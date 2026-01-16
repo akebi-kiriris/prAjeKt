@@ -1,5 +1,5 @@
 <template>
-  <div class="h-full w-full bg-linear-to-br from-green-50 to-teal-100 p-6 overflow-y-auto">
+  <div class="h-full w-full bg-gray-50 p-6 overflow-y-auto">
     <div class="grid grid-cols-1 gap-6 max-w-6xl mx-auto">
     <!-- Header -->
     <div class="text-center pt-8 pb-4 px-4 animate-slideDown">
@@ -12,10 +12,23 @@
     <div class="text-center px-4 mb-6">
       <button 
         @click="showCreateModal = true"
-        class="px-6 py-3 bg-linear-to-r from-primary to-primary-light text-gray-800 font-semibold rounded-xl shadow-lg hover:-translate-y-0.5 hover:shadow-xl transition-all flex items-center gap-2 mx-auto h-12 border-4"
+        class="
+              group relative w-full h-12 
+              flex items-center justify-center gap-3 px-6 py-3 
+              bg-linear-to-b from-primary to-primary-dark
+              border border-white/10 
+              text-white font-bold tracking-wide rounded-xl 
+              shadow-[0_4px_10px_rgba(0,0,0,0.5)] 
+              hover:shadow-black/40 
+              hover:border-white/20
+              hover:-translate-y-0.5 active:scale-95 
+              transition-all duration-300 ease-out 
+              overflow-hidden
+            "
       >
-        <span>➕</span>
-        新增專案
+    <div class="absolute inset-0 bg-white/10 translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-in-out skew-x-12"></div>
+    <span class="text-sm drop-shadow-md">➕</span>
+    <span class="drop-shadow-md">新增專案</span>
       </button>
     </div>
     

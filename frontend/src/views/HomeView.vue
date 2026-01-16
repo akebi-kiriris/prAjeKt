@@ -2,8 +2,8 @@
   <div class="h-full w-full bg-gray-50 p-6 overflow-y-auto">
     <div class="grid grid-cols-1 gap-6 max-w-6xl mx-auto">
     <!-- Welcome Card -->
-    <div class="mb-8 bg-linear-to-r from-primary to-primary-light rounded-2xl shadow-lg animate-slideDown">
-      <div class="p-12 text-center text-gray-800">
+    <div class="mt-4 mb-8 bg-linear-to-r from-primary to-primary-light rounded-2xl shadow-lg animate-slideDown">
+      <div class="p-12 text-center text-white">
         <div class="flex items-center justify-center gap-4 mb-4">
           <h1 class="text-4xl font-bold">ProjectHub 專案管理</h1>
         </div>

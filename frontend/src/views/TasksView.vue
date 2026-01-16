@@ -1,5 +1,5 @@
 <template>
-  <div class="h-full w-full bg-linear-to-br from-teal-50 to-emerald-100 p-6 overflow-y-auto">
+  <div class="h-full w-full bg-gray-50 p-6 overflow-y-auto">
     <div class="grid grid-cols-1 gap-6 max-w-4xl mx-auto">
     <!-- Header -->
     <div class="text-center pt-8 pb-4 px-4 animate-slideDown">
