@@ -1,2 +1,45 @@
-# 忽略 Header用戶名問題筆記
-Header用戶名問題筆記.md
+
+# Node
+node_modules/
+dist/
+.env
+.env.*
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.db
+*.sqlite3
+instance/
+
+# VSCode
+.vscode/
+
+# macOS/Windows/Linux
+.DS_Store
+Thumbs.db
+
+# Log
+*.log
+
+# IDE
+.idea/
+
+# SQL
+*.sql
+
+# Markdown 筆記
+*.md
+
+# 其他
+*.bak
+*.swp
+*.swo
+
+# Alembic migration cache
+backend/migrations/versions/__pycache__/
+backend/migrations/versions/*.pyc
+backend/migrations/versions/*.pyo
+backend/migrations/versions/*.pyd
