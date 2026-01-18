@@ -20,29 +20,23 @@
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label class="block text-sm font-semibold text-gray-600 mb-2">任務名稱 *</label>
-              <div class="relative">
-                <span class="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400">📋</span>
-                <input 
-                  v-model="taskForm.name" 
-                  type="text" 
-                  placeholder="請輸入任務名稱"
-                  class="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
-                  required
-                />
-              </div>
+              <input 
+                v-model="taskForm.name" 
+                type="text" 
+                placeholder="請輸入任務名稱"
+                class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
+                required
+              />
             </div>
             
             <div>
               <label class="block text-sm font-semibold text-gray-600 mb-2">快速筆記（選填）</label>
-              <div class="relative">
-                <span class="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400">📝</span>
-                <input 
-                  v-model="taskForm.assistant" 
-                  type="text" 
-                  placeholder="快速記錄協助者或相關資訊"
-                  class="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
-                />
-              </div>
+              <input 
+                v-model="taskForm.assistant" 
+                type="text" 
+                placeholder="快速記錄協助者或相關資訊"
+                class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
+              />
               <p class="text-xs text-gray-500 mt-1">快速筆記，不會關聯實際使用者</p>
             </div>
           </div>
@@ -81,7 +75,7 @@
           <div class="flex gap-3">
             <button 
               type="submit"
-              class="px-6 py-3 font-bold text-lg rounded-xl border-4 shadow-xl hover:-translate-y-0.5 hover:shadow-2xl transition-all flex items-center gap-2" style="background: var(--color-primary); color: #fff; border-color: var(--color-primary);"
+              class="px-6 py-3 bg-primary text-white border-4 border-primary font-bold text-lg rounded-xl shadow-xl hover:-translate-y-0.5 hover:shadow-2xl transition-all flex items-center gap-2"
             >
               <span>✓</span>
               <span>{{ editingTask ? '更新任務' : '新增任務' }}</span>

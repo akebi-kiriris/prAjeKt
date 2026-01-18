@@ -25,19 +25,17 @@ def get_timelines():
     
     result = []
     for timeline in timelines:
-        # 計算進度
+        # 計算任務統計
         tasks = Task.query.filter_by(timeline_id=timeline.id, user_id=user_id).all()
         total_tasks = len(tasks)
         completed_tasks = len([t for t in tasks if t.completed])
-        progress = (completed_tasks / total_tasks * 100) if total_tasks > 0 else 0
         
         result.append({
             'id': timeline.id,
             'name': timeline.name,
             'startDate': timeline.start_date.isoformat() if timeline.start_date else None,
             'endDate': timeline.end_date.isoformat() if timeline.end_date else None,
-            'color': timeline.color,
-            'progress': round(progress, 1),
+            'remark': timeline.remark,
             'totalTasks': total_tasks,
             'completedTasks': completed_tasks
         })
@@ -54,7 +52,7 @@ def create_timeline():
     name = data.get('name')
     start_date_raw = data.get('start_date', '')
     end_date_raw = data.get('end_date', '')
-    color = data.get('color', '#007bff')
+    remark = data.get('remark', '')
 
     if not isinstance(name, str) or not name.strip():
         return jsonify({'error': '請提供專案名稱（字串）'}), 400
@@ -62,8 +60,6 @@ def create_timeline():
         return jsonify({'error': '開始日期必須是字串'}), 400
     if not isinstance(end_date_raw, str):
         return jsonify({'error': '結束日期必須是字串'}), 400
-    if not isinstance(color, str):
-        return jsonify({'error': '顏色必須是字串'}), 400
 
     # 解析日期，允許空字串
     start_date = None
@@ -85,7 +81,7 @@ def create_timeline():
         name=name.strip(),
         start_date=start_date,
         end_date=end_date,
-        color=color
+        remark=remark
     )
     
     try:
@@ -131,8 +127,8 @@ def update_timeline(timeline_id):
         else:
             timeline.end_date = None
     
-    if 'color' in data:
-        timeline.color = data['color']
+    if 'remark' in data:
+        timeline.remark = data['remark']
     
     try:
         db.session.commit()

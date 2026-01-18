@@ -1,9 +1,9 @@
 <template>
+  <!-- 桌面版：左側 Sidebar -->
   <nav
-    class="fixed left-0 top-16 bottom-0 w-64 bg-gray-100 shadow-lg overflow-y-auto z-40 transition-transform duration-300"
+    class="hidden md:block fixed left-0 top-16 bottom-0 w-64 bg-gray-100 shadow-lg overflow-y-auto z-40 transition-transform duration-300"
     :class="{ '-translate-x-full': !open, 'translate-x-0': open }"
   >
-    <!-- 關閉按鈕移回 Header，這裡不顯示 -->
     <ul class="list-none py-4">
       <li v-for="item in navItems" :key="item.path">
         <router-link 
@@ -13,6 +13,22 @@
         >
           <span class="text-2xl mr-4 ml-2">{{ item.icon }}</span>
           <span class="text-xl font-bold font-sans tracking-wide">{{ item.text }}</span>
+        </router-link>
+      </li>
+    </ul>
+  </nav>
+
+  <!-- 手機版：底部導航列 -->
+  <nav class="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg z-50">
+    <ul class="flex justify-around items-center list-none m-0 p-0">
+      <li v-for="item in navItems" :key="item.path" class="flex-1">
+        <router-link 
+          :to="item.path" 
+          class="flex flex-col items-center justify-center py-2 px-1 text-gray-600 no-underline transition-all"
+          :class="{ 'text-emerald-600': $route.path === item.path }"
+        >
+          <span class="text-2xl mb-1">{{ item.icon }}</span>
+          <span class="text-xs font-medium">{{ item.text }}</span>
         </router-link>
       </li>
     </ul>
@@ -33,14 +49,5 @@ const navItems = [
 </script>
 
 <style scoped>
-@media (max-width: 768px) {
-  nav {
-    transform: translateX(-100%);
-    transition: transform 0.3s;
-  }
-  
-  nav.open {
-    transform: translateX(0);
-  }
-}
+/* 桌面版 Sidebar 動畫已由 Tailwind class 處理 */
 </style>

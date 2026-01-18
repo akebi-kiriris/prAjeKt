@@ -9,9 +9,7 @@ class Timeline(db.Model):
     name = db.Column(db.String(200), nullable=False)
     start_date = db.Column(db.Date)
     end_date = db.Column(db.Date)
-    color = db.Column(db.String(20), default='#007bff')
     remark = db.Column(db.Text)
-    progress = db.Column(db.Integer, default=0)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
     def __repr__(self):

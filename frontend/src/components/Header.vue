@@ -1,8 +1,8 @@
 <template>
   <header class="fixed top-0 left-0 right-0 h-16 bg-white shadow-md flex justify-between items-center z-50 px-8">
     <div class="flex items-center ml-3">
-      <!-- 漢堡選單按鈕（所有螢幕尺寸都顯示，固定在 logo 左側） -->
-      <button @click="$emit('toggle-sidebar')" class="mr-4 focus:outline-none">
+      <!-- 漢堡選單按鈕（僅桌面版顯示，手機版使用底部導航列） -->
+      <button @click="$emit('toggle-sidebar')" class="hidden md:block mr-4 focus:outline-none">
         <svg class="w-8 h-8 text-gray-700" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" />
         </svg>
