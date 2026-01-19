@@ -74,6 +74,15 @@
           <span class="mr-1">📇</span> 卡片
         </button>
         <button 
+          @click="viewMode = 'kanban'"
+          :class="[
+            'px-4 py-2 rounded-lg text-sm font-medium transition-all',
+            viewMode === 'kanban' ? 'bg-primary text-white shadow-sm' : 'text-gray-600 hover:bg-gray-100'
+          ]"
+        >
+          <span class="mr-1">📊</span> 看板
+        </button>
+        <button 
           @click="viewMode = 'timeline'"
           :class="[
             'px-4 py-2 rounded-lg text-sm font-medium transition-all',
@@ -103,25 +112,278 @@
       </button>
     </div>
     
+    <!-- Kanban View (看板模式) -->
+    <div v-if="viewMode === 'kanban'" class="px-4 pb-8">
+      <!-- 專案選擇器 -->
+      <div class="mb-6 flex flex-wrap items-center gap-4">
+        <div class="flex-1 min-w-50">
+          <label class="block text-sm font-medium text-gray-600 mb-2">選擇專案</label>
+          <select 
+            v-model="selectedKanbanTimeline"
+            class="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none shadow-sm"
+          >
+            <option :value="null">📁 全部專案</option>
+            <option v-for="t in timelines" :key="t.id" :value="t.id">📋 {{ t.name }}</option>
+          </select>
+        </div>
+        
+        <!-- 搜尋框 -->
+        <div class="flex-1 min-w-50">
+          <label class="block text-sm font-medium text-gray-600 mb-2">搜尋任務</label>
+          <div class="relative">
+            <input 
+              v-model="searchQuery"
+              type="text"
+              placeholder="輸入任務名稱..."
+              class="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none shadow-sm"
+            />
+            <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">🔍</span>
+          </div>
+        </div>
+        
+        <!-- 篩選按鈕 -->
+        <div class="flex items-end gap-2">
+          <button 
+            @click="showFilterPanel = !showFilterPanel"
+            :class="[
+              'px-4 py-2.5 rounded-xl border transition-all flex items-center gap-2 shadow-sm',
+              hasActiveFilters ? 'bg-linear-to-r from-primary to-blue-600 text-white border-transparent' : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50 hover:border-gray-300'
+            ]"
+          >
+            <span>🎯</span> 篩選
+            <span v-if="hasActiveFilters" class="w-5 h-5 bg-white text-primary text-xs font-bold rounded-full flex items-center justify-center shadow">{{ activeFilterCount }}</span>
+          </button>
+        </div>
+      </div>
+      
+      <!-- 篩選面板 -->
+      <div v-if="showFilterPanel" class="mb-6 p-5 bg-linear-to-r from-white to-gray-50/50 rounded-2xl border border-gray-200 shadow-lg">
+        <h4 class="text-sm font-bold text-gray-700 mb-4 flex items-center gap-2">
+          <span class="w-6 h-6 bg-primary/10 rounded-lg flex items-center justify-center text-xs">🎯</span>
+          進階篩選
+        </h4>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-600 mb-2">優先級</label>
+            <select v-model="filterPriority" class="w-full px-3 py-2.5 border border-gray-200 rounded-xl bg-white shadow-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none">
+              <option :value="null">全部優先級</option>
+              <option :value="1">🔴 高優先</option>
+              <option :value="2">🟡 中優先</option>
+              <option :value="3">🟢 低優先</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-600 mb-2">標籤</label>
+            <input 
+              v-model="filterTag"
+              type="text"
+              placeholder="輸入標籤關鍵字..."
+              class="w-full px-3 py-2.5 border border-gray-200 rounded-xl bg-white shadow-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
+            />
+          </div>
+          <div class="flex items-end">
+            <button @click="clearFilters" class="px-4 py-2.5 text-gray-500 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all flex items-center gap-2">
+              <span>🗑️</span> 清除篩選
+            </button>
+          </div>
+        </div>
+      </div>
+      
+      <!-- 看板欄位 - 使用 vuedraggable -->
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <!-- 待辦欄 -->
+        <div class="bg-linear-to-b from-slate-100 to-slate-50 rounded-2xl p-4 shadow-sm">
+          <div class="flex items-center justify-between mb-4">
+            <h3 class="font-bold text-gray-700 flex items-center gap-2">
+              <span class="w-3 h-3 rounded-full bg-slate-400 animate-pulse"></span>
+              待辦
+              <span class="text-sm font-normal bg-slate-200 text-slate-600 px-2 py-0.5 rounded-full">{{ pendingTasks.length }}</span>
+            </h3>
+          </div>
+          <draggable
+            v-model="pendingTasksList"
+            group="kanban"
+            item-key="task_id"
+            :animation="200"
+            ghost-class="kanban-ghost"
+            drag-class="kanban-drag"
+            @start="onDragStart"
+            @end="onDragEnd"
+            @change="(evt) => onTaskMoved(evt, 'pending')"
+            class="space-y-3 min-h-50"
+          >
+            <template #item="{ element: task }">
+              <div 
+                @click="viewKanbanTaskDetail(task)"
+                class="kanban-card bg-white rounded-xl p-4 shadow-sm border-l-4 border-slate-300 cursor-grab hover:shadow-lg hover:-translate-y-1 active:cursor-grabbing transition-all duration-200"
+              >
+                <div class="flex items-start justify-between mb-2">
+                  <span class="font-medium text-gray-800 text-sm line-clamp-2">{{ task.name }}</span>
+                  <span :class="getPriorityBadgeClass(task.priority)" class="text-xs px-2 py-0.5 rounded-full shrink-0 ml-2 font-medium">
+                    {{ getPriorityLabel(task.priority) }}
+                  </span>
+                </div>
+                <div v-if="task.tags" class="flex flex-wrap gap-1 mb-2">
+                  <span v-for="tag in task.tags.split(',').slice(0, 3)" :key="tag" class="text-xs px-2 py-0.5 bg-linear-to-r from-blue-100 to-indigo-100 text-blue-700 rounded-full">
+                    {{ tag.trim() }}
+                  </span>
+                  <span v-if="task.tags.split(',').length > 3" class="text-xs text-gray-400">+{{ task.tags.split(',').length - 3 }}</span>
+                </div>
+                <div v-if="task.subtasks && task.subtasks.length > 0" class="mb-2">
+                  <div class="flex items-center gap-2 text-xs text-gray-500">
+                    <div class="flex-1 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                      <div class="h-full bg-linear-to-r from-primary to-blue-400 rounded-full transition-all duration-300" :style="{ width: getSubtaskProgress(task) + '%' }"></div>
+                    </div>
+                    <span class="font-medium">{{ task.subtasks.filter(s => s.completed).length }}/{{ task.subtasks.length }}</span>
+                  </div>
+                </div>
+                <div class="flex items-center justify-between text-xs text-gray-500 pt-2 border-t border-gray-100">
+                  <span class="flex items-center gap-1 bg-gray-100 px-2 py-1 rounded-md">
+                    📅 {{ formatDate(task.end_date) }}
+                  </span>
+                  <span v-if="getTaskTimelineName(task)" class="truncate max-w-20 text-primary font-medium">📁 {{ getTaskTimelineName(task) }}</span>
+                </div>
+              </div>
+            </template>
+          </draggable>
+          <div v-if="pendingTasks.length === 0 && !isDragging" class="text-center py-12 text-gray-400">
+            <span class="text-3xl mb-2 block">📋</span>
+            <span class="text-sm">拖曳任務到這裡</span>
+          </div>
+        </div>
+        
+        <!-- 進行中欄 -->
+        <div class="bg-linear-to-b from-blue-100 to-blue-50 rounded-2xl p-4 shadow-sm">
+          <div class="flex items-center justify-between mb-4">
+            <h3 class="font-bold text-blue-700 flex items-center gap-2">
+              <span class="w-3 h-3 rounded-full bg-blue-500 animate-pulse"></span>
+              進行中
+              <span class="text-sm font-normal bg-blue-200 text-blue-700 px-2 py-0.5 rounded-full">{{ inProgressTasks.length }}</span>
+            </h3>
+          </div>
+          <draggable
+            v-model="inProgressTasksList"
+            group="kanban"
+            item-key="task_id"
+            :animation="200"
+            ghost-class="kanban-ghost"
+            drag-class="kanban-drag"
+            @start="onDragStart"
+            @end="onDragEnd"
+            @change="(evt) => onTaskMoved(evt, 'in_progress')"
+            class="space-y-3 min-h-50"
+          >
+            <template #item="{ element: task }">
+              <div 
+                @click="viewKanbanTaskDetail(task)"
+                class="kanban-card bg-white rounded-xl p-4 shadow-sm border-l-4 border-blue-400 cursor-grab hover:shadow-lg hover:-translate-y-1 active:cursor-grabbing transition-all duration-200"
+              >
+                <div class="flex items-start justify-between mb-2">
+                  <span class="font-medium text-gray-800 text-sm line-clamp-2">{{ task.name }}</span>
+                  <span :class="getPriorityBadgeClass(task.priority)" class="text-xs px-2 py-0.5 rounded-full shrink-0 ml-2 font-medium">
+                    {{ getPriorityLabel(task.priority) }}
+                  </span>
+                </div>
+                <div v-if="task.tags" class="flex flex-wrap gap-1 mb-2">
+                  <span v-for="tag in task.tags.split(',').slice(0, 3)" :key="tag" class="text-xs px-2 py-0.5 bg-linear-to-r from-blue-100 to-indigo-100 text-blue-700 rounded-full">
+                    {{ tag.trim() }}
+                  </span>
+                  <span v-if="task.tags.split(',').length > 3" class="text-xs text-gray-400">+{{ task.tags.split(',').length - 3 }}</span>
+                </div>
+                <div v-if="task.subtasks && task.subtasks.length > 0" class="mb-2">
+                  <div class="flex items-center gap-2 text-xs text-gray-500">
+                    <div class="flex-1 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                      <div class="h-full bg-linear-to-r from-primary to-blue-400 rounded-full transition-all duration-300" :style="{ width: getSubtaskProgress(task) + '%' }"></div>
+                    </div>
+                    <span class="font-medium">{{ task.subtasks.filter(s => s.completed).length }}/{{ task.subtasks.length }}</span>
+                  </div>
+                </div>
+                <div class="flex items-center justify-between text-xs text-gray-500 pt-2 border-t border-gray-100">
+                  <span class="flex items-center gap-1 bg-blue-100 px-2 py-1 rounded-md text-blue-600">
+                    📅 {{ formatDate(task.end_date) }}
+                  </span>
+                  <span v-if="getTaskTimelineName(task)" class="truncate max-w-20 text-primary font-medium">📁 {{ getTaskTimelineName(task) }}</span>
+                </div>
+              </div>
+            </template>
+          </draggable>
+          <div v-if="inProgressTasks.length === 0 && !isDragging" class="text-center py-12 text-gray-400">
+            <span class="text-3xl mb-2 block">🚀</span>
+            <span class="text-sm">拖曳任務到這裡</span>
+          </div>
+        </div>
+        
+        <!-- 已完成欄 -->
+        <div class="bg-linear-to-b from-green-100 to-green-50 rounded-2xl p-4 shadow-sm">
+          <div class="flex items-center justify-between mb-4">
+            <h3 class="font-bold text-green-700 flex items-center gap-2">
+              <span class="w-3 h-3 rounded-full bg-green-500"></span>
+              已完成
+              <span class="text-sm font-normal bg-green-200 text-green-700 px-2 py-0.5 rounded-full">{{ completedTasks.length }}</span>
+            </h3>
+          </div>
+          <draggable
+            v-model="completedTasksList"
+            group="kanban"
+            item-key="task_id"
+            :animation="200"
+            ghost-class="kanban-ghost"
+            drag-class="kanban-drag"
+            @start="onDragStart"
+            @end="onDragEnd"
+            @change="(evt) => onTaskMoved(evt, 'completed')"
+            class="space-y-3 min-h-50"
+          >
+            <template #item="{ element: task }">
+              <div 
+                @click="viewKanbanTaskDetail(task)"
+                class="kanban-card bg-white/80 rounded-xl p-4 shadow-sm border-l-4 border-green-400 cursor-grab hover:shadow-lg hover:-translate-y-1 active:cursor-grabbing transition-all duration-200"
+              >
+                <div class="flex items-start justify-between mb-2">
+                  <span class="font-medium text-gray-500 text-sm line-through line-clamp-2">{{ task.name }}</span>
+                  <span class="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700 shrink-0 ml-2 font-medium">
+                    ✓ 完成
+                  </span>
+                </div>
+                <div class="flex items-center justify-between text-xs text-gray-400 pt-2 border-t border-gray-100">
+                  <span class="flex items-center gap-1 bg-green-100 px-2 py-1 rounded-md text-green-600">
+                    📅 {{ formatDate(task.end_date) }}
+                  </span>
+                  <span v-if="getTaskTimelineName(task)" class="truncate max-w-20 text-green-600 font-medium">📁 {{ getTaskTimelineName(task) }}</span>
+                </div>
+              </div>
+            </template>
+          </draggable>
+          <div v-if="completedTasks.length === 0 && !isDragging" class="text-center py-12 text-gray-400">
+            <span class="text-3xl mb-2 block">🎉</span>
+            <span class="text-sm">完成的任務會出現在這裡</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    
     <!-- Calendar View -->
     <div v-if="viewMode === 'calendar'" class="px-4 pb-8">
-      <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+      <div class="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
         <!-- Calendar Legend -->
-        <div class="p-4 border-b border-gray-100 bg-gray-50/50">
+        <div class="p-5 border-b border-gray-100 bg-gradient-to-r from-primary/5 via-blue-50 to-indigo-50">
           <div class="flex flex-wrap items-center justify-between gap-4">
-            <h3 class="font-semibold text-gray-700">📅 專案月曆</h3>
-            <div class="flex flex-wrap items-center gap-3 text-xs">
-              <span class="flex items-center gap-1"><span class="w-3 h-3 rounded-full bg-green-500"></span> 已完成</span>
-              <span class="flex items-center gap-1"><span class="w-3 h-3 rounded-full bg-red-500"></span> 已過期</span>
-              <span class="flex items-center gap-1"><span class="w-3 h-3 rounded-full bg-orange-500"></span> 緊急</span>
-              <span class="flex items-center gap-1"><span class="w-3 h-3 rounded-full bg-yellow-500"></span> 即將到期</span>
-              <span class="flex items-center gap-1"><span class="w-3 h-3 rounded-full bg-blue-500"></span> 進行中</span>
+            <h3 class="font-bold text-gray-800 flex items-center gap-2 text-lg">
+              <span class="w-10 h-10 bg-white rounded-xl shadow-sm flex items-center justify-center">📅</span>
+              專案月曆
+            </h3>
+            <div class="flex flex-wrap items-center gap-4 text-sm bg-white/80 backdrop-blur-sm px-4 py-2.5 rounded-xl shadow-sm">
+              <span class="flex items-center gap-2"><span class="w-4 h-4 rounded-md bg-gradient-to-r from-green-400 to-green-500 shadow-sm"></span> 已完成</span>
+              <span class="flex items-center gap-2"><span class="w-4 h-4 rounded-md bg-gradient-to-r from-red-400 to-red-500 shadow-sm"></span> 已過期</span>
+              <span class="flex items-center gap-2"><span class="w-4 h-4 rounded-md bg-gradient-to-r from-orange-400 to-orange-500 shadow-sm"></span> 緊急</span>
+              <span class="flex items-center gap-2"><span class="w-4 h-4 rounded-md bg-gradient-to-r from-yellow-400 to-yellow-500 shadow-sm"></span> 即將到期</span>
+              <span class="flex items-center gap-2"><span class="w-4 h-4 rounded-md bg-gradient-to-r from-blue-400 to-blue-500 shadow-sm"></span> 進行中</span>
             </div>
           </div>
         </div>
         
         <!-- FullCalendar -->
-        <div class="p-4">
+        <div class="p-6">
           <FullCalendar 
             ref="calendarRef"
             :options="calendarOptions" 
@@ -131,59 +393,68 @@
       </div>
       
       <!-- Quick Stats Below Calendar -->
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
-        <div class="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
-          <h4 class="text-sm font-semibold text-gray-600 mb-3">📌 本週截止</h4>
-          <div class="space-y-2 max-h-32 overflow-y-auto">
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
+        <div class="bg-white rounded-2xl p-5 shadow-lg border border-gray-100 hover:shadow-xl transition-shadow">
+          <h4 class="text-sm font-bold text-gray-700 mb-4 flex items-center gap-2">
+            <span class="w-8 h-8 bg-orange-100 rounded-lg flex items-center justify-center">📌</span>
+            本週截止
+          </h4>
+          <div class="space-y-2 max-h-36 overflow-y-auto">
             <div 
               v-for="timeline in thisWeekTimelines" 
               :key="timeline.id"
               @click="viewTimeline(timeline)"
-              class="flex items-center justify-between p-2 bg-orange-50 rounded-lg cursor-pointer hover:bg-orange-100 transition-colors"
+              class="flex items-center justify-between p-3 bg-gradient-to-r from-orange-50 to-amber-50 rounded-xl cursor-pointer hover:from-orange-100 hover:to-amber-100 transition-all border border-orange-100"
             >
               <span class="text-sm font-medium text-gray-700 truncate">{{ timeline.name }}</span>
-              <span class="text-xs text-orange-600 font-medium">{{ getDaysRemaining(timeline.endDate).text }}</span>
+              <span class="text-xs bg-orange-500 text-white px-2 py-1 rounded-full font-medium">{{ getDaysRemaining(timeline.endDate).text }}</span>
             </div>
-            <p v-if="thisWeekTimelines.length === 0" class="text-xs text-gray-400 text-center py-2">無專案</p>
+            <p v-if="thisWeekTimelines.length === 0" class="text-sm text-gray-400 text-center py-4">📋 無專案</p>
           </div>
         </div>
-        <div class="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
-          <h4 class="text-sm font-semibold text-gray-600 mb-3">🔥 已過期專案</h4>
-          <div class="space-y-2 max-h-32 overflow-y-auto">
+        <div class="bg-white rounded-2xl p-5 shadow-lg border border-gray-100 hover:shadow-xl transition-shadow">
+          <h4 class="text-sm font-bold text-gray-700 mb-4 flex items-center gap-2">
+            <span class="w-8 h-8 bg-red-100 rounded-lg flex items-center justify-center">🔥</span>
+            已過期專案
+          </h4>
+          <div class="space-y-2 max-h-36 overflow-y-auto">
             <div 
               v-for="timeline in overdueTimelines" 
               :key="timeline.id"
               @click="viewTimeline(timeline)"
-              class="flex items-center justify-between p-2 bg-red-50 rounded-lg cursor-pointer hover:bg-red-100 transition-colors"
+              class="flex items-center justify-between p-3 bg-gradient-to-r from-red-50 to-rose-50 rounded-xl cursor-pointer hover:from-red-100 hover:to-rose-100 transition-all border border-red-100"
             >
               <span class="text-sm font-medium text-gray-700 truncate">{{ timeline.name }}</span>
-              <span class="text-xs text-red-600 font-medium">{{ getDaysRemaining(timeline.endDate).text }}</span>
+              <span class="text-xs bg-red-500 text-white px-2 py-1 rounded-full font-medium">{{ getDaysRemaining(timeline.endDate).text }}</span>
             </div>
-            <p v-if="overdueTimelines.length === 0" class="text-xs text-gray-400 text-center py-2">無過期專案 👍</p>
+            <p v-if="overdueTimelines.length === 0" class="text-sm text-gray-400 text-center py-4">👍 無過期專案</p>
           </div>
         </div>
-        <div class="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
-          <h4 class="text-sm font-semibold text-gray-600 mb-3">✅ 近期完成</h4>
-          <div class="space-y-2 max-h-32 overflow-y-auto">
+        <div class="bg-white rounded-2xl p-5 shadow-lg border border-gray-100 hover:shadow-xl transition-shadow">
+          <h4 class="text-sm font-bold text-gray-700 mb-4 flex items-center gap-2">
+            <span class="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center">✅</span>
+            近期完成
+          </h4>
+          <div class="space-y-2 max-h-36 overflow-y-auto">
             <div 
               v-for="timeline in completedTimelines" 
               :key="timeline.id"
               @click="viewTimeline(timeline)"
-              class="flex items-center justify-between p-2 bg-green-50 rounded-lg cursor-pointer hover:bg-green-100 transition-colors"
+              class="flex items-center justify-between p-3 bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl cursor-pointer hover:from-green-100 hover:to-emerald-100 transition-all border border-green-100"
             >
               <span class="text-sm font-medium text-gray-700 truncate">{{ timeline.name }}</span>
-              <span class="text-xs text-green-600 font-medium">100%</span>
+              <span class="text-xs bg-green-500 text-white px-2 py-1 rounded-full font-medium">100%</span>
             </div>
-            <p v-if="completedTimelines.length === 0" class="text-xs text-gray-400 text-center py-2">尚無完成專案</p>
+            <p v-if="completedTimelines.length === 0" class="text-sm text-gray-400 text-center py-4">🎯 尚無完成專案</p>
           </div>
         </div>
       </div>
     </div>
     
     <!-- Create/Edit Project Modal -->
-    <div v-if="showCreateModal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+    <div v-if="showCreateModal" class="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
       <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg animate-slideUp max-h-[90vh] overflow-y-auto">
-        <div class="p-5 border-b border-gray-100 flex justify-between items-center bg-linear-to-r from-primary/5 to-transparent">
+        <div class="p-5 border-b border-gray-100 flex justify-between items-center bg-gradient-to-r from-primary/5 to-transparent">
           <h2 class="text-lg font-semibold text-gray-800 flex items-center gap-2">
             <span class="w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center">📁</span>
             {{ editingTimeline ? '編輯專案' : '新增專案' }}
@@ -641,6 +912,29 @@
             </div>
           </div>
           
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label class="block text-sm font-semibold text-gray-600 mb-2">優先級</label>
+              <select 
+                v-model="taskForm.priority"
+                class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
+              >
+                <option :value="1">🔴 高優先</option>
+                <option :value="2">🟡 中優先</option>
+                <option :value="3">🟢 低優先</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-sm font-semibold text-gray-600 mb-2">標籤（逗號分隔）</label>
+              <input 
+                v-model.lazy="taskForm.tags" 
+                type="text" 
+                placeholder="例如：前端, 重要"
+                class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
+              />
+            </div>
+          </div>
+          
           <div>
             <label class="block text-sm font-semibold text-gray-600 mb-2">備註</label>
             <textarea 
@@ -803,6 +1097,159 @@
         </div>
       </div>
     </div>
+    
+    <!-- 看板任務詳情 Modal -->
+    <div v-if="showKanbanTaskModal && selectedKanbanTask" class="fixed inset-0 bg-black/50 flex items-center justify-center z-60 p-4">
+      <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto animate-slideUp">
+        <div class="p-5 border-b border-gray-100 flex justify-between items-center bg-linear-to-r from-primary/5 to-transparent sticky top-0 bg-white z-10">
+          <h2 class="text-lg font-semibold text-gray-800 flex items-center gap-2">
+            <span class="w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center">📌</span>
+            {{ selectedKanbanTask.name }}
+          </h2>
+          <button @click="showKanbanTaskModal = false" class="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">&times;</button>
+        </div>
+        
+        <div class="p-6 space-y-6">
+          <!-- 狀態與優先級 -->
+          <div class="flex flex-wrap items-center gap-4">
+            <div class="flex items-center gap-2">
+              <span class="text-sm text-gray-500">狀態：</span>
+              <span :class="[
+                'px-3 py-1 text-sm font-medium rounded-full',
+                selectedKanbanTask.status === 'completed' ? 'bg-green-100 text-green-700' :
+                selectedKanbanTask.status === 'in_progress' ? 'bg-blue-100 text-blue-700' :
+                'bg-gray-100 text-gray-700'
+              ]">
+                {{ selectedKanbanTask.status === 'completed' ? '✅ 已完成' : 
+                   selectedKanbanTask.status === 'in_progress' ? '🔄 進行中' : '📋 待辦' }}
+              </span>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="text-sm text-gray-500">優先級：</span>
+              <select 
+                :value="selectedKanbanTask.priority"
+                @change="updateTaskPriority(Number($event.target.value))"
+                class="px-3 py-1 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
+              >
+                <option :value="1">🔴 高優先</option>
+                <option :value="2">🟡 中優先</option>
+                <option :value="3">🟢 低優先</option>
+              </select>
+            </div>
+          </div>
+          
+          <!-- 日期資訊 -->
+          <div class="grid grid-cols-2 gap-4 p-4 bg-gray-50 rounded-xl">
+            <div>
+              <p class="text-xs text-gray-500 mb-1">開始日期</p>
+              <p class="font-medium text-gray-800">{{ formatDate(selectedKanbanTask.start_date) || '未設定' }}</p>
+            </div>
+            <div>
+              <p class="text-xs text-gray-500 mb-1">截止日期</p>
+              <p class="font-medium text-gray-800">{{ formatDate(selectedKanbanTask.end_date) || '未設定' }}</p>
+            </div>
+          </div>
+          
+          <!-- 標籤編輯 -->
+          <div>
+            <label class="block text-sm font-medium text-gray-600 mb-2">
+              <span>🏷️</span> 標籤（逗號分隔）
+            </label>
+            <div class="flex gap-2">
+              <input 
+                v-model="selectedKanbanTask.tags"
+                type="text"
+                placeholder="例如：前端, 重要, Bug"
+                class="flex-1 px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
+              />
+              <button 
+                @click="updateTaskTags"
+                class="px-4 py-2 bg-primary text-white rounded-xl hover:brightness-110 transition-all"
+              >儲存</button>
+            </div>
+            <div v-if="selectedKanbanTask.tags" class="flex flex-wrap gap-2 mt-2">
+              <span 
+                v-for="tag in selectedKanbanTask.tags.split(',')" 
+                :key="tag"
+                class="px-3 py-1 bg-blue-100 text-blue-700 text-sm rounded-full"
+              >
+                {{ tag.trim() }}
+              </span>
+            </div>
+          </div>
+          
+          <!-- 子任務 -->
+          <div>
+            <h4 class="font-semibold text-gray-700 mb-3 flex items-center gap-2">
+              <span>📋</span>
+              子任務
+              <span class="text-sm font-normal text-gray-500">
+                ({{ selectedKanbanTask.subtasks?.filter(s => s.completed).length || 0 }}/{{ selectedKanbanTask.subtasks?.length || 0 }})
+              </span>
+            </h4>
+            
+            <!-- 子任務進度條 -->
+            <div v-if="selectedKanbanTask.subtasks && selectedKanbanTask.subtasks.length > 0" class="mb-4">
+              <div class="h-2 bg-gray-200 rounded-full overflow-hidden">
+                <div 
+                  class="h-full bg-primary rounded-full transition-all duration-300"
+                  :style="{ width: getSubtaskProgress(selectedKanbanTask) + '%' }"
+                ></div>
+              </div>
+            </div>
+            
+            <!-- 子任務列表 -->
+            <div class="space-y-2 mb-4">
+              <div 
+                v-for="subtask in selectedKanbanTask.subtasks" 
+                :key="subtask.id"
+                class="flex items-center gap-3 p-3 bg-gray-50 rounded-lg group hover:bg-gray-100 transition-colors"
+              >
+                <input 
+                  type="checkbox"
+                  :checked="subtask.completed"
+                  @change="toggleSubtask(subtask)"
+                  class="w-5 h-5 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer"
+                />
+                <span :class="['flex-1 text-sm', subtask.completed ? 'line-through text-gray-400' : 'text-gray-700']">
+                  {{ subtask.name }}
+                </span>
+                <button 
+                  @click="deleteSubtask(subtask)"
+                  class="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-600 transition-all"
+                >🗑️</button>
+              </div>
+              <div v-if="!selectedKanbanTask.subtasks || selectedKanbanTask.subtasks.length === 0" class="text-center py-4 text-gray-400 text-sm">
+                尚無子任務
+              </div>
+            </div>
+            
+            <!-- 新增子任務 -->
+            <div class="flex gap-2">
+              <input 
+                v-model="newSubtaskName"
+                type="text"
+                placeholder="輸入子任務名稱..."
+                @keyup.enter="addSubtask"
+                class="flex-1 px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
+              />
+              <button 
+                @click="addSubtask"
+                class="px-4 py-2 bg-primary text-white rounded-xl hover:brightness-110 transition-all"
+              >新增</button>
+            </div>
+          </div>
+          
+          <!-- 備註 -->
+          <div v-if="selectedKanbanTask.task_remark" class="p-4 bg-yellow-50 rounded-xl">
+            <h4 class="font-semibold text-gray-700 mb-2 flex items-center gap-2">
+              <span>📝</span> 備註
+            </h4>
+            <p class="text-gray-600 text-sm">{{ selectedKanbanTask.task_remark }}</p>
+          </div>
+        </div>
+      </div>
+    </div>
     </div>
   </div>
 </template>
@@ -814,6 +1261,7 @@ import FullCalendar from '@fullcalendar/vue3';
 import dayGridPlugin from '@fullcalendar/daygrid';
 import interactionPlugin from '@fullcalendar/interaction';
 import multiMonthPlugin from '@fullcalendar/multimonth';
+import draggable from 'vuedraggable';
 
 const timelines = ref([]);
 const selectedTimeline = ref(null);
@@ -830,8 +1278,250 @@ const isSharePanelOpen = ref(false);
 const inputEmail = ref('');
 const searchResult = ref(null);
 const searchError = ref('');
-const viewMode = ref('card'); // 'card', 'timeline', or 'calendar'
+const viewMode = ref('card'); // 'card', 'kanban', 'timeline', or 'calendar'
 const calendarRef = ref(null);
+
+// 看板模式相關
+const allTasks = ref([]);
+const selectedKanbanTimeline = ref(null);
+const searchQuery = ref('');
+const showFilterPanel = ref(false);
+const filterPriority = ref(null);
+const filterTag = ref('');
+const showKanbanTaskModal = ref(false);
+const selectedKanbanTask = ref(null);
+const newSubtaskName = ref('');
+const isDragging = ref(false);
+
+// 取得所有任務（看板用）
+const fetchAllTasks = async () => {
+  try {
+    const response = await api.get('/tasks');
+    allTasks.value = response.data;
+  } catch (error) {
+    console.error('取得任務失敗:', error);
+  }
+};
+
+// 所有可用的標籤（從所有任務中提取）
+const allTags = computed(() => {
+  const tagSet = new Set();
+  allTasks.value.forEach(task => {
+    if (task.tags) {
+      task.tags.split(',').forEach(tag => {
+        const trimmed = tag.trim();
+        if (trimmed) tagSet.add(trimmed);
+      });
+    }
+  });
+  return Array.from(tagSet).sort();
+});
+
+// 篩選後的任務
+const filteredTasks = computed(() => {
+  let tasks = allTasks.value;
+  
+  // 專案篩選
+  if (selectedKanbanTimeline.value) {
+    tasks = tasks.filter(t => t.timeline_id === selectedKanbanTimeline.value);
+  }
+  
+  // 搜尋篩選
+  if (searchQuery.value) {
+    const query = searchQuery.value.toLowerCase();
+    tasks = tasks.filter(t => t.name.toLowerCase().includes(query));
+  }
+  
+  // 優先級篩選
+  if (filterPriority.value) {
+    tasks = tasks.filter(t => t.priority === filterPriority.value);
+  }
+  
+  // 標籤篩選
+  if (filterTag.value) {
+    const tag = filterTag.value.toLowerCase();
+    tasks = tasks.filter(t => t.tags && t.tags.toLowerCase().includes(tag));
+  }
+  
+  return tasks;
+});
+
+// 看板欄位任務 (唯讀)
+const pendingTasks = computed(() => filteredTasks.value.filter(t => t.status === 'pending' && !t.completed));
+const inProgressTasks = computed(() => filteredTasks.value.filter(t => t.status === 'in_progress' && !t.completed));
+const completedTasks = computed(() => filteredTasks.value.filter(t => t.status === 'completed' || t.completed));
+
+// 看板欄位任務列表 (可寫入，供 vuedraggable 使用)
+const pendingTasksList = computed({
+  get: () => pendingTasks.value,
+  set: (val) => { /* 由 onTaskMoved 處理 */ }
+});
+const inProgressTasksList = computed({
+  get: () => inProgressTasks.value,
+  set: (val) => { /* 由 onTaskMoved 處理 */ }
+});
+const completedTasksList = computed({
+  get: () => completedTasks.value,
+  set: (val) => { /* 由 onTaskMoved 處理 */ }
+});
+
+// 篩選相關
+const hasActiveFilters = computed(() => filterPriority.value || filterTag.value);
+const activeFilterCount = computed(() => {
+  let count = 0;
+  if (filterPriority.value) count++;
+  if (filterTag.value) count++;
+  return count;
+});
+
+const clearFilters = () => {
+  filterPriority.value = null;
+  filterTag.value = '';
+};
+
+// 拖曳相關 - 使用 vuedraggable
+const onDragStart = () => {
+  isDragging.value = true;
+};
+
+const onDragEnd = () => {
+  isDragging.value = false;
+};
+
+// 處理任務狀態變更
+const onTaskMoved = async (evt, newStatus) => {
+  if (evt.added) {
+    const task = evt.added.element;
+    try {
+      await api.patch(`/tasks/${task.task_id}/status`, { status: newStatus });
+      // 更新本地狀態
+      const localTask = allTasks.value.find(t => t.task_id === task.task_id);
+      if (localTask) {
+        localTask.status = newStatus;
+        localTask.completed = newStatus === 'completed';
+      }
+    } catch (error) {
+      console.error('更新狀態失敗:', error);
+      alert('更新狀態失敗');
+      // 重新載入任務以回復狀態
+      await fetchAllTasks();
+    }
+  }
+};
+
+// 優先級相關
+const getPriorityLabel = (priority) => {
+  const labels = { 1: '🔴 高', 2: '🟡 中', 3: '🟢 低' };
+  return labels[priority] || '🟡 中';
+};
+
+const getPriorityBadgeClass = (priority) => {
+  const classes = {
+    1: 'bg-gradient-to-r from-red-100 to-rose-100 text-red-700 border border-red-200',
+    2: 'bg-gradient-to-r from-yellow-100 to-amber-100 text-yellow-700 border border-yellow-200',
+    3: 'bg-gradient-to-r from-green-100 to-emerald-100 text-green-700 border border-green-200'
+  };
+  return classes[priority] || 'bg-gray-100 text-gray-700 border border-gray-200';
+};
+
+// 子任務進度
+const getSubtaskProgress = (task) => {
+  if (!task.subtasks || task.subtasks.length === 0) return 0;
+  const completed = task.subtasks.filter(s => s.completed).length;
+  return Math.round((completed / task.subtasks.length) * 100);
+};
+
+// 取得任務所屬專案名稱
+const getTaskTimelineName = (task) => {
+  if (!task.timeline_id) return '';
+  const timeline = timelines.value.find(t => t.id === task.timeline_id);
+  return timeline ? timeline.name : '';
+};
+
+// 看板任務詳情
+const viewKanbanTaskDetail = async (task) => {
+  selectedKanbanTask.value = { ...task };
+  
+  // 取得子任務
+  try {
+    const response = await api.get(`/tasks/${task.task_id}/subtasks`);
+    selectedKanbanTask.value.subtasks = response.data;
+  } catch (error) {
+    console.error('取得子任務失敗:', error);
+    selectedKanbanTask.value.subtasks = [];
+  }
+  
+  showKanbanTaskModal.value = true;
+};
+
+// 新增子任務
+const addSubtask = async () => {
+  if (!newSubtaskName.value.trim() || !selectedKanbanTask.value) return;
+  
+  try {
+    const response = await api.post(`/tasks/${selectedKanbanTask.value.task_id}/subtasks`, {
+      name: newSubtaskName.value.trim()
+    });
+    selectedKanbanTask.value.subtasks.push(response.data.subtask);
+    newSubtaskName.value = '';
+    await fetchAllTasks();
+  } catch (error) {
+    alert('新增子任務失敗');
+  }
+};
+
+// 切換子任務完成狀態
+const toggleSubtask = async (subtask) => {
+  try {
+    await api.patch(`/tasks/${selectedKanbanTask.value.task_id}/subtasks/${subtask.id}/toggle`);
+    subtask.completed = !subtask.completed;
+    await fetchAllTasks();
+  } catch (error) {
+    alert('更新子任務失敗');
+  }
+};
+
+// 刪除子任務
+const deleteSubtask = async (subtask) => {
+  try {
+    await api.delete(`/tasks/${selectedKanbanTask.value.task_id}/subtasks/${subtask.id}`);
+    selectedKanbanTask.value.subtasks = selectedKanbanTask.value.subtasks.filter(s => s.id !== subtask.id);
+    await fetchAllTasks();
+  } catch (error) {
+    alert('刪除子任務失敗');
+  }
+};
+
+// 更新任務優先級
+const updateTaskPriority = async (priority) => {
+  if (!selectedKanbanTask.value) return;
+  
+  try {
+    await api.put(`/tasks/${selectedKanbanTask.value.task_id}`, {
+      ...selectedKanbanTask.value,
+      priority
+    });
+    selectedKanbanTask.value.priority = priority;
+    await fetchAllTasks();
+  } catch (error) {
+    alert('更新優先級失敗');
+  }
+};
+
+// 更新任務標籤
+const updateTaskTags = async () => {
+  if (!selectedKanbanTask.value) return;
+  
+  try {
+    await api.put(`/tasks/${selectedKanbanTask.value.task_id}`, {
+      ...selectedKanbanTask.value,
+      tags: selectedKanbanTask.value.tags
+    });
+    await fetchAllTasks();
+  } catch (error) {
+    alert('更新標籤失敗');
+  }
+};
 
 // FullCalendar 設定
 const calendarOptions = computed(() => ({
@@ -852,19 +1542,52 @@ const calendarOptions = computed(() => ({
   events: calendarEvents.value,
   eventClick: handleEventClick,
   eventDidMount: (info) => {
+    // 添加自定義樣式和 tooltip
+    const el = info.el;
+    const progress = info.event.extendedProps.progress;
+    
     // 添加 tooltip
-    info.el.title = `${info.event.title}\n${info.event.extendedProps.status}\n${info.event.extendedProps.progress}% 完成`;
+    el.title = `${info.event.title}\n狀態：${info.event.extendedProps.status}\n進度：${progress}% 完成`;
+    
+    // 美化事件樣式
+    el.style.borderRadius = '8px';
+    el.style.padding = '4px 8px';
+    el.style.margin = '2px 4px';
+    el.style.fontSize = '12px';
+    el.style.fontWeight = '500';
+    el.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)';
+    el.style.border = 'none';
+    el.style.borderLeft = `4px solid ${info.event.borderColor}`;
+    el.style.transition = 'all 0.2s ease';
+    
+    // Hover 效果
+    el.addEventListener('mouseenter', () => {
+      el.style.transform = 'translateY(-2px)';
+      el.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
+    });
+    el.addEventListener('mouseleave', () => {
+      el.style.transform = 'translateY(0)';
+      el.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)';
+    });
   },
   dayCellDidMount: (info) => {
     // 標記今天
     const today = new Date();
     if (info.date.toDateString() === today.toDateString()) {
-      info.el.style.backgroundColor = 'rgba(59, 130, 246, 0.1)';
+      info.el.style.backgroundColor = 'rgba(59, 130, 246, 0.08)';
+      info.el.style.borderRadius = '8px';
+    }
+    // 週末淡色背景
+    const day = info.date.getDay();
+    if (day === 0 || day === 6) {
+      info.el.style.backgroundColor = 'rgba(100, 116, 139, 0.03)';
     }
   },
   eventDisplay: 'block',
   displayEventTime: false,
-  eventClassNames: 'cursor-pointer'
+  eventClassNames: 'cursor-pointer fc-event-custom',
+  dayMaxEvents: 3,
+  moreLinkClick: 'popover'
 }));
 
 // 將專案轉換為日曆事件
@@ -873,36 +1596,43 @@ const calendarEvents = computed(() => {
     const status = getTimelineStatus(timeline);
     const progress = getTaskProgress(timeline);
     
-    // 根據狀態決定顏色
-    let backgroundColor, borderColor;
+    // 根據狀態決定漸層顏色
+    let backgroundColor, borderColor, textColor;
     if (progress === 100) {
-      backgroundColor = '#22c55e'; // green
-      borderColor = '#16a34a';
+      backgroundColor = 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)';
+      borderColor = '#15803d';
+      textColor = '#ffffff';
     } else if (status.label === '已過期') {
-      backgroundColor = '#ef4444'; // red
-      borderColor = '#dc2626';
+      backgroundColor = 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)';
+      borderColor = '#b91c1c';
+      textColor = '#ffffff';
     } else if (status.label === '緊急') {
-      backgroundColor = '#f97316'; // orange
-      borderColor = '#ea580c';
+      backgroundColor = 'linear-gradient(135deg, #f97316 0%, #ea580c 100%)';
+      borderColor = '#c2410c';
+      textColor = '#ffffff';
     } else if (status.label === '即將到期') {
-      backgroundColor = '#eab308'; // yellow
-      borderColor = '#ca8a04';
+      backgroundColor = 'linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%)';
+      borderColor = '#d97706';
+      textColor = '#78350f';
     } else {
-      backgroundColor = '#3b82f6'; // blue
-      borderColor = '#2563eb';
+      backgroundColor = 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)';
+      borderColor = '#1d4ed8';
+      textColor = '#ffffff';
     }
     
     return {
       id: timeline.id,
-      title: `${status.icon} ${timeline.name}`,
+      title: `${status.icon} ${timeline.name} (${progress}%)`,
       start: timeline.startDate || timeline.endDate,
-      end: timeline.endDate ? addDays(timeline.endDate, 1) : null, // FullCalendar end is exclusive
-      backgroundColor,
+      end: timeline.endDate ? addDays(timeline.endDate, 1) : null,
+      backgroundColor: backgroundColor.includes('linear') ? backgroundColor.match(/#[a-f0-9]{6}/i)?.[0] || '#3b82f6' : backgroundColor,
       borderColor,
+      textColor,
       extendedProps: {
         timeline,
         status: status.label,
-        progress
+        progress,
+        gradient: backgroundColor
       }
     };
   });
@@ -1141,7 +1871,9 @@ const taskForm = ref({
   start_date: '',
   end_date: '',
   task_remark: '',
-  isWork: false
+  isWork: false,
+  priority: 2,
+  tags: ''
 });
 
 const resetTaskForm = () => {
@@ -1151,7 +1883,9 @@ const resetTaskForm = () => {
     start_date: '',
     end_date: '',
     task_remark: '',
-    isWork: false
+    isWork: false,
+    priority: 2,
+    tags: ''
   };
 };
 
@@ -1204,18 +1938,26 @@ const handleAddTask = async () => {
   }
   
   try {
-    const assistantArray = taskForm.value.assistant 
-      ? taskForm.value.assistant.split(',').map(s => s.trim()).filter(s => s)
-      : [];
+    // 將 assistant 處理為逗號分隔的字串
+    const assistantStr = taskForm.value.assistant 
+      ? taskForm.value.assistant.trim()
+      : '';
+    
+    // 處理標籤為逗號分隔的字串
+    const tagsStr = taskForm.value.tags 
+      ? taskForm.value.tags.trim()
+      : '';
     
     const formData = {
       name: taskForm.value.name.trim(),
-      assistant: assistantArray,
+      assistant: assistantStr,
       timeline_id: selectedTimeline.value.id,
       start_date: taskForm.value.start_date || null,
       end_date: taskForm.value.end_date,
       task_remark: taskForm.value.task_remark || '',
-      isWork: taskForm.value.isWork ? 1 : 0
+      isWork: taskForm.value.isWork ? 1 : 0,
+      priority: taskForm.value.priority || 2,
+      tags: tagsStr
     };
     
     await api.post('/tasks', formData);
@@ -1224,6 +1966,7 @@ const handleAddTask = async () => {
     resetTaskForm();
     await viewTimeline(selectedTimeline.value);
     await fetchTimelines();
+    await fetchAllTasks();
   } catch (error) {
     alert(error.response?.data?.error || '新增任務失敗');
   }
@@ -1368,6 +2111,7 @@ const toggleTask = async (taskId) => {
     await api.patch(`/tasks/${taskId}/toggle`);
     await viewTimeline(selectedTimeline.value);
     await fetchTimelines();
+    await fetchAllTasks();
   } catch (error) {
     console.error('更新任務狀態失敗:', error);
     alert('更新任務狀態失敗');
@@ -1392,75 +2136,106 @@ const formatDate = (dateStr) => {
 
 onMounted(() => {
   fetchTimelines();
+  fetchAllTasks();
 });
 </script>
 
 <style>
 /* FullCalendar 自訂樣式 */
 .fc-custom {
-  --fc-border-color: #e5e7eb;
-  --fc-button-bg-color: #f3f4f6;
-  --fc-button-border-color: #e5e7eb;
-  --fc-button-text-color: #374151;
-  --fc-button-hover-bg-color: #e5e7eb;
-  --fc-button-hover-border-color: #d1d5db;
+  --fc-border-color: #e2e8f0;
+  --fc-button-bg-color: #f8fafc;
+  --fc-button-border-color: #e2e8f0;
+  --fc-button-text-color: #475569;
+  --fc-button-hover-bg-color: #f1f5f9;
+  --fc-button-hover-border-color: #cbd5e1;
   --fc-button-active-bg-color: var(--color-primary);
   --fc-button-active-border-color: var(--color-primary);
-  --fc-today-bg-color: rgba(59, 130, 246, 0.08);
+  --fc-today-bg-color: rgba(59, 130, 246, 0.06);
+  font-family: inherit;
+}
+
+.fc-custom .fc-toolbar {
+  padding: 1rem 0;
+  gap: 1rem;
 }
 
 .fc-custom .fc-toolbar-title {
-  font-size: 1.25rem;
-  font-weight: 600;
-  color: #1f2937;
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #1e293b;
+  letter-spacing: -0.025em;
 }
 
 .fc-custom .fc-button {
-  padding: 0.5rem 1rem;
+  padding: 0.625rem 1.25rem;
   font-size: 0.875rem;
-  font-weight: 500;
-  border-radius: 0.5rem;
-  transition: all 0.2s;
+  font-weight: 600;
+  border-radius: 0.75rem;
+  transition: all 0.2s ease;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+}
+
+.fc-custom .fc-button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 6px rgba(0,0,0,0.1);
 }
 
 .fc-custom .fc-button:focus {
-  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.3);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.3);
+  outline: none;
 }
 
 .fc-custom .fc-button-active {
-  background-color: var(--color-primary) !important;
-  border-color: var(--color-primary) !important;
+  background: linear-gradient(135deg, var(--color-primary) 0%, #2563eb 100%) !important;
+  border-color: transparent !important;
   color: white !important;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4) !important;
 }
 
 .fc-custom .fc-daygrid-day-number {
-  padding: 0.5rem;
+  padding: 0.625rem;
   font-size: 0.875rem;
-  color: #374151;
+  font-weight: 500;
+  color: #475569;
+}
+
+.fc-custom .fc-daygrid-day.fc-day-today {
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.08) 0%, rgba(99, 102, 241, 0.05) 100%) !important;
 }
 
 .fc-custom .fc-daygrid-day.fc-day-today .fc-daygrid-day-number {
-  background-color: var(--color-primary);
+  background: linear-gradient(135deg, var(--color-primary) 0%, #6366f1 100%);
   color: white;
   border-radius: 50%;
-  width: 1.75rem;
-  height: 1.75rem;
+  width: 2rem;
+  height: 2rem;
   display: flex;
   align-items: center;
   justify-content: center;
+  font-weight: 700;
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
 }
 
 .fc-custom .fc-event {
-  padding: 0.25rem 0.5rem;
-  border-radius: 0.375rem;
-  font-size: 0.75rem;
-  font-weight: 500;
+  padding: 0.375rem 0.625rem;
+  border-radius: 0.5rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
   border: none;
-  margin-bottom: 2px;
+  margin: 2px 4px 4px 4px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.08);
+  cursor: pointer;
+  transition: all 0.2s ease;
 }
 
 .fc-custom .fc-event:hover {
-  filter: brightness(0.95);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
+.fc-custom .fc-event-main {
+  padding: 0;
 }
 
 .fc-custom .fc-daygrid-event-dot {
@@ -1468,26 +2243,43 @@ onMounted(() => {
 }
 
 .fc-custom .fc-col-header-cell {
-  padding: 0.75rem 0;
-  background-color: #f9fafb;
-  font-weight: 600;
-  color: #6b7280;
+  padding: 1rem 0;
+  background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+  font-weight: 700;
+  color: #64748b;
   font-size: 0.75rem;
   text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 2px solid #e2e8f0;
 }
 
 .fc-custom .fc-scrollgrid {
-  border-radius: 0.75rem;
+  border-radius: 1rem;
   overflow: hidden;
+  border: 1px solid #e2e8f0;
 }
 
 .fc-custom .fc-daygrid-day-frame {
-  min-height: 100px;
+  min-height: 110px;
+  padding: 4px;
+}
+
+.fc-custom .fc-daygrid-day:hover {
+  background-color: rgba(59, 130, 246, 0.02);
 }
 
 .fc-custom .fc-more-link {
   color: var(--color-primary);
-  font-weight: 500;
+  font-weight: 600;
+  padding: 4px 8px;
+  border-radius: 4px;
+  background: rgba(59, 130, 246, 0.1);
+  margin: 2px 4px;
+  transition: all 0.2s;
+}
+
+.fc-custom .fc-more-link:hover {
+  background: rgba(59, 130, 246, 0.2);
 }
 
 /* 年度視圖調整 */
@@ -1496,13 +2288,91 @@ onMounted(() => {
 }
 
 .fc-custom .fc-multimonth-month {
-  border: 1px solid #e5e7eb;
-  border-radius: 0.75rem;
-  margin: 0.5rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 1rem;
+  margin: 0.75rem;
   overflow: hidden;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.05);
 }
 
 .fc-custom .fc-multimonth-header {
-  background-color: #f9fafb;
+  background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+  padding: 0.75rem;
+}
+
+.fc-custom .fc-multimonth-title {
+  font-weight: 700;
+  color: #334155;
+}
+
+/* Popover 樣式 */
+.fc-custom .fc-popover {
+  border-radius: 0.75rem;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.15);
+  border: 1px solid #e2e8f0;
+  overflow: hidden;
+}
+
+.fc-custom .fc-popover-header {
+  background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+  padding: 0.75rem 1rem;
+  font-weight: 600;
+}
+
+/* ========== 看板拖拽樣式 ========== */
+.kanban-ghost {
+  opacity: 0.5;
+  background: linear-gradient(135deg, #dbeafe 0%, #e0e7ff 100%) !important;
+  border: 2px dashed #3b82f6 !important;
+  border-radius: 0.75rem;
+}
+
+.kanban-drag {
+  transform: rotate(3deg);
+  box-shadow: 0 20px 40px rgba(0,0,0,0.2) !important;
+  z-index: 1000;
+}
+
+.kanban-card {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.kanban-card:hover {
+  border-color: #3b82f6 !important;
+}
+
+/* 拖拽時的視覺反饋 */
+.sortable-chosen {
+  cursor: grabbing !important;
+}
+
+/* 滑動動畫 */
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.kanban-card {
+  animation: slideIn 0.3s ease-out;
+}
+
+/* 拖放區域高亮 */
+.sortable-ghost-class {
+  position: relative;
+}
+
+.sortable-ghost-class::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(99, 102, 241, 0.1) 100%);
+  border-radius: 0.75rem;
+  border: 2px dashed #3b82f6;
 }
 </style>

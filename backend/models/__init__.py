@@ -14,6 +14,7 @@ from models.task_user import TaskUser
 from models.timeline_user import TimelineUser
 from models.notification import Notification
 from models.activity_log import ActivityLog
+from models.subtask import Subtask
 
 __all__ = [
     'db',
@@ -27,5 +28,6 @@ __all__ = [
     'TaskUser',
     'TimelineUser',
     'Notification',
-    'ActivityLog'
+    'ActivityLog',
+    'Subtask'
 ]

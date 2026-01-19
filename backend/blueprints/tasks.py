@@ -4,6 +4,7 @@ from app import db
 from models.task import Task
 from models.task_user import TaskUser
 from models.task_comment import TaskComment
+from models.subtask import Subtask
 from models.user import User
 from datetime import datetime
 
@@ -38,6 +39,10 @@ def get_tasks():
                     'role': m.role  # 0: 負責人, 1: 協作者
                 })
         
+        # 取得子任務
+        subtasks = Subtask.query.filter_by(task_id=t.task_id).order_by(Subtask.sort_order).all()
+        subtask_list = [s.to_dict() for s in subtasks]
+        
         result.append({
             'task_id': t.task_id,
             'name': t.name,
@@ -50,6 +55,7 @@ def get_tasks():
             'estimated_hours': t.estimated_hours,
             'actual_hours': t.actual_hours,
             'members': member_list,
+            'subtasks': subtask_list,
             'created_at': t.created_at.isoformat() if t.created_at else None,
             'start_date': t.start_date.isoformat() if t.start_date else None,
             'end_date': t.end_date.isoformat() if t.end_date else None,
@@ -350,6 +356,143 @@ def delete_task_comment(task_id, comment_id):
         db.session.delete(comment)
         db.session.commit()
         return jsonify({'message': '留言刪除成功'}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+
+# ===== 子任務 API =====
+
+@tasks_bp.route('/<int:task_id>/subtasks', methods=['GET'])
+@jwt_required()
+def get_subtasks(task_id):
+    """取得任務的所有子任務"""
+    subtasks = Subtask.query.filter_by(task_id=task_id).order_by(Subtask.sort_order).all()
+    return jsonify([s.to_dict() for s in subtasks]), 200
+
+@tasks_bp.route('/<int:task_id>/subtasks', methods=['POST'])
+@jwt_required()
+def create_subtask(task_id):
+    """新增子任務"""
+    user_id = int(get_jwt_identity())
+    task = Task.query.filter_by(task_id=task_id).first()
+    
+    if not task:
+        return jsonify({'error': '找不到該任務'}), 404
+    
+    data = request.get_json()
+    name = data.get('name')
+    
+    if not name:
+        return jsonify({'error': '請提供子任務名稱'}), 400
+    
+    # 取得最大排序順序
+    max_order = db.session.query(db.func.max(Subtask.sort_order)).filter_by(task_id=task_id).scalar() or 0
+    
+    try:
+        subtask = Subtask(
+            task_id=task_id,
+            name=name.strip(),
+            sort_order=max_order + 1
+        )
+        db.session.add(subtask)
+        db.session.commit()
+        return jsonify({'message': '子任務新增成功', 'subtask': subtask.to_dict()}), 201
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+@tasks_bp.route('/<int:task_id>/subtasks/<int:subtask_id>', methods=['PUT'])
+@jwt_required()
+def update_subtask(task_id, subtask_id):
+    """更新子任務"""
+    subtask = Subtask.query.filter_by(id=subtask_id, task_id=task_id).first()
+    
+    if not subtask:
+        return jsonify({'error': '找不到該子任務'}), 404
+    
+    data = request.get_json()
+    
+    if 'name' in data:
+        subtask.name = data['name']
+    if 'completed' in data:
+        subtask.completed = data['completed']
+    if 'sort_order' in data:
+        subtask.sort_order = data['sort_order']
+    
+    try:
+        db.session.commit()
+        return jsonify({'message': '子任務更新成功', 'subtask': subtask.to_dict()}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+@tasks_bp.route('/<int:task_id>/subtasks/<int:subtask_id>', methods=['DELETE'])
+@jwt_required()
+def delete_subtask(task_id, subtask_id):
+    """刪除子任務"""
+    subtask = Subtask.query.filter_by(id=subtask_id, task_id=task_id).first()
+    
+    if not subtask:
+        return jsonify({'error': '找不到該子任務'}), 404
+    
+    try:
+        db.session.delete(subtask)
+        db.session.commit()
+        return jsonify({'message': '子任務刪除成功'}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+@tasks_bp.route('/<int:task_id>/subtasks/<int:subtask_id>/toggle', methods=['PATCH'])
+@jwt_required()
+def toggle_subtask(task_id, subtask_id):
+    """切換子任務完成狀態"""
+    subtask = Subtask.query.filter_by(id=subtask_id, task_id=task_id).first()
+    
+    if not subtask:
+        return jsonify({'error': '找不到該子任務'}), 404
+    
+    subtask.completed = not subtask.completed
+    
+    try:
+        db.session.commit()
+        return jsonify({'message': '狀態更新成功', 'subtask': subtask.to_dict()}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+
+# ===== 任務狀態更新 API (看板用) =====
+
+@tasks_bp.route('/<int:task_id>/status', methods=['PATCH'])
+@jwt_required()
+def update_task_status(task_id):
+    """更新任務狀態（看板拖曳用）"""
+    user_id = int(get_jwt_identity())
+    task = Task.query.filter_by(task_id=task_id).first()
+    
+    if not task:
+        return jsonify({'error': '找不到該任務'}), 404
+    
+    # 檢查權限
+    is_member = TaskUser.query.filter_by(task_id=task_id, user_id=user_id).first()
+    if task.user_id != user_id and not is_member:
+        return jsonify({'error': '無權限修改此任務'}), 403
+    
+    data = request.get_json()
+    new_status = data.get('status')
+    
+    valid_statuses = ['pending', 'in_progress', 'completed']
+    if new_status not in valid_statuses:
+        return jsonify({'error': f'無效的狀態，有效值為: {valid_statuses}'}), 400
+    
+    task.status = new_status
+    task.completed = (new_status == 'completed')
+    
+    try:
+        db.session.commit()
+        return jsonify({'message': '狀態更新成功', 'status': task.status, 'completed': task.completed}), 200
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
