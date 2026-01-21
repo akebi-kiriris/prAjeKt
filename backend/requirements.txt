@@ -6,3 +6,4 @@ flask-migrate
 pymysql
 python-dotenv
 werkzeug
+google-generativeai

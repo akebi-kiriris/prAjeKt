@@ -10,6 +10,7 @@ class Timeline(db.Model):
     start_date = db.Column(db.Date)
     end_date = db.Column(db.Date)
     remark = db.Column(db.Text)
+    deleted = db.Column(db.Boolean, default=False, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
     def __repr__(self):

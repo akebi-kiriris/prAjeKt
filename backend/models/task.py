@@ -20,6 +20,7 @@ class Task(db.Model):
     estimated_hours = db.Column(db.Float)  # 預估工時
     actual_hours = db.Column(db.Float)  # 實際工時
     
+    deleted = db.Column(db.Boolean, default=False, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     start_date = db.Column(db.DateTime)
     end_date = db.Column(db.DateTime)

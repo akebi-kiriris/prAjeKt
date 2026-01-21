@@ -366,18 +366,18 @@
     <div v-if="viewMode === 'calendar'" class="px-4 pb-8">
       <div class="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
         <!-- Calendar Legend -->
-        <div class="p-5 border-b border-gray-100 bg-gradient-to-r from-primary/5 via-blue-50 to-indigo-50">
+        <div class="p-5 border-b border-gray-100 bg-linear-to-r from-primary/5 via-blue-50 to-indigo-50">
           <div class="flex flex-wrap items-center justify-between gap-4">
             <h3 class="font-bold text-gray-800 flex items-center gap-2 text-lg">
               <span class="w-10 h-10 bg-white rounded-xl shadow-sm flex items-center justify-center">📅</span>
               專案月曆
             </h3>
             <div class="flex flex-wrap items-center gap-4 text-sm bg-white/80 backdrop-blur-sm px-4 py-2.5 rounded-xl shadow-sm">
-              <span class="flex items-center gap-2"><span class="w-4 h-4 rounded-md bg-gradient-to-r from-green-400 to-green-500 shadow-sm"></span> 已完成</span>
-              <span class="flex items-center gap-2"><span class="w-4 h-4 rounded-md bg-gradient-to-r from-red-400 to-red-500 shadow-sm"></span> 已過期</span>
-              <span class="flex items-center gap-2"><span class="w-4 h-4 rounded-md bg-gradient-to-r from-orange-400 to-orange-500 shadow-sm"></span> 緊急</span>
-              <span class="flex items-center gap-2"><span class="w-4 h-4 rounded-md bg-gradient-to-r from-yellow-400 to-yellow-500 shadow-sm"></span> 即將到期</span>
-              <span class="flex items-center gap-2"><span class="w-4 h-4 rounded-md bg-gradient-to-r from-blue-400 to-blue-500 shadow-sm"></span> 進行中</span>
+              <span class="flex items-center gap-2"><span class="w-4 h-4 rounded-md bg-linear-to-r from-green-400 to-green-500 shadow-sm"></span> 已完成</span>
+              <span class="flex items-center gap-2"><span class="w-4 h-4 rounded-md bg-linear-to-r from-red-400 to-red-500 shadow-sm"></span> 已過期</span>
+              <span class="flex items-center gap-2"><span class="w-4 h-4 rounded-md bg-linear-to-r from-orange-400 to-orange-500 shadow-sm"></span> 緊急</span>
+              <span class="flex items-center gap-2"><span class="w-4 h-4 rounded-md bg-linear-to-r from-yellow-400 to-yellow-500 shadow-sm"></span> 即將到期</span>
+              <span class="flex items-center gap-2"><span class="w-4 h-4 rounded-md bg-linear-to-r from-blue-400 to-blue-500 shadow-sm"></span> 進行中</span>
             </div>
           </div>
         </div>
@@ -404,7 +404,7 @@
               v-for="timeline in thisWeekTimelines" 
               :key="timeline.id"
               @click="viewTimeline(timeline)"
-              class="flex items-center justify-between p-3 bg-gradient-to-r from-orange-50 to-amber-50 rounded-xl cursor-pointer hover:from-orange-100 hover:to-amber-100 transition-all border border-orange-100"
+              class="flex items-center justify-between p-3 bg-linear-to-r from-orange-50 to-amber-50 rounded-xl cursor-pointer hover:from-orange-100 hover:to-amber-100 transition-all border border-orange-100"
             >
               <span class="text-sm font-medium text-gray-700 truncate">{{ timeline.name }}</span>
               <span class="text-xs bg-orange-500 text-white px-2 py-1 rounded-full font-medium">{{ getDaysRemaining(timeline.endDate).text }}</span>
@@ -422,7 +422,7 @@
               v-for="timeline in overdueTimelines" 
               :key="timeline.id"
               @click="viewTimeline(timeline)"
-              class="flex items-center justify-between p-3 bg-gradient-to-r from-red-50 to-rose-50 rounded-xl cursor-pointer hover:from-red-100 hover:to-rose-100 transition-all border border-red-100"
+              class="flex items-center justify-between p-3 bg-linear-to-r from-red-50 to-rose-50 rounded-xl cursor-pointer hover:from-red-100 hover:to-rose-100 transition-all border border-red-100"
             >
               <span class="text-sm font-medium text-gray-700 truncate">{{ timeline.name }}</span>
               <span class="text-xs bg-red-500 text-white px-2 py-1 rounded-full font-medium">{{ getDaysRemaining(timeline.endDate).text }}</span>
@@ -440,7 +440,7 @@
               v-for="timeline in completedTimelines" 
               :key="timeline.id"
               @click="viewTimeline(timeline)"
-              class="flex items-center justify-between p-3 bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl cursor-pointer hover:from-green-100 hover:to-emerald-100 transition-all border border-green-100"
+              class="flex items-center justify-between p-3 bg-linear-to-r from-green-50 to-emerald-50 rounded-xl cursor-pointer hover:from-green-100 hover:to-emerald-100 transition-all border border-green-100"
             >
               <span class="text-sm font-medium text-gray-700 truncate">{{ timeline.name }}</span>
               <span class="text-xs bg-green-500 text-white px-2 py-1 rounded-full font-medium">100%</span>
@@ -452,9 +452,9 @@
     </div>
     
     <!-- Create/Edit Project Modal -->
-    <div v-if="showCreateModal" class="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+    <div v-if="showCreateModal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg animate-slideUp max-h-[90vh] overflow-y-auto">
-        <div class="p-5 border-b border-gray-100 flex justify-between items-center bg-gradient-to-r from-primary/5 to-transparent">
+        <div class="p-5 border-b border-gray-100 flex justify-between items-center bg-linear-to-r from-primary/5 to-transparent">
           <h2 class="text-lg font-semibold text-gray-800 flex items-center gap-2">
             <span class="w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center">📁</span>
             {{ editingTimeline ? '編輯專案' : '新增專案' }}
@@ -769,6 +769,15 @@
             >
               <span>➕</span>
               新增任務
+            </button>
+            <button 
+              @click="generateTasksWithAi"
+              :disabled="isGeneratingAi"
+              class="px-4 py-2 bg-linear-to-r from-purple-500 to-indigo-600 text-white rounded-lg hover:brightness-110 transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-purple-500/30"
+            >
+              <span v-if="!isGeneratingAi">✨</span>
+              <span v-else class="animate-spin">⭐</span>
+              {{ isGeneratingAi ? 'AI 生成中...' : 'AI 生成任務' }}
             </button>
             <button 
               @click="isSharePanelOpen = true"
@@ -1098,6 +1107,125 @@
       </div>
     </div>
     
+    <!-- AI 生成任務預覽 Modal -->
+    <div v-if="showAiGenerateModal" class="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-60 p-4">
+      <div class="bg-white rounded-2xl shadow-2xl w-full max-w-3xl animate-slideUp max-h-[90vh] overflow-y-auto">
+        <div class="p-5 border-b border-gray-100 flex justify-between items-center bg-linear-to-r from-purple-50 via-indigo-50 to-blue-50 sticky top-0 bg-white z-10">
+          <h2 class="text-lg font-semibold text-gray-800 flex items-center gap-2">
+            <span class="w-10 h-10 bg-linear-to-br from-purple-500 to-indigo-600 rounded-xl flex items-center justify-center text-white shadow-lg">✨</span>
+            <div>
+              <div>AI 生成的任務建議</div>
+              <div class="text-xs text-gray-500 font-normal mt-0.5">根據專案「{{ selectedTimeline?.name }}」智能生成</div>
+            </div>
+          </h2>
+          <button @click="showAiGenerateModal = false; aiGeneratedTasks = []; selectedAiTasks = []" class="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">&times;</button>
+        </div>
+        
+        <div class="p-6">
+          <!-- 提示信息 -->
+          <div class="mb-6 p-4 bg-linear-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-100">
+            <div class="flex items-start gap-3">
+              <span class="text-2xl">🤖</span>
+              <div class="flex-1">
+                <h4 class="font-semibold text-gray-800 mb-1">AI 智能分析</h4>
+                <p class="text-sm text-gray-600">
+                  基於專案名稱和描述，AI 為您生成了 <span class="font-bold text-purple-600">{{ aiGeneratedTasks.length }}</span> 個任務建議。
+                  您可以選擇需要的任務，也可以在創建後再進行調整。
+                </p>
+              </div>
+            </div>
+          </div>
+          
+          <!-- 全選控制 -->
+          <div class="flex items-center justify-between mb-4 p-3 bg-gray-50 rounded-lg">
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input 
+                type="checkbox"
+                :checked="selectedAiTasks.length === aiGeneratedTasks.length"
+                @change="toggleAllAiTasks"
+                class="w-5 h-5 rounded border-gray-300 text-purple-600 focus:ring-purple-500 cursor-pointer"
+              />
+              <span class="font-medium text-gray-700">全選/取消全選</span>
+            </label>
+            <span class="text-sm text-gray-500">
+              已選擇 <span class="font-bold text-purple-600">{{ selectedAiTasks.length }}</span> / {{ aiGeneratedTasks.length }}
+            </span>
+          </div>
+          
+          <!-- 任務列表 -->
+          <div class="space-y-3 mb-6 max-h-96 overflow-y-auto">
+            <div 
+              v-for="(task, index) in aiGeneratedTasks" 
+              :key="index"
+              @click="toggleAiTaskSelection(index)"
+              :class="[
+                'p-4 border-2 rounded-xl cursor-pointer transition-all duration-200',
+                selectedAiTasks.includes(index) 
+                  ? 'border-purple-400 bg-linear-to-r from-purple-50 to-indigo-50 shadow-md' 
+                  : 'border-gray-200 bg-white hover:border-purple-200 hover:bg-purple-50/30'
+              ]"
+            >
+              <div class="flex items-start gap-3">
+                <input 
+                  type="checkbox"
+                  :checked="selectedAiTasks.includes(index)"
+                  @click.stop="toggleAiTaskSelection(index)"
+                  class="w-5 h-5 mt-1 rounded border-gray-300 text-purple-600 focus:ring-purple-500 cursor-pointer"
+                />
+                <div class="flex-1">
+                  <div class="flex items-start justify-between gap-2 mb-2">
+                    <h4 class="font-semibold text-gray-800 flex-1">{{ task.name }}</h4>
+                    <span :class="['px-3 py-1 text-xs font-medium rounded-full border', getAiPriorityClass(task.priority)]">
+                      {{ getPriorityLabel(task.priority) }}
+                    </span>
+                  </div>
+                  
+                  <div class="flex flex-wrap items-center gap-4 text-sm text-gray-600 mb-2">
+                    <span class="flex items-center gap-1">
+                      <span>⏱️</span>
+                      預計 {{ task.estimated_days }} 天
+                    </span>
+                    <span v-if="task.start_date" class="flex items-center gap-1">
+                      <span>📅</span>
+                      {{ formatDate(task.start_date) }} - {{ formatDate(task.end_date) }}
+                    </span>
+                  </div>
+                  
+                  <p v-if="task.task_remark" class="text-sm text-gray-600 bg-white/80 p-2 rounded-lg border border-gray-100">
+                    💡 {{ task.task_remark }}
+                  </p>
+                </div>
+              </div>
+            </div>
+            
+            <div v-if="aiGeneratedTasks.length === 0" class="text-center py-12 text-gray-400">
+              <span class="text-4xl block mb-4">🤔</span>
+              <p>暫無生成的任務</p>
+            </div>
+          </div>
+          
+          <!-- 操作按鈕 -->
+          <div class="flex gap-3 pt-4 border-t border-gray-100">
+            <button 
+              @click="batchCreateAiTasks"
+              :disabled="selectedAiTasks.length === 0"
+              class="flex-1 py-3 bg-linear-to-r from-purple-500 to-indigo-600 text-white font-semibold rounded-xl shadow-lg shadow-purple-500/30 hover:shadow-xl hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0 flex items-center justify-center gap-2"
+            >
+              <span>✓</span>
+              創建選中的任務 ({{ selectedAiTasks.length }})
+            </button>
+            <button 
+              @click="showAiGenerateModal = false; aiGeneratedTasks = []; selectedAiTasks = []"
+              class="px-6 py-3 bg-gray-100 text-gray-700 font-semibold rounded-xl hover:bg-gray-200 transition-all flex items-center justify-center gap-2"
+            >
+              <span>✕</span>
+              取消
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+    
     <!-- 看板任務詳情 Modal -->
     <div v-if="showKanbanTaskModal && selectedKanbanTask" class="fixed inset-0 bg-black/50 flex items-center justify-center z-60 p-4">
       <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto animate-slideUp">
@@ -1292,6 +1420,12 @@ const showKanbanTaskModal = ref(false);
 const selectedKanbanTask = ref(null);
 const newSubtaskName = ref('');
 const isDragging = ref(false);
+
+// AI 任務生成相關
+const showAiGenerateModal = ref(false);
+const isGeneratingAi = ref(false);
+const aiGeneratedTasks = ref([]);
+const selectedAiTasks = ref([]);
 
 // 取得所有任務（看板用）
 const fetchAllTasks = async () => {
@@ -2132,6 +2266,78 @@ const closeModal = () => {
 const formatDate = (dateStr) => {
   if (!dateStr) return '';
   return new Date(dateStr).toLocaleDateString('zh-TW');
+};
+
+// AI 生成任務
+const generateTasksWithAi = async () => {
+  if (!selectedTimeline.value) return;
+  
+  isGeneratingAi.value = true;
+  try {
+    const response = await api.post(`/timelines/${selectedTimeline.value.id}/generate-tasks`, {});
+    aiGeneratedTasks.value = response.data.tasks;
+    // 預設全選
+    selectedAiTasks.value = aiGeneratedTasks.value.map((_, index) => index);
+    showAiGenerateModal.value = true;
+  } catch (error) {
+    console.error('AI 生成失敗:', error);
+    alert(error.response?.data?.error || 'AI 生成任務失敗，請稍後再試');
+  } finally {
+    isGeneratingAi.value = false;
+  }
+};
+
+// 批次創建 AI 生成的任務
+const batchCreateAiTasks = async () => {
+  if (!selectedTimeline.value || selectedAiTasks.value.length === 0) {
+    alert('請至少選擇一個任務');
+    return;
+  }
+  
+  try {
+    const tasksToCreate = selectedAiTasks.value.map(index => aiGeneratedTasks.value[index]);
+    await api.post(`/timelines/${selectedTimeline.value.id}/batch-create-tasks`, {
+      tasks: tasksToCreate
+    });
+    alert(`成功創建 ${tasksToCreate.length} 個任務！`);
+    showAiGenerateModal.value = false;
+    aiGeneratedTasks.value = [];
+    selectedAiTasks.value = [];
+    await viewTimeline(selectedTimeline.value);
+    await fetchTimelines();
+    await fetchAllTasks();
+  } catch (error) {
+    alert(error.response?.data?.error || '批次創建任務失敗');
+  }
+};
+
+// 切換任務選擇
+const toggleAiTaskSelection = (index) => {
+  const idx = selectedAiTasks.value.indexOf(index);
+  if (idx > -1) {
+    selectedAiTasks.value.splice(idx, 1);
+  } else {
+    selectedAiTasks.value.push(index);
+  }
+};
+
+// 全選/取消全選
+const toggleAllAiTasks = () => {
+  if (selectedAiTasks.value.length === aiGeneratedTasks.value.length) {
+    selectedAiTasks.value = [];
+  } else {
+    selectedAiTasks.value = aiGeneratedTasks.value.map((_, index) => index);
+  }
+};
+
+// 獲取優先級顏色類別
+const getAiPriorityClass = (priority) => {
+  const classes = {
+    1: 'bg-red-100 text-red-700 border-red-300',
+    2: 'bg-yellow-100 text-yellow-700 border-yellow-300',
+    3: 'bg-green-100 text-green-700 border-green-300'
+  };
+  return classes[priority] || 'bg-gray-100 text-gray-700 border-gray-300';
 };
 
 onMounted(() => {

@@ -8,6 +8,8 @@ from models.task import Task
 from models.user import User
 from datetime import datetime
 import os
+import json
+import google.generativeai as genai
 
 timelines_bp = Blueprint('timelines', __name__)
 
@@ -21,12 +23,12 @@ def allowed_file(filename):
 def get_timelines():
     """取得使用者的所有專案時程"""
     user_id = int(get_jwt_identity())
-    timelines = Timeline.query.filter_by(user_id=user_id).all()
+    timelines = Timeline.query.filter_by(user_id=user_id, deleted=False).all()
     
     result = []
     for timeline in timelines:
         # 計算任務統計
-        tasks = Task.query.filter_by(timeline_id=timeline.id, user_id=user_id).all()
+        tasks = Task.query.filter_by(timeline_id=timeline.id, user_id=user_id, deleted=False).all()
         total_tasks = len(tasks)
         completed_tasks = len([t for t in tasks if t.completed])
         
@@ -41,6 +43,7 @@ def get_timelines():
         })
     
     return jsonify(result), 200
+
 
 @timelines_bp.route('', methods=['POST'])
 @jwt_required()
@@ -97,7 +100,7 @@ def create_timeline():
 def update_timeline(timeline_id):
     """更新專案時程"""
     user_id = int(get_jwt_identity())
-    timeline = Timeline.query.filter_by(id=timeline_id, user_id=user_id).first()
+    timeline = Timeline.query.filter_by(id=timeline_id, user_id=user_id, deleted=False).first()
     
     if not timeline:
         return jsonify({'error': '找不到該專案'}), 404
@@ -140,15 +143,20 @@ def update_timeline(timeline_id):
 @timelines_bp.route('/<int:timeline_id>', methods=['DELETE'])
 @jwt_required()
 def delete_timeline(timeline_id):
-    """刪除專案時程"""
+    """刪除專案時程（軟刪除）"""
     user_id = int(get_jwt_identity())
-    timeline = Timeline.query.filter_by(id=timeline_id, user_id=user_id).first()
+    timeline = Timeline.query.filter_by(id=timeline_id, user_id=user_id, deleted=False).first()
     
     if not timeline:
         return jsonify({'error': '找不到該專案'}), 404
     
     try:
-        db.session.delete(timeline)
+        # 軟刪除專案
+        timeline.deleted = True
+        
+        # 連帶軟刪除該專案下的所有任務
+        Task.query.filter_by(timeline_id=timeline_id, user_id=user_id).update({'deleted': True})
+        
         db.session.commit()
         return jsonify({'message': '專案刪除成功'}), 200
     except Exception as e:
@@ -160,7 +168,7 @@ def delete_timeline(timeline_id):
 def get_timeline_tasks(timeline_id):
     """取得專案的所有任務（含負責人、助理資訊）"""
     user_id = int(get_jwt_identity())
-    tasks = Task.query.filter_by(timeline_id=timeline_id).order_by(Task.end_date).all()
+    tasks = Task.query.filter_by(timeline_id=timeline_id, deleted=False).order_by(Task.end_date).all()
     
     tasks_response = []
     for task in tasks:
@@ -325,7 +333,7 @@ def add_task_comment(task_id):
 def update_timeline_remark(timeline_id):
     """修改專案備註"""
     user_id = int(get_jwt_identity())
-    timeline = Timeline.query.filter_by(id=timeline_id, user_id=user_id).first()
+    timeline = Timeline.query.filter_by(id=timeline_id, user_id=user_id, deleted=False).first()
     
     if not timeline:
         return jsonify({'error': '找不到該專案'}), 404
@@ -387,6 +395,209 @@ def add_timeline_member(timeline_id):
         )
         db.session.commit()
         return jsonify({'message': '成員新增成功'}), 201
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+
+# ===== AI 任務生成 API =====
+
+@timelines_bp.route('/<int:timeline_id>/generate-tasks', methods=['POST'])
+@jwt_required()
+def generate_tasks_with_ai(timeline_id):
+    """使用 AI 自動生成任務清單"""
+    user_id = int(get_jwt_identity())
+    
+    # 檢查專案是否存在且屬於該使用者
+    timeline = Timeline.query.filter_by(id=timeline_id, user_id=user_id, deleted=False).first()
+    if not timeline:
+        return jsonify({'error': '找不到該專案或無權限'}), 404
+    
+    data = request.get_json() or {}
+    project_name = data.get('name', timeline.name)
+    description = data.get('description', timeline.remark or '')
+    
+    if not project_name.strip():
+        return jsonify({'error': '請提供專案名稱'}), 400
+    
+    # 查詢現有任務
+    existing_tasks = Task.query.filter_by(timeline_id=timeline_id, user_id=user_id, deleted=False).all()
+    existing_tasks_info = []
+    for task in existing_tasks:
+        existing_tasks_info.append({
+            'task_id': task.task_id,
+            'name': task.name,
+            'priority': task.priority,
+            'estimated_days': (task.end_date - task.start_date).days if task.start_date and task.end_date else 3,
+            'task_remark': task.task_remark or '',
+            'isExisting': True
+        })
+    
+    try:
+        # 初始化 Gemini AI
+        api_key = os.getenv('GOOGLE_API_KEY')
+        if not api_key:
+            return jsonify({'error': 'Google API Key 未配置，請在 .env 中設定 GOOGLE_API_KEY'}), 500
+        
+        genai.configure(api_key=api_key)
+        
+        # 定義 JSON Schema 來限定輸出格式
+        task_schema = {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "name": {"type": "string", "description": "任務名稱（10-30字，繁體中文）"},
+                        "priority": {"type": "integer", "description": "優先級（1=高,2=中,3=低）", "enum": [1,2,3]},
+                        "estimated_days": {"type": "integer", "description": "預估完成天數"},
+                        "task_remark": {"type": "string", "description": "任務備註（20-50字，繁體中文）"}
+                    },
+                    "required": ["name", "priority", "estimated_days", "task_remark"]
+                }
+        }
+        
+        # 建構 Prompt（包含現有任務資訊）
+        existing_tasks_text = ""
+        if existing_tasks_info:
+            existing_tasks_text = "\n\n現有任務：\n"
+            for idx, task in enumerate(existing_tasks_info, 1):
+                existing_tasks_text += f"{idx}. {task['name']} (優先級:{task['priority']}, 預估:{task['estimated_days']}天)\n"
+        
+        prompt = f"""你是一個專業的專案管理助手。請根據以下專案資訊，為使用者生成合理的任務清單。
+
+專案名稱: {project_name}
+專案描述: {description if description.strip() else '無'}{existing_tasks_text}
+
+要求：
+1. 如果有現有任務，請參考它們來生成互補的任務（避免重複，找出缺失環節）
+2. 如果沒有現有任務，請生成 5-8 個完整的任務
+3. 生成的任務要考慮現有任務的優先級和邏輯順序
+
+請務必回傳一個 JSON 陣列，每個任務物件必須包含以下欄位：
+1. name（string）：任務名稱，10-30字，繁體中文
+2. priority（integer）：優先級，1=高，2=中，3=低
+3. estimated_days（integer）：預估完成天數，根據任務複雜度合理估計
+4. task_remark（string）：任務備註，20-50字，繁體中文
+
+不要使用 task_name、priority: "高" 這種格式，請嚴格依照上方欄位與型別。
+按照邏輯順序排列（從準備、進行、到完成）
+"""
+        
+        # 呼叫 AI，使用 response_mime_type 限定 JSON 輸出
+        model = genai.GenerativeModel('gemini-2.5-flash-lite')
+        response = model.generate_content(
+            prompt,
+            generation_config={
+                "response_mime_type": "application/json",
+                "temperature": 0.7
+            }
+        )
+        
+        # 直接解析 JSON（不需要手動處理 markdown 符號）
+        ai_generated_tasks = json.loads(response.text)
+        
+        # 驗證回傳格式
+        if not isinstance(ai_generated_tasks, list):
+            return jsonify({'error': 'AI 回傳格式錯誤'}), 500
+        
+        # 補充預設值並標記為 AI 生成
+        for task in ai_generated_tasks:
+            task['timeline_id'] = timeline_id
+            task['status'] = 'pending'
+            task['completed'] = False
+            task['isExisting'] = False  # 標記為 AI 生成的新任務
+            task.setdefault('priority', 2)
+            task.setdefault('estimated_days', 3)
+            task.setdefault('task_remark', '')
+        
+        # 合併現有任務和 AI 生成任務
+        all_tasks = existing_tasks_info + ai_generated_tasks
+        
+        return jsonify({
+            'message': f'現有 {len(existing_tasks_info)} 個任務，AI 生成 {len(ai_generated_tasks)} 個新任務',
+            'tasks': all_tasks,
+            'existingCount': len(existing_tasks_info),
+            'generatedCount': len(ai_generated_tasks)
+        }), 200
+
+    except json.JSONDecodeError as e:
+        return jsonify({
+            'error': 'AI 回應解析失敗',
+            'detail': str(e)
+        }), 500
+    except Exception as e:
+        return jsonify({'error': f'AI 生成失敗: {str(e)}'}), 500
+
+
+@timelines_bp.route('/<int:timeline_id>/batch-create-tasks', methods=['POST'])
+@jwt_required()
+def batch_create_tasks(timeline_id):
+    """批量創建任務（用於 AI 生成後確認）"""
+    user_id = int(get_jwt_identity())
+    
+    # 檢查專案是否存在且屬於該使用者
+    timeline = Timeline.query.filter_by(id=timeline_id, user_id=user_id, deleted=False).first()
+    if not timeline:
+        return jsonify({'error': '找不到該專案或無權限'}), 404
+    
+    data = request.get_json()
+    tasks = data.get('tasks', [])
+    
+    if not isinstance(tasks, list) or len(tasks) == 0:
+        return jsonify({'error': '請提供至少一個任務'}), 400
+    
+    try:
+        from datetime import timedelta
+        
+        # 收集所有現有任務 ID 和使用者選中的現有任務 ID
+        all_existing_task_ids = [t.task_id for t in Task.query.filter_by(timeline_id=timeline_id, user_id=user_id, deleted=False).all()]
+        selected_existing_task_ids = [task['task_id'] for task in tasks if task.get('isExisting') and task.get('task_id')]
+        
+        # 軟刪除未被選中的舊任務
+        tasks_to_delete = set(all_existing_task_ids) - set(selected_existing_task_ids)
+        if tasks_to_delete:
+            Task.query.filter(Task.task_id.in_(tasks_to_delete)).update({'deleted': True}, synchronize_session=False)
+        
+        # 新增 AI 生成的任務（isExisting=False）
+        created_tasks = []
+        start_date = timeline.start_date or datetime.now()
+        current_date = start_date
+        
+        for task_data in tasks:
+            # 跳過現有任務（已經存在於資料庫，不需要重複新增）
+            if task_data.get('isExisting'):
+                continue
+            
+            # 計算任務時間
+            estimated_days = task_data.get('estimated_days', 3)
+            end_date = current_date + timedelta(days=estimated_days)
+            
+            new_task = Task(
+                user_id=user_id,
+                timeline_id=timeline_id,
+                name=task_data.get('name', '未命名任務'),
+                priority=task_data.get('priority', 2),
+                status=task_data.get('status', 'pending'),
+                task_remark=task_data.get('task_remark', ''),
+                start_date=current_date,
+                end_date=end_date,
+                completed=False,
+                isWork=1
+            )
+            
+            db.session.add(new_task)
+            created_tasks.append(new_task.name)
+            current_date = end_date
+        
+        db.session.commit()
+        
+        return jsonify({
+            'message': f'保留 {len(selected_existing_task_ids)} 個舊任務，刪除 {len(tasks_to_delete)} 個舊任務，新增 {len(created_tasks)} 個任務',
+            'kept': len(selected_existing_task_ids),
+            'deleted': len(tasks_to_delete),
+            'created': len(created_tasks)
+        }), 201
+    
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
