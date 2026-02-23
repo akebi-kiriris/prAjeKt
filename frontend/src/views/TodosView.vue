@@ -190,7 +190,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue';
-import api from '../services/api';
+import { todoService } from '../services/todoService';
 
 const todos = ref([]);
 const showAddForm = ref(false);
@@ -211,7 +211,7 @@ const completedTodos = computed(() =>
 
 const fetchTodos = async () => {
   try {
-    const response = await api.get('/todos');
+    const response = await todoService.getAll();
     todos.value = response.data;
   } catch (error) {
     console.error('取得待辦事項失敗:', error);
@@ -226,9 +226,9 @@ const handleSubmit = async () => {
     };
     
     if (editingTodo.value) {
-      await api.put(`/todos/${editingTodo.value.id}`, formData);
+      await todoService.update(editingTodo.value.id, formData);
     } else {
-      await api.post('/todos', formData);
+      await todoService.create(formData);
     }
     await fetchTodos();
     cancelForm();
@@ -249,7 +249,7 @@ const editTodo = (todo) => {
 
 const toggleTodo = async (id) => {
   try {
-    await api.patch(`/todos/${id}/toggle`);
+    await todoService.toggleComplete(id);
     await fetchTodos();
   } catch (error) {
     console.error('更新待辦狀態失敗:', error);
@@ -260,7 +260,7 @@ const deleteTodo = async (id) => {
   if (!confirm('確定要刪除此待辦事項？')) return;
   
   try {
-    await api.delete(`/todos/${id}`);
+    await todoService.remove(id);
     await fetchTodos();
   } catch (error) {
     console.error('刪除失敗:', error);

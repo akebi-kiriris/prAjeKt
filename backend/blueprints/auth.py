@@ -101,3 +101,17 @@ def get_current_user():
         'email': user.email,
         'phone': user.phone
     }), 200
+    
+@auth_bp.route('/refresh', methods=['POST'])
+@jwt_required(refresh=True)
+def refresh_access_token():
+    """使用 refresh token 取得新的 access token"""
+    # 從 refresh token 中取得 user_id
+    user_id = get_jwt_identity()
+    
+    # 產生新的 access token
+    new_access_token = create_access_token(identity=user_id)
+    
+    return jsonify({
+        'access_token': new_access_token
+    }), 200

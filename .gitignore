@@ -30,8 +30,10 @@ Thumbs.db
 # SQL
 *.sql
 
-# Markdown 筆記
-*.md
+# Docs / 筆記目錄（不追蹤）
+docs/
+# README 保留追蹤
+!README.md
 
 # 其他
 *.bak

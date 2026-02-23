@@ -1,4 +1,5 @@
 <template>
+  <div>
   <!-- 桌面版：左側 Sidebar -->
   <nav
     class="hidden md:block fixed left-0 top-16 bottom-0 w-64 bg-gray-100 shadow-lg overflow-y-auto z-40 transition-transform duration-300"
@@ -33,10 +34,12 @@
       </li>
     </ul>
   </nav>
+  </div>
 </template>
 
 <script setup>
 defineProps({ open: Boolean });
+defineEmits(['close']);
 
 const navItems = [
   { path: '/', icon: '🏠', text: '主頁' },
@@ -48,6 +51,3 @@ const navItems = [
 ];
 </script>
 
-<style scoped>
-/* 桌面版 Sidebar 動畫已由 Tailwind class 處理 */
-</style>

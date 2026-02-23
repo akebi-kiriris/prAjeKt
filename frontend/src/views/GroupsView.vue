@@ -197,7 +197,7 @@
 
 <script setup>
 import { ref, onMounted, nextTick } from 'vue';
-import api from '../services/api';
+import { groupService } from '../services/groupService';
 
 const groups = ref([]);
 const currentGroup = ref(null);
@@ -211,7 +211,7 @@ const messagesContainer = ref(null);
 
 const fetchGroups = async () => {
   try {
-    const response = await api.get('/groups');
+    const response = await groupService.getAll();
     groups.value = response.data;
   } catch (error) {
     console.error('取得群組失敗:', error);
@@ -225,7 +225,7 @@ const handleCreateGroup = async () => {
   }
   
   try {
-    const response = await api.post('/groups', { group_name: newGroupName.value });
+    const response = await groupService.create(newGroupName.value);
     alert(`群組建立成功！邀請碼: ${response.data.invite_code}`);
     await fetchGroups();
     showCreateGroup.value = false;
@@ -242,7 +242,7 @@ const handleJoinGroup = async () => {
   }
   
   try {
-    await api.post('/groups/join', { invite_code: inviteCode.value });
+    await groupService.join(inviteCode.value);
     alert('成功加入群組');
     await fetchGroups();
     showJoinGroup.value = false;
@@ -259,7 +259,7 @@ const openChat = async (group) => {
 
 const fetchMessages = async (groupId) => {
   try {
-    const response = await api.get(`/groups/${groupId}/messages`);
+    const response = await groupService.getMessages(groupId);
     messages.value = response.data;
     await nextTick();
     scrollToBottom();
@@ -272,9 +272,7 @@ const sendMessage = async () => {
   if (!newMessage.value.trim()) return;
   
   try {
-    await api.post(`/groups/${currentGroup.value.group_id}/messages`, {
-      content: newMessage.value
-    });
+    await groupService.sendMessage(currentGroup.value.group_id, newMessage.value);
     newMessage.value = '';
     await fetchMessages(currentGroup.value.group_id);
   } catch (error) {
@@ -286,7 +284,7 @@ const leaveGroup = async (groupId) => {
   if (!confirm('確定要離開此群組？')) return;
   
   try {
-    await api.post(`/groups/${groupId}/leave`);
+    await groupService.leave(groupId);
     alert('已離開群組');
     await fetchGroups();
     if (currentGroup.value?.group_id === groupId) {

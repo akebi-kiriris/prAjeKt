@@ -1094,7 +1094,7 @@
               <a 
                 v-for="file in selectedTask.files" 
                 :key="file.id"
-                :href="`http://localhost:5000/api/timelines/files/${file.filename}`"
+                :href="`${apiBaseUrl}/timelines/files/${file.filename}`"
                 target="_blank"
                 class="block p-3 bg-white rounded-lg hover:bg-blue-50 transition-colors text-primary"
               >
@@ -1384,12 +1384,15 @@
 
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue';
-import api from '../services/api';
+import { taskService } from '../services/taskService';
+import { timelineService } from '../services/timelineService';
 import FullCalendar from '@fullcalendar/vue3';
 import dayGridPlugin from '@fullcalendar/daygrid';
 import interactionPlugin from '@fullcalendar/interaction';
 import multiMonthPlugin from '@fullcalendar/multimonth';
 import draggable from 'vuedraggable';
+
+const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
 
 const timelines = ref([]);
 const selectedTimeline = ref(null);
@@ -1430,7 +1433,7 @@ const selectedAiTasks = ref([]);
 // 取得所有任務（看板用）
 const fetchAllTasks = async () => {
   try {
-    const response = await api.get('/tasks');
+    const response = await taskService.getAll();
     allTasks.value = response.data;
   } catch (error) {
     console.error('取得任務失敗:', error);
@@ -1527,7 +1530,7 @@ const onTaskMoved = async (evt, newStatus) => {
   if (evt.added) {
     const task = evt.added.element;
     try {
-      await api.patch(`/tasks/${task.task_id}/status`, { status: newStatus });
+      await taskService.updateStatus(task.task_id, newStatus);
       // 更新本地狀態
       const localTask = allTasks.value.find(t => t.task_id === task.task_id);
       if (localTask) {
@@ -1578,7 +1581,7 @@ const viewKanbanTaskDetail = async (task) => {
   
   // 取得子任務
   try {
-    const response = await api.get(`/tasks/${task.task_id}/subtasks`);
+    const response = await taskService.getSubtasks(task.task_id);
     selectedKanbanTask.value.subtasks = response.data;
   } catch (error) {
     console.error('取得子任務失敗:', error);
@@ -1593,9 +1596,7 @@ const addSubtask = async () => {
   if (!newSubtaskName.value.trim() || !selectedKanbanTask.value) return;
   
   try {
-    const response = await api.post(`/tasks/${selectedKanbanTask.value.task_id}/subtasks`, {
-      name: newSubtaskName.value.trim()
-    });
+    const response = await taskService.createSubtask(selectedKanbanTask.value.task_id, { name: newSubtaskName.value.trim() });
     selectedKanbanTask.value.subtasks.push(response.data.subtask);
     newSubtaskName.value = '';
     await fetchAllTasks();
@@ -1607,7 +1608,7 @@ const addSubtask = async () => {
 // 切換子任務完成狀態
 const toggleSubtask = async (subtask) => {
   try {
-    await api.patch(`/tasks/${selectedKanbanTask.value.task_id}/subtasks/${subtask.id}/toggle`);
+    await taskService.toggleSubtask(selectedKanbanTask.value.task_id, subtask.id);
     subtask.completed = !subtask.completed;
     await fetchAllTasks();
   } catch (error) {
@@ -1618,7 +1619,7 @@ const toggleSubtask = async (subtask) => {
 // 刪除子任務
 const deleteSubtask = async (subtask) => {
   try {
-    await api.delete(`/tasks/${selectedKanbanTask.value.task_id}/subtasks/${subtask.id}`);
+    await taskService.deleteSubtask(selectedKanbanTask.value.task_id, subtask.id);
     selectedKanbanTask.value.subtasks = selectedKanbanTask.value.subtasks.filter(s => s.id !== subtask.id);
     await fetchAllTasks();
   } catch (error) {
@@ -1631,10 +1632,7 @@ const updateTaskPriority = async (priority) => {
   if (!selectedKanbanTask.value) return;
   
   try {
-    await api.put(`/tasks/${selectedKanbanTask.value.task_id}`, {
-      ...selectedKanbanTask.value,
-      priority
-    });
+    await taskService.update(selectedKanbanTask.value.task_id, { ...selectedKanbanTask.value, priority });
     selectedKanbanTask.value.priority = priority;
     await fetchAllTasks();
   } catch (error) {
@@ -1647,10 +1645,7 @@ const updateTaskTags = async () => {
   if (!selectedKanbanTask.value) return;
   
   try {
-    await api.put(`/tasks/${selectedKanbanTask.value.task_id}`, {
-      ...selectedKanbanTask.value,
-      tags: selectedKanbanTask.value.tags
-    });
+    await taskService.update(selectedKanbanTask.value.task_id, { ...selectedKanbanTask.value, tags: selectedKanbanTask.value.tags });
     await fetchAllTasks();
   } catch (error) {
     alert('更新標籤失敗');
@@ -2025,7 +2020,7 @@ const resetTaskForm = () => {
 
 const fetchTimelines = async () => {
   try {
-    const response = await api.get('/timelines');
+    const response = await timelineService.getAll();
     timelines.value = response.data;
   } catch (error) {
     console.error('取得專案失敗:', error);
@@ -2048,10 +2043,10 @@ const handleSubmit = async () => {
     };
     
     if (editingTimeline.value) {
-      await api.put(`/timelines/${editingTimeline.value.id}`, formData);
+      await timelineService.update(editingTimeline.value.id, formData);
       alert('專案更新成功');
     } else {
-      await api.post('/timelines', formData);
+      await timelineService.create(formData);
       alert('專案新增成功');
     }
     await fetchTimelines();
@@ -2094,7 +2089,7 @@ const handleAddTask = async () => {
       tags: tagsStr
     };
     
-    await api.post('/tasks', formData);
+    await taskService.create(formData);
     alert('任務新增成功');
     showAddTaskModal.value = false;
     resetTaskForm();
@@ -2110,7 +2105,7 @@ const deleteTask = async (taskId) => {
   if (!confirm('確定要刪除此任務？')) return;
   
   try {
-    await api.delete(`/tasks/${taskId}`);
+    await taskService.remove(taskId);
     alert('任務刪除成功');
     await viewTimeline(selectedTimeline.value);
     await fetchTimelines();
@@ -2134,7 +2129,7 @@ const deleteTimeline = async (id) => {
   if (!confirm('確定要刪除此專案？相關任務也會被刪除！')) return;
   
   try {
-    await api.delete(`/timelines/${id}`);
+    await timelineService.remove(id);
     alert('專案刪除成功');
     await fetchTimelines();
   } catch (error) {
@@ -2146,7 +2141,7 @@ const viewTimeline = async (timeline) => {
   selectedTimeline.value = timeline;
   newRemark.value = timeline.remark || '';
   try {
-    const response = await api.get(`/timelines/${timeline.id}/tasks`);
+    const response = await timelineService.getTasks(timeline.id);
     timelineTasks.value = response.data;
   } catch (error) {
     console.error('取得任務失敗:', error);
@@ -2157,7 +2152,7 @@ const viewTaskDetail = async (task) => {
   selectedTask.value = { ...task };
   
   try {
-    const response = await api.get(`/timelines/tasks/${task.task_id}/comments`);
+    const response = await timelineService.getComments(task.task_id);
     selectedTask.value.comments = response.data;
   } catch (error) {
     console.error('獲取留言失敗:', error);
@@ -2165,7 +2160,7 @@ const viewTaskDetail = async (task) => {
   }
   
   try {
-    const response = await api.get(`/timelines/tasks/${task.task_id}/files`);
+    const response = await timelineService.getFiles(task.task_id);
     selectedTask.value.files = response.data;
   } catch (error) {
     console.error('獲取檔案失敗:', error);
@@ -2179,9 +2174,7 @@ const addComment = async () => {
   if (!newComment.value.trim() || !selectedTask.value) return;
   
   try {
-    await api.post(`/timelines/tasks/${selectedTask.value.task_id}/comments`, {
-      task_message: newComment.value
-    });
+    await timelineService.addComment(selectedTask.value.task_id, newComment.value);
     alert('留言成功');
     newComment.value = '';
     await viewTaskDetail(selectedTask.value);
@@ -2194,9 +2187,7 @@ const updateRemark = async () => {
   if (!selectedTimeline.value) return;
   
   try {
-    await api.put(`/timelines/${selectedTimeline.value.id}/remark`, {
-      remark: newRemark.value
-    });
+    await timelineService.updateRemark(selectedTimeline.value.id, newRemark.value);
     selectedTimeline.value.remark = newRemark.value;
     alert('備註更新成功');
     isEditingRemark.value = false;
@@ -2212,9 +2203,7 @@ const searchUser = async () => {
   }
   
   try {
-    const response = await api.post('/timelines/search_user', {
-      email: inputEmail.value
-    });
+    const response = await timelineService.searchUser(inputEmail.value);
     searchResult.value = response.data;
     searchError.value = '';
   } catch (error) {
@@ -2227,10 +2216,7 @@ const confirmShare = async () => {
   if (!searchResult.value || !selectedTimeline.value) return;
   
   try {
-    await api.post(`/timelines/${selectedTimeline.value.id}/members`, {
-      user_id: searchResult.value.id,
-      role: 1
-    });
+    await timelineService.addMember(selectedTimeline.value.id, searchResult.value.id);
     alert('邀請成功');
     isSharePanelOpen.value = false;
     inputEmail.value = '';
@@ -2242,7 +2228,7 @@ const confirmShare = async () => {
 
 const toggleTask = async (taskId) => {
   try {
-    await api.patch(`/tasks/${taskId}/toggle`);
+    await taskService.toggle(taskId);
     await viewTimeline(selectedTimeline.value);
     await fetchTimelines();
     await fetchAllTasks();
@@ -2274,7 +2260,7 @@ const generateTasksWithAi = async () => {
   
   isGeneratingAi.value = true;
   try {
-    const response = await api.post(`/timelines/${selectedTimeline.value.id}/generate-tasks`, {});
+    const response = await timelineService.generateTasks(selectedTimeline.value.id);
     aiGeneratedTasks.value = response.data.tasks;
     // 預設全選
     selectedAiTasks.value = aiGeneratedTasks.value.map((_, index) => index);
@@ -2296,9 +2282,7 @@ const batchCreateAiTasks = async () => {
   
   try {
     const tasksToCreate = selectedAiTasks.value.map(index => aiGeneratedTasks.value[index]);
-    await api.post(`/timelines/${selectedTimeline.value.id}/batch-create-tasks`, {
-      tasks: tasksToCreate
-    });
+    await timelineService.batchCreateTasks(selectedTimeline.value.id, tasksToCreate);
     alert(`成功創建 ${tasksToCreate.length} 個任務！`);
     showAiGenerateModal.value = false;
     aiGeneratedTasks.value = [];

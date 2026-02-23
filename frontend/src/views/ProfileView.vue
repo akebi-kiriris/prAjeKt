@@ -179,7 +179,10 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue';
-import api from '../services/api';
+import { profileService } from '../services/profileService';
+import { taskService } from '../services/taskService';
+import { groupService } from '../services/groupService';
+import { timelineService } from '../services/timelineService';
 import { useAuthStore } from '../stores/auth';
 
 const authStore = useAuthStore();
@@ -211,7 +214,7 @@ const statCards = computed(() => [
 const fetchProfile = async () => {
   try {
     loading.value = true;
-    const response = await api.get('/profile/me');
+    const response = await profileService.getMe();
     profileForm.value = {
       name: response.data.name || '',
       username: response.data.username || '',
@@ -232,9 +235,9 @@ const fetchProfile = async () => {
 const fetchStats = async () => {
   try {
     const [tasksRes, timelinesRes, groupsRes] = await Promise.all([
-      api.get('/tasks'),
-      api.get('/timelines'),
-      api.get('/groups')
+      taskService.getAll(),
+      timelineService.getAll(),
+      groupService.getAll()
     ]);
     
     stats.value = {
@@ -277,7 +280,7 @@ const handleSubmit = async () => {
       updateData.new_password = profileForm.value.new_password;
     }
     
-    await api.put('/profile/me', updateData);
+    await profileService.update(updateData);
     await authStore.fetchCurrentUser();
     
     alert('個人資料更新成功');

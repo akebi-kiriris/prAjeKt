@@ -285,7 +285,7 @@ def get_task_comments(task_id):
     """取得任務留言"""
     comments_query = db.session.execute(
         text("""
-            SELECT c.id as comment_id, c.user_id, u.name as user_name, c.message as task_message
+            SELECT c.comment_id, c.user_id, u.name as user_name, c.task_message
             FROM task_comments c
             JOIN users u ON c.user_id = u.id
             WHERE c.task_id = :task_id
@@ -317,7 +317,7 @@ def add_task_comment(task_id):
     try:
         db.session.execute(
             text("""
-                INSERT INTO task_comments (task_id, user_id, message, created_at)
+                INSERT INTO task_comments (task_id, user_id, task_message, created_at)
                 VALUES (:task_id, :user_id, :message, datetime('now'))
             """),
             {'task_id': task_id, 'user_id': user_id, 'message': message}
