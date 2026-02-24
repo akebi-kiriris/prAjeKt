@@ -110,7 +110,7 @@
                   class="mt-1 w-5 h-5 accent-primary cursor-pointer"
                 />
                 <div class="flex-1 min-w-0">
-                  <p class="text-gray-800">{{ todo.content }}</p>
+                  <p class="text-gray-800">{{ todo.title }}</p>
                   <div v-if="todo.deadline" class="flex items-center gap-2 mt-2 text-sm text-gray-500">
                     <span>⏰</span>
                     <span>{{ formatDeadline(todo.deadline) }}</span>
@@ -189,10 +189,13 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue';
-import { todoService } from '../services/todoService';
+import { ref, onMounted } from 'vue';
+import { storeToRefs } from 'pinia';
+import { useTodoStore } from '../stores/todos';
 
-const todos = ref([]);
+const store = useTodoStore();
+
+// UI 狀態（留在 View）
 const showAddForm = ref(false);
 const editingTodo = ref(null);
 const todoForm = ref({
@@ -201,36 +204,21 @@ const todoForm = ref({
   deadline: ''
 });
 
-const incompleteTodos = computed(() => 
-  todos.value.filter(t => !t.completed)
-);
-
-const completedTodos = computed(() => 
-  todos.value.filter(t => t.completed)
-);
-
-const fetchTodos = async () => {
-  try {
-    const response = await todoService.getAll();
-    todos.value = response.data;
-  } catch (error) {
-    console.error('取得待辦事項失敗:', error);
-  }
-};
+// 資料狀態全部來自 store（使用 storeToRefs 保持響應式）
+const { incompleteTodos, completedTodos } = storeToRefs(store);
 
 const handleSubmit = async () => {
   try {
     const formData = {
       ...todoForm.value,
-      deadline: todoForm.value.deadline ? new Date(todoForm.value.deadline).toISOString() : null
+      deadline: todoForm.value.deadline ? todoForm.value.deadline + ':00' : null
     };
-    
+
     if (editingTodo.value) {
-      await todoService.update(editingTodo.value.id, formData);
+      await store.updateTodo(editingTodo.value.id, formData);
     } else {
-      await todoService.create(formData);
+      await store.addTodo(formData);
     }
-    await fetchTodos();
     cancelForm();
   } catch (error) {
     console.error('操作失敗:', error);
@@ -247,45 +235,24 @@ const editTodo = (todo) => {
   showAddForm.value = true;
 };
 
-const toggleTodo = async (id) => {
-  try {
-    await todoService.toggleComplete(id);
-    await fetchTodos();
-  } catch (error) {
-    console.error('更新待辦狀態失敗:', error);
-  }
-};
+const toggleTodo = (id) => store.toggleTodo(id);
 
 const deleteTodo = async (id) => {
   if (!confirm('確定要刪除此待辦事項？')) return;
-  
-  try {
-    await todoService.remove(id);
-    await fetchTodos();
-  } catch (error) {
-    console.error('刪除失敗:', error);
-  }
+  await store.removeTodo(id);
 };
 
 const cancelForm = () => {
   showAddForm.value = false;
   editingTodo.value = null;
-  todoForm.value = {
-    title: '',
-    content: '',
-    deadline: ''
-  };
+  todoForm.value = { title: '', content: '', deadline: '' };
 };
 
 const formatDeadline = (deadline) => {
   if (!deadline) return '';
-  const date = new Date(deadline);
-  return date.toLocaleString('zh-TW', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit'
+  return new Date(deadline).toLocaleString('zh-TW', {
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit'
   });
 };
 
@@ -294,7 +261,5 @@ const isOverdue = (deadline) => {
   return new Date(deadline) < new Date();
 };
 
-onMounted(() => {
-  fetchTodos();
-});
+onMounted(() => store.fetchTodos());
 </script>

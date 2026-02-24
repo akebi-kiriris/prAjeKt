@@ -178,10 +178,14 @@
 
 <script setup>
 import { ref, onMounted } from 'vue';
-import { taskService } from '../services/taskService';
+import { storeToRefs } from 'pinia';
+import { useTaskStore } from '../stores/tasks';
 
+const store = useTaskStore();
+const { tasks } = storeToRefs(store);
+
+// UI state (stays in View)
 const showForm = ref(false);
-const tasks = ref([]);
 const editingTask = ref(null);
 const taskForm = ref({
   name: '',
@@ -191,34 +195,13 @@ const taskForm = ref({
   task_remark: ''
 });
 
-const fetchTasks = async () => {
-  try {
-    const response = await taskService.getAll();
-    tasks.value = response.data;
-  } catch (error) {
-    console.error('取得任務失敗:', error);
-  }
-};
-
 const handleSubmit = async () => {
   try {
-    const assistantArray = taskForm.value.assistant 
-      ? taskForm.value.assistant.split(',').map(s => s.trim()).filter(s => s)
-      : [];
-    
-    const formData = {
-      ...taskForm.value,
-      assistant: assistantArray,
-      start_date: taskForm.value.start_date || null,
-      end_date: taskForm.value.end_date || null,
-    };
-    
     if (editingTask.value) {
-      await taskService.update(editingTask.value.task_id, formData);
+      await store.updateTask(editingTask.value.task_id, taskForm.value);
     } else {
-      await taskService.create(formData);
+      await store.addTask(taskForm.value);
     }
-    await fetchTasks();
     resetForm();
   } catch (error) {
     console.error('儲存任務失敗:', error);
@@ -248,8 +231,7 @@ const cancelEdit = () => {
 const deleteTask = async (taskId) => {
   if (!confirm('確定要刪除此任務？')) return;
   try {
-    await taskService.remove(taskId);
-    await fetchTasks();
+    await store.removeTask(taskId);
   } catch (error) {
     console.error('刪除任務失敗:', error);
   }
@@ -257,8 +239,7 @@ const deleteTask = async (taskId) => {
 
 const toggleTask = async (task) => {
   try {
-    await taskService.toggle(task.task_id);
-    await fetchTasks();
+    await store.toggleTask(task.task_id);
   } catch (error) {
     console.error('更新任務狀態失敗:', error);
   }
@@ -282,6 +263,6 @@ const formatDate = (dateStr) => {
 };
 
 onMounted(() => {
-  fetchTasks();
+  store.fetchTasks();
 });
 </script>
