@@ -14,4 +14,5 @@ export const timelineService = {
   getComments:      (taskId)        => api.get(`/timelines/tasks/${taskId}/comments`),
   getFiles:         (taskId)        => api.get(`/timelines/tasks/${taskId}/files`),
   addComment:       (taskId, content) => api.post(`/timelines/tasks/${taskId}/comments`, { task_message: content }),
+  removeMember:     (id, userId)       => api.delete(`/timelines/${id}/members/${userId}`),
 };

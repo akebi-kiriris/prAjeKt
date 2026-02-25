@@ -15,7 +15,7 @@
             <button @click="showAddTaskModal = true" class="flex items-center gap-2 px-4 py-2 bg-primary text-white text-sm font-medium rounded-xl hover:brightness-110 transition-all shadow">
               <span>＋</span> 新增任務
             </button>
-            <button @click="isSharePanelOpen = true" class="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-gray-600 text-sm font-medium rounded-xl hover:bg-gray-50 transition-all shadow-sm">
+            <button v-if="selectedTimeline?.role === 0" @click="isSharePanelOpen = true" class="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-gray-600 text-sm font-medium rounded-xl hover:bg-gray-50 transition-all shadow-sm">
               <span>👥</span> 成員管理
             </button>
             <button @click="$emit('close')" class="w-9 h-9 flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-xl transition-colors text-xl">&times;</button>

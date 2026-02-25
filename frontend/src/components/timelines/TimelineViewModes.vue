@@ -341,8 +341,8 @@
                 </div>
               </div>
               <div class="shrink-0 flex items-center gap-1" @click.stop>
-                <button @click="$emit('edit-timeline', timeline)" class="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-primary hover:bg-primary/10 rounded-lg transition-colors">✏️</button>
-                <button @click="$emit('delete-timeline', timeline.id)" class="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors">🗑️</button>
+                <button v-if="timeline.role === 0" @click="$emit('edit-timeline', timeline)" class="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-primary hover:bg-primary/10 rounded-lg transition-colors">✏️</button>
+                <button v-if="timeline.role === 0" @click="$emit('delete-timeline', timeline.id)" class="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors">🗑️</button>
               </div>
             </div>
           </div>
@@ -373,8 +373,8 @@
                 </span>
               </div>
               <div class="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity" @click.stop>
-                <button @click="$emit('edit-timeline', timeline)" class="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-primary hover:bg-primary/10 rounded-lg transition-colors">✏️</button>
-                <button @click="$emit('delete-timeline', timeline.id)" class="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors">🗑️</button>
+                <button v-if="timeline.role === 0" @click="$emit('edit-timeline', timeline)" class="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-primary hover:bg-primary/10 rounded-lg transition-colors">✏️</button>
+                <button v-if="timeline.role === 0" @click="$emit('delete-timeline', timeline.id)" class="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors">🗑️</button>
               </div>
             </div>
             <div class="flex items-center justify-between mb-4 p-3 bg-gray-50 rounded-xl">
