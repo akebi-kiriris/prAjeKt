@@ -229,7 +229,10 @@ def get_timeline_tasks(timeline_id):
             'completed': task.completed,
             'timeline_id': task.timeline_id,
             'remark': task.task_remark,
-            'isWork': task.isWork
+            'isWork': task.isWork,
+            'priority': task.priority,
+            'status': task.status,
+            'tags': task.tags,
         })
     
     return jsonify(tasks_response), 200

@@ -13,7 +13,6 @@ class Task(db.Model):
     isWork = db.Column(db.Integer, default=0)
     
     # 新增欄位
-    assistant = db.Column(db.String(255))  # 協助者
     priority = db.Column(db.Integer, default=2)  # 1:高 2:中 3:低
     status = db.Column(db.String(20), default='pending')  # pending/in_progress/review/completed/cancelled
     tags = db.Column(db.String(255))  # 標籤，逗號分隔

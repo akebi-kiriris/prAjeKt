@@ -43,16 +43,6 @@
                   required
                 />
               </div>
-              <div>
-                <label class="block text-sm font-semibold text-gray-600 mb-2">快速筆記（選填）</label>
-                <input
-                  v-model="taskForm.assistant"
-                  type="text"
-                  placeholder="快速記錄協助者或相關資訊"
-                  class="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
-                />
-                <p class="text-xs text-gray-500 mt-1">快速筆記，不會關聯實際使用者</p>
-              </div>
             </div>
 
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -107,6 +97,95 @@
       </div>
     </Teleport>
     
+    <!-- 成員管理 Panel -->
+    <Teleport to="body">
+      <div
+        v-if="isSharePanelOpen"
+        class="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+        @click.self="isSharePanelOpen = false"
+      >
+        <div class="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-md mx-4 animate-slideUp">
+          <div class="flex items-center justify-between mb-5">
+            <div class="flex items-center gap-2 text-primary font-semibold text-xl">
+              <span>👥</span>
+              <span>成員管理 — {{ shareTask?.name }}</span>
+            </div>
+            <button @click="isSharePanelOpen = false" class="text-gray-400 hover:text-gray-600 text-2xl leading-none">✕</button>
+          </div>
+
+          <!-- 現有成員列表 -->
+          <div class="space-y-2 mb-4">
+            <p class="text-sm font-semibold text-gray-500 mb-2">目前成員</p>
+            <div
+              v-for="member in taskMembers"
+              :key="member.user_id"
+              class="flex items-center justify-between gap-3 py-2 px-3 rounded-xl hover:bg-gray-50"
+            >
+              <div class="flex items-center gap-3">
+                <div class="w-9 h-9 rounded-full bg-primary/20 text-primary font-bold flex items-center justify-center text-sm">
+                  {{ member.name?.charAt(0) || '?' }}
+                </div>
+                <div>
+                  <p class="text-sm font-semibold text-gray-800">{{ member.name }}</p>
+                  <p class="text-xs text-gray-400">{{ member.email }}</p>
+                </div>
+              </div>
+              <div class="flex items-center gap-2">
+                <span
+                  :class="member.role === 0 ? 'bg-primary/10 text-primary' : 'bg-gray-100 text-gray-500'"
+                  class="text-xs px-2 py-0.5 rounded-full font-medium"
+                >
+                  {{ member.role === 0 ? '負責人' : '協作者' }}
+                </span>
+                <button
+                  v-if="member.role !== 0"
+                  @click="kickTaskMember(member)"
+                  class="text-gray-300 hover:text-red-500 text-lg leading-none transition-colors"
+                  title="移除成員"
+                >✕</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- 邀請新成員 -->
+          <div class="border-t pt-4">
+            <p class="text-sm font-semibold text-gray-500 mb-3">邀請協作者</p>
+            <div class="flex gap-2">
+              <input
+                v-model="shareInputEmail"
+                type="email"
+                placeholder="輸入 Email 搜尋使用者"
+                @keyup.enter="searchShareUser"
+                class="flex-1 px-3 py-2 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
+              />
+              <button
+                @click="searchShareUser"
+                class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-xl text-sm transition-colors"
+              >搜尋</button>
+            </div>
+            <p v-if="shareSearchError" class="text-red-500 text-xs mt-2">{{ shareSearchError }}</p>
+
+            <!-- 搜尋結果 -->
+            <div v-if="shareSearchResult" class="mt-3 flex items-center justify-between gap-3 p-3 bg-gray-50 rounded-xl">
+              <div class="flex items-center gap-3">
+                <div class="w-9 h-9 rounded-full bg-primary/20 text-primary font-bold flex items-center justify-center text-sm">
+                  {{ shareSearchResult.name?.charAt(0) || '?' }}
+                </div>
+                <div>
+                  <p class="text-sm font-semibold text-gray-800">{{ shareSearchResult.name }}</p>
+                  <p class="text-xs text-gray-400">{{ shareSearchResult.email }}</p>
+                </div>
+              </div>
+              <button
+                @click="confirmShare"
+                class="px-4 py-2 bg-primary text-white font-semibold rounded-xl text-sm hover:bg-primary/90 transition-colors"
+              >邀請</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
     <!-- Task List -->
     <div class="pb-8">
       <div class="space-y-4">
@@ -127,10 +206,6 @@
                   <span>👥</span>
                   成員: {{ task.members.map(m => m.name || 'User').join(', ') }}
                 </span>
-                <span v-if="task.assistant" class="flex items-center gap-1">
-                  <span>📝</span>
-                  筆記: {{ Array.isArray(task.assistant) ? task.assistant.join(', ') : task.assistant }}
-                </span>
                 <span class="flex items-center gap-1">
                   <span>📅</span>
                   {{ formatDate(task.end_date) }}
@@ -147,6 +222,14 @@
                 :title="task.completed ? '標記未完成' : '標記完成'"
               >
                 ✓
+              </button>
+              <button
+                v-if="task.is_owner"
+                @click="openSharePanel(task)"
+                class="w-10 h-10 rounded-full bg-indigo-500 hover:bg-indigo-600 text-white flex items-center justify-center transition-colors"
+                title="成員管理"
+              >
+                👥
               </button>
               <button 
                 @click="editTask(task)"
@@ -177,9 +260,10 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, watch } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useTaskStore } from '../stores/tasks';
+import { taskService } from '../services/taskService';
 
 const store = useTaskStore();
 const { tasks } = storeToRefs(store);
@@ -189,7 +273,6 @@ const showForm = ref(false);
 const editingTask = ref(null);
 const taskForm = ref({
   name: '',
-  assistant: '',
   start_date: '',
   end_date: '',
   task_remark: ''
@@ -210,13 +293,9 @@ const handleSubmit = async () => {
 
 const editTask = (task) => {
   editingTask.value = task;
-  const assistantStr = task.assistant
-    ? (Array.isArray(task.assistant) ? task.assistant.join(', ') : task.assistant)
-    : '';
 
   taskForm.value = {
     name: task.name,
-    assistant: assistantStr,
     start_date: task.start_date ? task.start_date.slice(0, 10) : '',
     end_date: task.end_date ? task.end_date.slice(0, 10) : '',
     task_remark: task.task_remark || ''
@@ -250,11 +329,81 @@ const resetForm = () => {
   showForm.value = false;
   taskForm.value = {
     name: '',
-    assistant: '',
     start_date: '',
     end_date: '',
     task_remark: ''
   };
+};
+
+// ===== 成員管理 =====
+const shareTask = ref(null);
+const isSharePanelOpen = ref(false);
+const taskMembers = ref([]);
+const shareInputEmail = ref('');
+const shareSearchResult = ref(null);
+const shareSearchError = ref('');
+
+const openSharePanel = async (task) => {
+  shareTask.value = task;
+  isSharePanelOpen.value = true;
+};
+
+watch(isSharePanelOpen, async (val) => {
+  if (val && shareTask.value) {
+    await loadTaskMembers();
+  } else {
+    shareInputEmail.value = '';
+    shareSearchResult.value = null;
+    shareSearchError.value = '';
+  }
+});
+
+const loadTaskMembers = async () => {
+  try {
+    const res = await taskService.getMembers(shareTask.value.task_id);
+    taskMembers.value = res.data;
+  } catch (e) {
+    console.error('載入成員失敗', e);
+  }
+};
+
+const searchShareUser = async () => {
+  shareSearchResult.value = null;
+  shareSearchError.value = '';
+  if (!shareInputEmail.value.trim()) return;
+  try {
+    const res = await taskService.searchUser(shareInputEmail.value.trim());
+    const found = res.data.user;
+    const alreadyIn = taskMembers.value.some(m => m.user_id === found.id);
+    if (alreadyIn) { shareSearchError.value = '此使用者已是成員'; return; }
+    shareSearchResult.value = found;
+  } catch (e) {
+    shareSearchError.value = e.response?.data?.error || '找不到使用者';
+  }
+};
+
+const confirmShare = async () => {
+  if (!shareSearchResult.value) return;
+  try {
+    await taskService.addMember(shareTask.value.task_id, shareSearchResult.value.id);
+    shareInputEmail.value = '';
+    shareSearchResult.value = null;
+    await loadTaskMembers();
+    await store.fetchTasks();
+  } catch (e) {
+    shareSearchError.value = e.response?.data?.error || '新增失敗';
+  }
+};
+
+const kickTaskMember = async (member) => {
+  if (!confirm(`確定要移除「${member.name}」？`)) return;
+  try {
+    await taskService.removeMember(shareTask.value.task_id, member.user_id);
+    await loadTaskMembers();
+    await store.fetchTasks();
+  } catch (e) {
+    alert(e.response?.data?.error || '移除失敗');
+  }
 };
 
 const formatDate = (dateStr) => {

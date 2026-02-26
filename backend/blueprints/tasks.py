@@ -72,7 +72,10 @@ def get_tasks():
         # 取得任務成員
         members = TaskUser.query.filter_by(task_id=t.task_id).all()
         member_list = []
+        current_user_role = None
         for m in members:
+            if m.user_id == user_id:
+                current_user_role = m.role
             user = User.query.get(m.user_id)
             if user:
                 member_list.append({
@@ -90,7 +93,6 @@ def get_tasks():
             'name': t.name,
             'completed': t.completed,
             'timeline_id': t.timeline_id,
-            'assistant': t.assistant,
             'priority': t.priority,
             'status': t.status,
             'tags': t.tags,
@@ -104,7 +106,7 @@ def get_tasks():
             'updated_at': t.updated_at.isoformat() if t.updated_at else None,
             'task_remark': t.task_remark,
             'isWork': t.isWork,
-            'is_owner': t.user_id == user_id
+            'is_owner': current_user_role == 0
         })
     
     return jsonify(result), 200
@@ -118,16 +120,11 @@ def create_task():
     
     if not data.get('name') or not data.get('end_date'):
         return jsonify({'error': '請提供標題和截止日期'}), 400
-    
-    # assistant 可能是 array（前端送來），轉成逗號分隔字串存 DB
-    assistant_raw = data.get('assistant')
-    assistant_str = ','.join(assistant_raw) if isinstance(assistant_raw, list) else assistant_raw
 
     new_task = Task(
         user_id=user_id,
         name=data['name'],
         timeline_id=data.get('timeline_id'),
-        assistant=assistant_str,
         priority=data.get('priority', 2),
         status=data.get('status', 'pending'),
         tags=data.get('tags'),
@@ -181,9 +178,6 @@ def update_task(task_id):
     
     task.name = data.get('name', task.name)
     task.timeline_id = data.get('timeline_id', task.timeline_id)
-    # assistant 可能是 array（前端送來），轉成逗號分隔字串存 DB
-    assistant_raw = data.get('assistant', task.assistant)
-    task.assistant = ','.join(assistant_raw) if isinstance(assistant_raw, list) else assistant_raw
     task.priority = data.get('priority', task.priority)
     task.status = data.get('status', task.status)
     task.tags = data.get('tags', task.tags)

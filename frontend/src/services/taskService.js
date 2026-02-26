@@ -11,4 +11,9 @@ export const taskService = {
   createSubtask: (id, data)            => api.post(`/tasks/${id}/subtasks`, data),
   toggleSubtask: (taskId, subtaskId)   => api.patch(`/tasks/${taskId}/subtasks/${subtaskId}/toggle`),
   deleteSubtask: (taskId, subtaskId)   => api.delete(`/tasks/${taskId}/subtasks/${subtaskId}`),
+  // 成員管理
+  getMembers:    (id)                  => api.get(`/tasks/${id}/members`),
+  addMember:     (id, userId)          => api.post(`/tasks/${id}/members`, { user_id: userId }),
+  removeMember:  (taskId, userId)      => api.delete(`/tasks/${taskId}/members/${userId}`),
+  searchUser:    (email)               => api.post('/timelines/search_user', { email }),
 };

@@ -14,13 +14,8 @@ export const useTaskStore = defineStore('tasks', () => {
   }
 
   async function addTask(data) {
-    const assistantArray = data.assistant 
-      ? data.assistant.split(',').map(s => s.trim()).filter(s => s)
-      : [];
-    
     const formData = {
       ...data,
-      assistant: assistantArray,
       start_date: data.start_date || null,
       end_date: data.end_date || null,
     };
@@ -30,13 +25,8 @@ export const useTaskStore = defineStore('tasks', () => {
   }
 
   async function updateTask(id, data) {
-    const assistantArray = data.assistant 
-      ? data.assistant.split(',').map(s => s.trim()).filter(s => s)
-      : [];
-    
     const formData = {
       ...data,
-      assistant: assistantArray,
       start_date: data.start_date || null,
       end_date: data.end_date || null,
     };
