@@ -112,22 +112,48 @@
       <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md animate-slideUp">
         <div class="p-5 border-b border-gray-100 flex justify-between items-center">
           <h3 class="text-lg font-semibold text-gray-800">👥 成員管理</h3>
-          <button @click="isSharePanelOpen = false; inputEmail = ''; searchResult = null; searchError = ''" class="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">&times;</button>
+          <button @click="isSharePanelOpen = false" class="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">&times;</button>
         </div>
         <div class="p-5 space-y-4">
-          <p class="text-sm text-gray-500">邀請成員加入「{{ selectedTimeline?.name }}」</p>
-          <div class="flex gap-2">
-            <input v-model="inputEmail" type="email" placeholder="輸入用戶 Email" class="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none" @keyup.enter="searchUser" />
-            <button @click="searchUser" class="px-4 py-2.5 bg-primary text-white font-medium rounded-xl hover:brightness-110 transition-all">搜尋</button>
-          </div>
-          <div v-if="searchError" class="p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-600">{{ searchError }}</div>
-          <div v-if="searchResult" class="p-4 bg-green-50 border border-green-200 rounded-xl">
-            <div class="flex items-center justify-between">
-              <div>
-                <p class="font-medium text-gray-800">{{ searchResult.username }}</p>
-                <p class="text-sm text-gray-500">{{ searchResult.email }}</p>
+          <!-- 現有成員列表 -->
+          <div v-if="timelineMembers.length > 0">
+            <p class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">目前成員</p>
+            <div class="space-y-2">
+              <div v-for="member in timelineMembers" :key="member.user_id" class="flex items-center justify-between p-2.5 bg-gray-50 rounded-xl">
+                <div class="flex items-center gap-2.5">
+                  <div class="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center text-sm font-bold text-primary shrink-0">
+                    {{ (member.username || member.name || '?')[0].toUpperCase() }}
+                  </div>
+                  <div>
+                    <p class="text-sm font-medium text-gray-800">{{ member.username || member.name }}</p>
+                    <p class="text-xs text-gray-500">{{ member.email }}</p>
+                  </div>
+                </div>
+                <div class="flex items-center gap-1.5">
+                  <span :class="['px-2 py-0.5 text-xs font-medium rounded-full', member.role === 0 ? 'bg-primary/10 text-primary' : 'bg-gray-100 text-gray-500']">
+                    {{ member.role === 0 ? '負責人' : '協作者' }}
+                  </span>
+                  <button v-if="member.role !== 0" @click="kickMember(member)" class="w-7 h-7 flex items-center justify-center text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors text-sm font-bold">✕</button>
+                </div>
               </div>
-              <button @click="confirmShare" class="px-4 py-2 bg-primary text-white text-sm font-medium rounded-xl hover:brightness-110 transition-all">邀請</button>
+            </div>
+          </div>
+          <!-- 邀請新成員 -->
+          <div :class="timelineMembers.length > 0 ? 'border-t border-gray-100 pt-4' : ''">
+            <p class="text-sm text-gray-500 mb-3">邀請成員加入「{{ selectedTimeline?.name }}」</p>
+            <div class="flex gap-2">
+              <input v-model="inputEmail" type="email" placeholder="輸入用戶 Email" class="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none" @keyup.enter="searchUser" />
+              <button @click="searchUser" class="px-4 py-2.5 bg-primary text-white font-medium rounded-xl hover:brightness-110 transition-all">搜尋</button>
+            </div>
+            <div v-if="searchError" class="mt-2 p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-600">{{ searchError }}</div>
+            <div v-if="searchResult" class="mt-2 p-4 bg-green-50 border border-green-200 rounded-xl">
+              <div class="flex items-center justify-between">
+                <div>
+                  <p class="font-medium text-gray-800">{{ searchResult.username }}</p>
+                  <p class="text-sm text-gray-500">{{ searchResult.email }}</p>
+                </div>
+                <button @click="confirmShare" class="px-4 py-2 bg-primary text-white text-sm font-medium rounded-xl hover:brightness-110 transition-all">邀請</button>
+              </div>
             </div>
           </div>
         </div>
@@ -287,6 +313,7 @@ const newComment = ref('');
 const inputEmail = ref('');
 const searchResult = ref(null);
 const searchError = ref('');
+const timelineMembers = ref([]);
 
 const taskForm = ref({ name: '', start_date: '', end_date: '', priority: 2, tags: '', task_remark: '' });
 
@@ -355,7 +382,20 @@ const addComment = async () => {
   } catch { alert('新增留言失敗'); }
 };
 
-// ────────────── 成員邀請 ──────────────
+// ────────────── 成員管理 ──────────────
+const loadMembers = async () => {
+  if (!props.selectedTimeline) return;
+  try {
+    const res = await timelineService.getMembers(props.selectedTimeline.id);
+    timelineMembers.value = res.data;
+  } catch { timelineMembers.value = []; }
+};
+
+watch(isSharePanelOpen, (val) => {
+  if (val) loadMembers();
+  else { inputEmail.value = ''; searchResult.value = null; searchError.value = ''; }
+});
+
 const searchUser = async () => {
   if (!inputEmail.value.trim()) return;
   searchResult.value = null; searchError.value = '';
@@ -371,11 +411,21 @@ const confirmShare = async () => {
   if (!searchResult.value || !props.selectedTimeline) return;
   try {
     await timelineService.addMember(props.selectedTimeline.id, searchResult.value.id);
-    isSharePanelOpen.value = false;
     inputEmail.value = ''; searchResult.value = null;
+    await loadMembers();
     alert('邀請成功！');
   } catch (err) {
     alert(err.response?.data?.error || '邀請失敗');
+  }
+};
+
+const kickMember = async (member) => {
+  if (!confirm(`確定要將「${member.username || member.name}」移出此專案？`)) return;
+  try {
+    await timelineService.removeMember(props.selectedTimeline.id, member.user_id);
+    await loadMembers();
+  } catch (err) {
+    alert(err.response?.data?.error || '移除成員失敗');
   }
 };
 

@@ -407,6 +407,26 @@ def search_user_by_email():
         'email': user.email
     }), 200
 
+@timelines_bp.route('/<int:timeline_id>/members', methods=['GET'])
+@jwt_required()
+@require_timeline_role('member')
+def get_timeline_members(timeline_id):
+    """取得專案成員列表（成員皆可查）"""
+    members = TimelineUser.query.filter_by(timeline_id=timeline_id).all()
+    result = []
+    for m in members:
+        user = User.query.get(m.user_id)
+        if user:
+            result.append({
+                'user_id': user.id,
+                'name': user.name,
+                'username': user.username,
+                'email': user.email,
+                'role': m.role
+            })
+    return jsonify(result), 200
+
+
 @timelines_bp.route('/<int:timeline_id>/members', methods=['POST'])
 @jwt_required()
 @require_timeline_role('owner')

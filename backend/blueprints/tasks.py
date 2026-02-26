@@ -1,14 +1,56 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
+from functools import wraps
 from app import db
 from models.task import Task
 from models.task_user import TaskUser
 from models.task_comment import TaskComment
+from models.timeline_user import TimelineUser
 from models.subtask import Subtask
 from models.user import User
 from datetime import datetime
 
 tasks_bp = Blueprint('tasks', __name__)
+
+
+def get_user_task_role(user_id, task_id):
+    """查詢使用者在某任務的角色。
+    先找 task_user 直接記錄；若任務屬於 timeline 且未在 task_user 中，
+    繼承 timeline_user 的角色（0=負責人, 1=協作者）。
+    回傳 None 代表無任何權限。"""
+    member = TaskUser.query.filter_by(task_id=task_id, user_id=user_id).first()
+    if member:
+        return member.role
+    # 若任務屬於 timeline，依使用者在該 timeline 的角色判斷
+    task = Task.query.filter_by(task_id=task_id).first()
+    if task and task.timeline_id:
+        tl_member = TimelineUser.query.filter_by(
+            timeline_id=task.timeline_id, user_id=user_id
+        ).first()
+        if tl_member is not None:
+            return tl_member.role  # 繼承 timeline role
+    return None
+
+
+def require_task_role(required_role='member'):
+    """
+    Decorator：檢查當前使用者在任務中的角色。
+    required_role='member'  → owner(0) 或 collaborator(1) 均可
+    required_role='owner'   → 只有 owner(0) 才行
+    """
+    def decorator(f):
+        @wraps(f)
+        def wrapper(*args, **kwargs):
+            user_id = int(get_jwt_identity())
+            task_id = kwargs.get('task_id')
+            role = get_user_task_role(user_id, task_id)
+            if role is None:
+                return jsonify({'error': '你不是此任務成員'}), 403
+            if required_role == 'owner' and role != 0:
+                return jsonify({'error': '只有負責人可執行此操作'}), 403
+            return f(*args, **kwargs)
+        return wrapper
+    return decorator
 
 @tasks_bp.route('', methods=['GET'])
 @jwt_required()
@@ -127,18 +169,13 @@ def create_task():
 
 @tasks_bp.route('/<int:task_id>', methods=['PUT'])
 @jwt_required()
+@require_task_role('member')
 def update_task(task_id):
     """更新任務"""
-    user_id = int(get_jwt_identity())
     task = Task.query.filter_by(task_id=task_id).first()
     
     if not task:
         return jsonify({'error': '找不到該任務'}), 404
-    
-    # 檢查是否為任務擁有者或成員
-    is_member = TaskUser.query.filter_by(task_id=task_id, user_id=user_id).first()
-    if task.user_id != user_id and not is_member:
-        return jsonify({'error': '無權限修改此任務'}), 403
     
     data = request.get_json()
     
@@ -169,13 +206,13 @@ def update_task(task_id):
 
 @tasks_bp.route('/<int:task_id>', methods=['DELETE'])
 @jwt_required()
+@require_task_role('owner')
 def delete_task(task_id):
     """刪除任務"""
-    user_id = int(get_jwt_identity())
-    task = Task.query.filter_by(task_id=task_id, user_id=user_id).first()
+    task = Task.query.filter_by(task_id=task_id).first()
     
     if not task:
-        return jsonify({'error': '找不到該任務或無權限刪除'}), 404
+        return jsonify({'error': '找不到該任務'}), 404
     
     try:
         # 刪除相關的任務成員
@@ -191,18 +228,13 @@ def delete_task(task_id):
 
 @tasks_bp.route('/<int:task_id>/toggle', methods=['PATCH'])
 @jwt_required()
+@require_task_role('member')
 def toggle_task(task_id):
     """切換任務完成狀態"""
-    user_id = int(get_jwt_identity())
     task = Task.query.filter_by(task_id=task_id).first()
     
     if not task:
         return jsonify({'error': '找不到該任務'}), 404
-    
-    # 檢查是否為任務擁有者或成員
-    is_member = TaskUser.query.filter_by(task_id=task_id, user_id=user_id).first()
-    if task.user_id != user_id and not is_member:
-        return jsonify({'error': '無權限修改此任務'}), 403
     
     task.completed = not task.completed
     task.status = 'completed' if task.completed else 'pending'
@@ -218,6 +250,7 @@ def toggle_task(task_id):
 
 @tasks_bp.route('/<int:task_id>/members', methods=['GET'])
 @jwt_required()
+@require_task_role('member')
 def get_task_members(task_id):
     """取得任務成員列表"""
     members = TaskUser.query.filter_by(task_id=task_id).all()
@@ -237,17 +270,9 @@ def get_task_members(task_id):
 
 @tasks_bp.route('/<int:task_id>/members', methods=['POST'])
 @jwt_required()
+@require_task_role('owner')
 def add_task_member(task_id):
     """新增任務成員"""
-    user_id = int(get_jwt_identity())
-    task = Task.query.filter_by(task_id=task_id).first()
-    
-    if not task:
-        return jsonify({'error': '找不到該任務'}), 404
-    
-    if task.user_id != user_id:
-        return jsonify({'error': '只有任務建立者可以新增成員'}), 403
-    
     data = request.get_json()
     new_user_id = data.get('user_id')
     
@@ -274,19 +299,12 @@ def add_task_member(task_id):
 
 @tasks_bp.route('/<int:task_id>/members/<int:member_id>', methods=['DELETE'])
 @jwt_required()
+@require_task_role('owner')
 def remove_task_member(task_id, member_id):
     """移除任務成員"""
-    user_id = int(get_jwt_identity())
-    task = Task.query.filter_by(task_id=task_id).first()
-    
-    if not task:
-        return jsonify({'error': '找不到該任務'}), 404
-    
-    if task.user_id != user_id:
-        return jsonify({'error': '只有任務建立者可以移除成員'}), 403
-    
-    if member_id == task.user_id:
-        return jsonify({'error': '無法移除任務建立者'}), 400
+    target = TaskUser.query.filter_by(task_id=task_id, user_id=member_id).first()
+    if target and target.role == 0:
+        return jsonify({'error': '無法移除負責人'}), 400
     
     try:
         TaskUser.query.filter_by(task_id=task_id, user_id=member_id).delete()
@@ -300,6 +318,7 @@ def remove_task_member(task_id, member_id):
 
 @tasks_bp.route('/<int:task_id>/comments', methods=['GET'])
 @jwt_required()
+@require_task_role('member')
 def get_task_comments(task_id):
     """取得任務留言"""
     comments = TaskComment.query.filter_by(task_id=task_id).order_by(TaskComment.created_at.desc()).all()
@@ -318,14 +337,10 @@ def get_task_comments(task_id):
 
 @tasks_bp.route('/<int:task_id>/comments', methods=['POST'])
 @jwt_required()
+@require_task_role('member')
 def add_task_comment(task_id):
     """新增任務留言"""
     user_id = int(get_jwt_identity())
-    task = Task.query.filter_by(task_id=task_id).first()
-    
-    if not task:
-        return jsonify({'error': '找不到該任務'}), 404
-    
     data = request.get_json()
     message = data.get('message') or data.get('task_message')
     
@@ -371,6 +386,7 @@ def delete_task_comment(task_id, comment_id):
 
 @tasks_bp.route('/<int:task_id>/subtasks', methods=['GET'])
 @jwt_required()
+@require_task_role('member')
 def get_subtasks(task_id):
     """取得任務的所有子任務"""
     subtasks = Subtask.query.filter_by(task_id=task_id).order_by(Subtask.sort_order).all()
@@ -378,14 +394,9 @@ def get_subtasks(task_id):
 
 @tasks_bp.route('/<int:task_id>/subtasks', methods=['POST'])
 @jwt_required()
+@require_task_role('member')
 def create_subtask(task_id):
     """新增子任務"""
-    user_id = int(get_jwt_identity())
-    task = Task.query.filter_by(task_id=task_id).first()
-    
-    if not task:
-        return jsonify({'error': '找不到該任務'}), 404
-    
     data = request.get_json()
     name = data.get('name')
     
@@ -410,6 +421,7 @@ def create_subtask(task_id):
 
 @tasks_bp.route('/<int:task_id>/subtasks/<int:subtask_id>', methods=['PUT'])
 @jwt_required()
+@require_task_role('member')
 def update_subtask(task_id, subtask_id):
     """更新子任務"""
     subtask = Subtask.query.filter_by(id=subtask_id, task_id=task_id).first()
@@ -435,6 +447,7 @@ def update_subtask(task_id, subtask_id):
 
 @tasks_bp.route('/<int:task_id>/subtasks/<int:subtask_id>', methods=['DELETE'])
 @jwt_required()
+@require_task_role('member')
 def delete_subtask(task_id, subtask_id):
     """刪除子任務"""
     subtask = Subtask.query.filter_by(id=subtask_id, task_id=task_id).first()
@@ -452,6 +465,7 @@ def delete_subtask(task_id, subtask_id):
 
 @tasks_bp.route('/<int:task_id>/subtasks/<int:subtask_id>/toggle', methods=['PATCH'])
 @jwt_required()
+@require_task_role('member')
 def toggle_subtask(task_id, subtask_id):
     """切換子任務完成狀態"""
     subtask = Subtask.query.filter_by(id=subtask_id, task_id=task_id).first()
@@ -473,18 +487,13 @@ def toggle_subtask(task_id, subtask_id):
 
 @tasks_bp.route('/<int:task_id>/status', methods=['PATCH'])
 @jwt_required()
+@require_task_role('member')
 def update_task_status(task_id):
     """更新任務狀態（看板拖曳用）"""
-    user_id = int(get_jwt_identity())
     task = Task.query.filter_by(task_id=task_id).first()
     
     if not task:
         return jsonify({'error': '找不到該任務'}), 404
-    
-    # 檢查權限
-    is_member = TaskUser.query.filter_by(task_id=task_id, user_id=user_id).first()
-    if task.user_id != user_id and not is_member:
-        return jsonify({'error': '無權限修改此任務'}), 403
     
     data = request.get_json()
     new_status = data.get('status')
