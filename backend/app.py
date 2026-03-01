@@ -55,6 +55,7 @@ def create_app():
     from blueprints.profile import profile_bp
     from blueprints.groups import groups_bp
     from blueprints.timelines import timelines_bp
+    from blueprints.trash import trash_bp
     
     app.register_blueprint(auth_bp, url_prefix='/api/auth')
     app.register_blueprint(tasks_bp, url_prefix='/api/tasks')
@@ -63,6 +64,7 @@ def create_app():
     app.register_blueprint(profile_bp, url_prefix='/api/profile')
     app.register_blueprint(groups_bp, url_prefix='/api/groups')
     app.register_blueprint(timelines_bp, url_prefix='/api/timelines')
+    app.register_blueprint(trash_bp, url_prefix='/api/trash')
     
     # 健康檢查
     @app.route('/api/health')

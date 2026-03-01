@@ -7,6 +7,7 @@ import TodosView from '../views/TodosView.vue';
 import GroupsView from '../views/GroupsView.vue';
 import TimelinesView from '../views/TimelinesView.vue';
 import ProfileView from '../views/ProfileView.vue';
+import TrashView from '../views/TrashView.vue';
 
 const routes = [
   {
@@ -53,6 +54,12 @@ const routes = [
     path: '/profile',
     name: 'Profile',
     component: ProfileView,
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/trash',
+    name: 'Trash',
+    component: TrashView,
     meta: { requiresAuth: true }
   },
 ];

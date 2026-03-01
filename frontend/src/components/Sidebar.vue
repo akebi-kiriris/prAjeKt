@@ -48,6 +48,7 @@ const navItems = [
   { path: '/todos', icon: '📝', text: '待辦事項' },
   { path: '/groups', icon: '💬', text: '群組訊息' },
   { path: '/profile', icon: '👤', text: '個人資料' },
+  { path: '/trash', icon: '🗑️', text: '垃圾桶' },
 ];
 </script>
 
