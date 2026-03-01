@@ -16,6 +16,7 @@ class Todo(db.Model):
     priority = db.Column(db.Integer, default=2)  # 1:高 2:中 3:低
     order = db.Column(db.Integer)  # 自訂排序
     completed_at = db.Column(db.DateTime)  # 完成時間
+    deleted_at = db.Column(db.DateTime, nullable=True)  # None=正常, 有值=軟刪除時間
     
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

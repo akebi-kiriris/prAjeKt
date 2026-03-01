@@ -11,7 +11,7 @@ class TimelineUser(db.Model):
     joined_at = db.Column(db.DateTime, default=datetime.utcnow)
     
     # 關聯
-    timeline = db.relationship('Timeline', backref=db.backref('timeline_members', lazy=True))
+    timeline = db.relationship('Timeline', backref=db.backref('timeline_members', lazy=True, cascade='all, delete-orphan'))
     user = db.relationship('User', backref=db.backref('joined_timelines', lazy=True))
     
     # 複合唯一索引

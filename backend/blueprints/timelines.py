@@ -1,13 +1,11 @@
-from flask import Blueprint, request, jsonify, send_from_directory
+from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from werkzeug.utils import secure_filename
 from functools import wraps
 from app import db
-from models.timeline import Timeline, TaskFile
+from models.timeline import Timeline
 from models.timeline_user import TimelineUser
 from models.task import Task
 from models.task_user import TaskUser
-from models.task_comment import TaskComment
 from models.user import User
 from datetime import datetime
 import os
@@ -16,16 +14,27 @@ import google.generativeai as genai
 
 timelines_bp = Blueprint('timelines', __name__)
 
-ALLOWED_EXTENSIONS = {'txt', 'pdf', 'png', 'jpg', 'jpeg', 'gif', 'doc', 'docx', 'xls', 'xlsx'}
-
-def allowed_file(filename):
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
-
 
 def get_user_timeline_role(user_id, timeline_id):
     """查詢使用者在某專案的角色，回傳 0（負責人）、1（協作者）或 None（非成員）"""
     member = TimelineUser.query.filter_by(timeline_id=timeline_id, user_id=user_id).first()
     return member.role if member is not None else None
+
+
+def get_task_access(user_id, task):
+    """查詢使用者對某任務的存取權限（支援 timeline 任務與獨立任務）。
+    優先檢查 timeline 成員資格，後退到 task_user 直接成員，再退到任務建立者。
+    回傳 role (0/1) 或 None（無權限）。"""
+    if task.timeline_id:
+        role = get_user_timeline_role(user_id, task.timeline_id)
+        if role is not None:
+            return role
+    member = TaskUser.query.filter_by(task_id=task.task_id, user_id=user_id).first()
+    if member:
+        return member.role
+    if task.user_id == user_id:
+        return 0
+    return None
 
 
 def require_timeline_role(required_role='member'):
@@ -57,13 +66,13 @@ def get_timelines():
     # 查詢使用者參與的所有專案（自己建立的 + 被邀請的）
     memberships = db.session.query(Timeline, TimelineUser.role)\
         .join(TimelineUser, Timeline.id == TimelineUser.timeline_id)\
-        .filter(TimelineUser.user_id == user_id, Timeline.deleted == False)\
+        .filter(TimelineUser.user_id == user_id, Timeline.deleted_at.is_(None))\
         .order_by(Timeline.id.desc())\
         .all()
 
     result = []
     for timeline, role in memberships:
-        tasks = Task.query.filter_by(timeline_id=timeline.id, deleted=False).all()
+        tasks = Task.query.filter(Task.timeline_id == timeline.id, Task.deleted_at.is_(None)).all()
         total_tasks = len(tasks)
         completed_tasks = len([t for t in tasks if t.completed])
 
@@ -139,7 +148,7 @@ def create_timeline():
 @require_timeline_role('member')
 def update_timeline(timeline_id):
     """更新專案時程（負責人或協作者均可）"""
-    timeline = Timeline.query.filter_by(id=timeline_id, deleted=False).first()
+    timeline = Timeline.query.filter_by(id=timeline_id).filter(Timeline.deleted_at.is_(None)).first()
 
     if not timeline:
         return jsonify({'error': '找不到該專案'}), 404
@@ -183,18 +192,18 @@ def update_timeline(timeline_id):
 @jwt_required()
 @require_timeline_role('owner')
 def delete_timeline(timeline_id):
-    """刪除專案時程（軟刪陔，僅負責人可操作）"""
-    timeline = Timeline.query.filter_by(id=timeline_id, deleted=False).first()
+    """刪除專案時程（軟刪除，僅負責人可操作）"""
+    timeline = Timeline.query.filter_by(id=timeline_id).filter(Timeline.deleted_at.is_(None)).first()
 
     if not timeline:
         return jsonify({'error': '找不到該專案'}), 404
 
     try:
-        # 軟刪陔專案
-        timeline.deleted = True
+        # 軟刪除專案
+        timeline.deleted_at = datetime.utcnow()
 
-        # 連帶軟刪陔該專案下的所有任務
-        Task.query.filter_by(timeline_id=timeline_id).update({'deleted': True})
+        # 連帶軟刪除該專案下的所有任務
+        Task.query.filter_by(timeline_id=timeline_id).update({'deleted_at': datetime.utcnow()})
         
         db.session.commit()
         return jsonify({'message': '專案刪除成功'}), 200
@@ -207,7 +216,7 @@ def delete_timeline(timeline_id):
 @require_timeline_role('member')
 def get_timeline_tasks(timeline_id):
     """取得專案的所有任務（含負責人、助理資訊）"""
-    tasks = Task.query.filter_by(timeline_id=timeline_id, deleted=False).order_by(Task.end_date).all()
+    tasks = Task.query.filter_by(timeline_id=timeline_id).filter(Task.deleted_at.is_(None)).order_by(Task.end_date).all()
     
     tasks_response = []
     for task in tasks:
@@ -237,140 +246,12 @@ def get_timeline_tasks(timeline_id):
     
     return jsonify(tasks_response), 200
 
-@timelines_bp.route('/tasks/<int:task_id>/upload', methods=['POST'])
-@jwt_required()
-def upload_task_file(task_id):
-    """上傳任務檔案（負責人或協作者均可）"""
-    user_id = int(get_jwt_identity())
-    task = Task.query.filter_by(task_id=task_id, deleted=False).first()
-    if not task:
-        return jsonify({'error': '找不到該任務'}), 404
-    if get_user_timeline_role(user_id, task.timeline_id) is None:
-        return jsonify({'error': '你不是此專案成員'}), 403
-
-    if 'file' not in request.files:
-        return jsonify({'error': '沒有選擇檔案'}), 400
-    
-    file = request.files['file']
-    if file.filename == '':
-        return jsonify({'error': '檔案名稱為空'}), 400
-    
-    if not allowed_file(file.filename):
-        return jsonify({'error': '不支援的檔案格式'}), 400
-    
-    filename = secure_filename(file.filename)
-    upload_folder = os.path.join(os.path.dirname(__file__), '..', 'uploads', 'task_files')
-    os.makedirs(upload_folder, exist_ok=True)
-    
-    import time
-    unique_filename = f"{int(time.time())}_{filename}"
-    file_path = os.path.join(upload_folder, unique_filename)
-    file.save(file_path)
-    
-    task_file = TaskFile(
-        task_id=task_id,
-        filename=unique_filename,
-        original_filename=filename,
-        file_path=file_path,
-        file_size=os.path.getsize(file_path),
-        uploaded_by=user_id
-    )
-    
-    try:
-        db.session.add(task_file)
-        db.session.commit()
-        return jsonify({
-            'message': '檔案上傳成功',
-            'filename': unique_filename,
-            'original_filename': filename
-        }), 201
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'error': str(e)}), 500
-
-@timelines_bp.route('/tasks/<int:task_id>/files', methods=['GET'])
-@jwt_required()
-def get_task_files(task_id):
-    """取得任務的所有檔案（負責人或協作者均可）"""
-    user_id = int(get_jwt_identity())
-    task = Task.query.filter_by(task_id=task_id, deleted=False).first()
-    if not task:
-        return jsonify({'error': '找不到該任務'}), 404
-    if get_user_timeline_role(user_id, task.timeline_id) is None:
-        return jsonify({'error': '你不是此專案成員'}), 403
-
-    files = TaskFile.query.filter_by(task_id=task_id).all()
-    
-    return jsonify([{
-        'id': f.id,
-        'filename': f.filename,
-        'original_filename': f.original_filename,
-        'file_size': f.file_size,
-        'uploaded_at': f.uploaded_at.isoformat() if f.uploaded_at else None
-    } for f in files]), 200
-
-@timelines_bp.route('/files/<filename>', methods=['GET'])
-@jwt_required()
-def download_file(filename):
-    """下載檔案"""
-    upload_folder = os.path.join(os.path.dirname(__file__), '..', 'uploads', 'task_files')
-    return send_from_directory(upload_folder, filename, as_attachment=True)
-
-@timelines_bp.route('/tasks/<int:task_id>/comments', methods=['GET'])
-@jwt_required()
-def get_task_comments(task_id):
-    """取得任務留言（負責人或協作者均可）"""
-    user_id = int(get_jwt_identity())
-    task = Task.query.filter_by(task_id=task_id, deleted=False).first()
-    if not task:
-        return jsonify({'error': '找不到該任務'}), 404
-    if get_user_timeline_role(user_id, task.timeline_id) is None:
-        return jsonify({'error': '你不是此專案成員'}), 403
-
-    comments = TaskComment.query\
-        .filter_by(task_id=task_id)\
-        .order_by(TaskComment.created_at.asc())\
-        .all()
-
-    return jsonify([{
-        'comment_id': c.comment_id,
-        'user_id': c.user_id,
-        'user_name': c.user.name,
-        'task_message': c.task_message
-    } for c in comments]), 200
-
-@timelines_bp.route('/tasks/<int:task_id>/comments', methods=['POST'])
-@jwt_required()
-def add_task_comment(task_id):
-    """新增任務留言（負責人或協作者均可）"""
-    user_id = int(get_jwt_identity())
-    task = Task.query.filter_by(task_id=task_id, deleted=False).first()
-    if not task:
-        return jsonify({'error': '找不到該任務'}), 404
-    if get_user_timeline_role(user_id, task.timeline_id) is None:
-        return jsonify({'error': '你不是此專案成員'}), 403
-
-    data = request.get_json()
-    message = data.get('task_message')
-    
-    if not message or not isinstance(message, str):
-        return jsonify({'error': '留言內容必須是字串'}), 400
-    
-    try:
-        comment = TaskComment(task_id=task_id, user_id=user_id, task_message=message)
-        db.session.add(comment)
-        db.session.commit()
-        return jsonify({'message': '留言新增成功'}), 201
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'error': str(e)}), 500
-
 @timelines_bp.route('/<int:timeline_id>/remark', methods=['PUT'])
 @jwt_required()
 @require_timeline_role('member')
 def update_timeline_remark(timeline_id):
     """修改專案備註（負責人或協作者均可）"""
-    timeline = Timeline.query.filter_by(id=timeline_id, deleted=False).first()
+    timeline = Timeline.query.filter_by(id=timeline_id).filter(Timeline.deleted_at.is_(None)).first()
 
     if not timeline:
         return jsonify({'error': '找不到該專案'}), 404
@@ -481,7 +362,7 @@ def remove_timeline_member(timeline_id, member_user_id):
 @require_timeline_role('member')
 def generate_tasks_with_ai(timeline_id):
     """使用 AI 自動生成任務清單（負責人或協作者均可）"""
-    timeline = Timeline.query.filter_by(id=timeline_id, deleted=False).first()
+    timeline = Timeline.query.filter_by(id=timeline_id).filter(Timeline.deleted_at.is_(None)).first()
     if not timeline:
         return jsonify({'error': '找不到該專案'}), 404
     
@@ -493,7 +374,7 @@ def generate_tasks_with_ai(timeline_id):
         return jsonify({'error': '請提供專案名稱'}), 400
     
     # 查詢現有任務
-    existing_tasks = Task.query.filter_by(timeline_id=timeline_id, deleted=False).all()
+    existing_tasks = Task.query.filter_by(timeline_id=timeline_id).filter(Task.deleted_at.is_(None)).all()
     existing_tasks_info = []
     for task in existing_tasks:
         existing_tasks_info.append({
@@ -608,7 +489,7 @@ def batch_create_tasks(timeline_id):
     """批量創建任務（用於 AI 生成後確認）"""
     user_id = int(get_jwt_identity())
 
-    timeline = Timeline.query.filter_by(id=timeline_id, deleted=False).first()
+    timeline = Timeline.query.filter_by(id=timeline_id).filter(Timeline.deleted_at.is_(None)).first()
     if not timeline:
         return jsonify({'error': '找不到該專案'}), 404
     
@@ -622,13 +503,13 @@ def batch_create_tasks(timeline_id):
         from datetime import timedelta
         
         # 收集所有現有任務 ID 和使用者選中的現有任務 ID
-        all_existing_task_ids = [t.task_id for t in Task.query.filter_by(timeline_id=timeline_id, deleted=False).all()]
+        all_existing_task_ids = [t.task_id for t in Task.query.filter_by(timeline_id=timeline_id).filter(Task.deleted_at.is_(None)).all()]
         selected_existing_task_ids = [task['task_id'] for task in tasks if task.get('isExisting') and task.get('task_id')]
         
         # 軟刪除未被選中的舊任務
         tasks_to_delete = set(all_existing_task_ids) - set(selected_existing_task_ids)
         if tasks_to_delete:
-            Task.query.filter(Task.task_id.in_(tasks_to_delete)).update({'deleted': True}, synchronize_session=False)
+            Task.query.filter(Task.task_id.in_(tasks_to_delete)).update({'deleted_at': datetime.utcnow()}, synchronize_session=False)
         
         # 新增 AI 生成的任務（isExisting=False）
         created_tasks = []

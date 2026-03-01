@@ -11,9 +11,6 @@ export const timelineService = {
   addMember:        (id, userId)    => api.post(`/timelines/${id}/members`, { user_id: userId, role: 1 }),
   generateTasks:    (id)            => api.post(`/timelines/${id}/generate-tasks`, {}),
   batchCreateTasks: (id, tasks)     => api.post(`/timelines/${id}/batch-create-tasks`, { tasks }),
-  getComments:      (taskId)        => api.get(`/timelines/tasks/${taskId}/comments`),
-  getFiles:         (taskId)        => api.get(`/timelines/tasks/${taskId}/files`),
-  addComment:       (taskId, content) => api.post(`/timelines/tasks/${taskId}/comments`, { task_message: content }),
-  getMembers:       (id)               => api.get(`/timelines/${id}/members`),
-  removeMember:     (id, userId)       => api.delete(`/timelines/${id}/members/${userId}`),
+  getMembers:       (id)            => api.get(`/timelines/${id}/members`),
+  removeMember:     (id, userId)    => api.delete(`/timelines/${id}/members/${userId}`),
 };

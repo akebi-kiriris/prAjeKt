@@ -11,7 +11,7 @@ class TaskUser(db.Model):
     assigned_at = db.Column(db.DateTime, default=datetime.utcnow)
     
     # 關聯
-    task = db.relationship('Task', backref=db.backref('task_members', lazy=True))
+    task = db.relationship('Task', backref=db.backref('task_members', lazy=True, cascade='all, delete-orphan'))
     user = db.relationship('User', backref=db.backref('assigned_tasks', lazy=True))
     
     # 複合唯一索引

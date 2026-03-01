@@ -171,6 +171,7 @@
           <button @click="showTaskDetail = false" class="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">&times;</button>
         </div>
         <div class="p-6 space-y-6">
+          <!-- 基本資訊 -->
           <div class="grid grid-cols-2 gap-4 p-4 bg-gray-50 rounded-xl">
             <div><p class="text-xs text-gray-500 mb-1">開始日期</p><p class="font-medium text-gray-800">{{ formatDate(selectedTask.start_date) || '未設定' }}</p></div>
             <div><p class="text-xs text-gray-500 mb-1">截止日期</p><p class="font-medium text-gray-800">{{ formatDate(selectedTask.end_date) || '未設定' }}</p></div>
@@ -179,38 +180,77 @@
             <h4 class="font-semibold text-gray-700 mb-2">📝 備註</h4>
             <p class="text-gray-600 text-sm">{{ selectedTask.task_remark }}</p>
           </div>
-          <!-- 附件 -->
-          <div v-if="selectedTask.files && selectedTask.files.length > 0">
-            <h4 class="font-semibold text-gray-700 mb-3 flex items-center gap-2"><span>📎</span> 附件</h4>
-            <div class="grid grid-cols-2 gap-3">
-              <div v-for="file in selectedTask.files" :key="file.id" class="flex items-center gap-3 p-3 bg-gray-50 rounded-lg border border-gray-200 hover:bg-gray-100 transition-colors">
-                <span class="text-2xl">{{ file.file_name?.match(/\.(jpg|jpeg|png|gif|webp)$/i) ? '🖼️' : '📄' }}</span>
+
+          <!-- ── 附件區 ── -->
+          <div>
+            <div class="flex items-center justify-between mb-3">
+              <h4 class="font-semibold text-gray-700 flex items-center gap-2">
+                <span>📎</span> 附件
+                <span class="text-xs text-gray-400 font-normal">({{ taskFiles.length }})</span>
+              </h4>
+              <label class="cursor-pointer flex items-center gap-1.5 px-3 py-1.5 bg-primary/10 text-primary text-sm font-medium rounded-lg hover:bg-primary/20 transition-colors">
+                <span>＋</span> 上傳檔案
+                <input ref="fileInput" type="file" class="hidden"
+                  accept=".jpg,.jpeg,.png,.gif,.webp,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip,.csv,.mp4,.mov"
+                  @change="handleFileUpload" />
+              </label>
+            </div>
+            <div v-if="taskFiles.length === 0" class="text-center py-6 text-gray-400 text-sm bg-gray-50 rounded-xl border border-dashed border-gray-200">
+              尚無附件，點擊「上傳檔案」新增
+            </div>
+            <div v-else class="space-y-2">
+              <div v-for="file in taskFiles" :key="file.id"
+                class="flex items-center gap-3 p-3 bg-gray-50 rounded-xl border border-gray-200 hover:bg-gray-100 transition-colors group">
+                <img v-if="isImageFile(file.original_filename)"
+                  :src="`${apiBaseUrl}/tasks/files/${file.filename}`"
+                  class="w-12 h-12 object-cover rounded-lg border border-gray-200 shrink-0"
+                  :alt="file.original_filename" />
+                <span v-else class="text-3xl shrink-0">{{ getFileIcon(file.original_filename) }}</span>
                 <div class="flex-1 min-w-0">
-                  <p class="text-sm font-medium text-gray-700 truncate">{{ file.file_name }}</p>
-                  <a :href="`${apiBaseUrl}/timelines/tasks/${selectedTask.task_id}/files/${file.id}`" target="_blank" class="text-xs text-primary hover:underline">下載</a>
+                  <p class="text-sm font-medium text-gray-700 truncate">{{ file.original_filename }}</p>
+                  <p class="text-xs text-gray-400">{{ formatFileSize(file.file_size) }} · {{ formatDateTime(file.uploaded_at) }}</p>
+                </div>
+                <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <button @click="downloadFile(`${apiBaseUrl}/tasks/files/${file.filename}`, file.original_filename)"
+                    class="w-8 h-8 flex items-center justify-center text-primary hover:bg-primary/10 rounded-lg transition-colors"
+                    title="下載">⬇️</button>
+                  <button @click="deleteFile(file.id)"
+                    class="w-8 h-8 flex items-center justify-center text-red-400 hover:bg-red-50 hover:text-red-600 rounded-lg transition-colors"
+                    title="刪除">🗑️</button>
                 </div>
               </div>
             </div>
           </div>
-          <!-- 留言 -->
+
+          <!-- ── 留言區 ── -->
           <div>
-            <h4 class="font-semibold text-gray-700 mb-4 flex items-center gap-2"><span>💬</span> 留言</h4>
+            <h4 class="font-semibold text-gray-700 mb-4 flex items-center gap-2">
+              <span>💬</span> 留言
+              <span class="text-xs text-gray-400 font-normal">({{ taskComments.length }})</span>
+            </h4>
             <div class="space-y-3 max-h-60 overflow-y-auto mb-4">
-              <div v-for="comment in selectedTask.comments" :key="comment.id" class="flex gap-3 p-3 bg-gray-50 rounded-xl">
-                <div class="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center text-sm font-bold text-primary shrink-0">{{ comment.username?.charAt(0).toUpperCase() }}</div>
+              <div v-for="comment in taskComments" :key="comment.comment_id" class="flex gap-3 p-3 bg-gray-50 rounded-xl group">
+                <div class="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center text-sm font-bold text-primary shrink-0">
+                  {{ comment.user_name?.charAt(0)?.toUpperCase() }}
+                </div>
                 <div class="flex-1">
                   <div class="flex items-center gap-2 mb-1">
-                    <span class="text-sm font-medium text-gray-700">{{ comment.username }}</span>
-                    <span class="text-xs text-gray-400">{{ comment.created_at ? new Date(comment.created_at).toLocaleString('zh-TW') : '' }}</span>
+                    <span class="text-sm font-medium text-gray-700">{{ comment.user_name }}</span>
+                    <span class="text-xs text-gray-400">{{ formatDateTime(comment.created_at) }}</span>
                   </div>
-                  <p class="text-sm text-gray-600">{{ comment.content }}</p>
+                  <p class="text-sm text-gray-600">{{ comment.task_message }}</p>
                 </div>
+                <button @click="deleteComment(comment.comment_id)"
+                  class="opacity-0 group-hover:opacity-100 w-7 h-7 flex items-center justify-center text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all shrink-0"
+                  title="刪除留言">✕</button>
               </div>
-              <div v-if="!selectedTask.comments || selectedTask.comments.length === 0" class="text-center py-4 text-gray-400 text-sm">尚無留言</div>
+              <div v-if="taskComments.length === 0" class="text-center py-4 text-gray-400 text-sm">尚無留言</div>
             </div>
             <div class="flex gap-2">
-              <input v-model="newComment" type="text" placeholder="新增留言..." @keyup.enter="addComment" class="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none" />
-              <button @click="addComment" class="px-4 py-2.5 bg-primary text-white font-medium rounded-xl hover:brightness-110 transition-all">傳送</button>
+              <input v-model="newComment" type="text" placeholder="新增留言..." @keyup.enter="addComment"
+                class="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none" />
+              <button @click="addComment" :disabled="!newComment.trim()"
+                class="px-4 py-2.5 bg-primary text-white font-medium rounded-xl hover:brightness-110 transition-all disabled:opacity-50">傳送</button>
             </div>
           </div>
         </div>
@@ -303,6 +343,9 @@ const showAddTaskModal = ref(false);
 const isSharePanelOpen = ref(false);
 const showTaskDetail = ref(false);
 const selectedTask = ref(null);
+const taskComments = ref([]);
+const taskFiles = ref([]);
+const fileInput = ref(null);
 const showAiGenerateModal = ref(false);
 const aiGeneratedTasks = ref([]);
 const selectedAiTasks = ref([]);
@@ -357,29 +400,63 @@ const handleAddTask = async () => {
 };
 
 const openTaskDetail = async (task) => {
-  selectedTask.value = { ...task, comments: [], files: [] };
+  selectedTask.value = { ...task };
+  taskComments.value = [];
+  taskFiles.value = [];
+  showTaskDetail.value = true;
   try {
     const [commentsRes, filesRes] = await Promise.allSettled([
-      timelineService.getComments(task.task_id),
-      timelineService.getFiles(task.task_id)
+      taskService.getComments(task.task_id),
+      taskService.getFiles(task.task_id)
     ]);
-    if (commentsRes.status === 'fulfilled') selectedTask.value.comments = commentsRes.value.data;
-    if (filesRes.status === 'fulfilled') selectedTask.value.files = filesRes.value.data;
+    if (commentsRes.status === 'fulfilled') taskComments.value = commentsRes.value.data || [];
+    if (filesRes.status === 'fulfilled') taskFiles.value = filesRes.value.data || [];
   } catch (err) {
     console.error('取得任務詳情失敗:', err);
   }
-  showTaskDetail.value = true;
 };
 
 const addComment = async () => {
   if (!newComment.value.trim() || !selectedTask.value) return;
   try {
-    await timelineService.addComment(selectedTask.value.task_id, newComment.value);
+    await taskService.addComment(selectedTask.value.task_id, newComment.value.trim());
     newComment.value = '';
-    // 重新取得留言列表
-    const res = await timelineService.getComments(selectedTask.value.task_id);
-    selectedTask.value.comments = res.data;
+    const res = await taskService.getComments(selectedTask.value.task_id);
+    taskComments.value = res.data || [];
   } catch { alert('新增留言失敗'); }
+};
+
+const deleteComment = async (commentId) => {
+  if (!confirm('確定要刪除此留言？')) return;
+  try {
+    await taskService.deleteComment(selectedTask.value.task_id, commentId);
+    taskComments.value = taskComments.value.filter(c => c.comment_id !== commentId);
+  } catch { alert('刪除留言失敗'); }
+};
+
+const handleFileUpload = async (event) => {
+  const file = event.target.files?.[0];
+  if (!file || !selectedTask.value) return;
+  if (file.size > 10 * 1024 * 1024) { alert('檔案大小不可超過 10MB'); return; }
+  const formData = new FormData();
+  formData.append('file', file);
+  try {
+    await taskService.uploadFile(selectedTask.value.task_id, formData);
+    const res = await taskService.getFiles(selectedTask.value.task_id);
+    taskFiles.value = res.data || [];
+  } catch (err) {
+    alert(err.response?.data?.error || '上傳失敗');
+  } finally {
+    if (fileInput.value) fileInput.value.value = '';
+  }
+};
+
+const deleteFile = async (fileId) => {
+  if (!confirm('確定要刪除此附件？')) return;
+  try {
+    await taskService.deleteFile(selectedTask.value.task_id, fileId);
+    taskFiles.value = taskFiles.value.filter(f => f.id !== fileId);
+  } catch { alert('刪除附件失敗'); }
 };
 
 // ────────────── 成員管理 ──────────────
@@ -467,6 +544,45 @@ const batchCreateAiTasks = async () => {
 const formatDate = (dateStr) => {
   if (!dateStr) return '';
   return new Date(dateStr).toLocaleDateString('zh-TW');
+};
+
+const formatDateTime = (dateStr) => {
+  if (!dateStr) return '';
+  return new Date(dateStr).toLocaleString('zh-TW', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+};
+
+const isImageFile = (filename) => /\.(jpg|jpeg|png|gif|webp)$/i.test(filename || '');
+
+const getFileIcon = (filename) => {
+  if (!filename) return '📄';
+  const ext = filename.split('.').pop()?.toLowerCase();
+  const icons = { pdf: '📕', doc: '📝', docx: '📝', xls: '📊', xlsx: '📊', ppt: '📋', pptx: '📋', zip: '🗜️', csv: '📊', mp4: '🎬', mov: '🎬', txt: '📃' };
+  return icons[ext] || '📄';
+};
+
+const formatFileSize = (bytes) => {
+  if (!bytes) return '';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+};
+
+const downloadFile = async (url, originalFilename) => {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('下載失敗');
+    const blob = await res.blob();
+    const blobUrl = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = blobUrl;
+    a.download = originalFilename || 'download';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(blobUrl);
+  } catch {
+    alert('下載失敗，請稍後再試');
+  }
 };
 
 const getPriorityLabel = (priority) => ({ 1: '🔴 高', 2: '🟡 中', 3: '🟢 低' }[priority] || '🟡 中');

@@ -8,6 +8,9 @@ class Subtask(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     task_id = db.Column(db.Integer, db.ForeignKey('tasks.task_id'), nullable=False)
     name = db.Column(db.String(200), nullable=False)
+
+    # 關聯（cascade 保證 Task 永久刪除時自動清除子任務）
+    task = db.relationship('Task', backref=db.backref('subtasks', lazy=True, cascade='all, delete-orphan'))
     completed = db.Column(db.Boolean, default=False)
     sort_order = db.Column(db.Integer, default=0)  # 排序順序
     created_at = db.Column(db.DateTime, default=datetime.utcnow)

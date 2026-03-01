@@ -10,7 +10,7 @@ class Timeline(db.Model):
     start_date = db.Column(db.Date)
     end_date = db.Column(db.Date)
     remark = db.Column(db.Text)
-    deleted = db.Column(db.Boolean, default=False, nullable=False)
+    deleted_at = db.Column(db.DateTime, nullable=True)  # None=正常, 有值=軟刪除時間
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     
     def __repr__(self):
@@ -27,6 +27,9 @@ class TaskFile(db.Model):
     file_size = db.Column(db.Integer)
     uploaded_at = db.Column(db.DateTime, default=datetime.utcnow)
     uploaded_by = db.Column(db.Integer, db.ForeignKey('users.id'))
-    
+
+    # 關聯（cascade 保證 Task 永久刪除時自動清除附件記錄）
+    task = db.relationship('Task', backref=db.backref('files', lazy=True, cascade='all, delete-orphan'))
+
     def __repr__(self):
         return f'<TaskFile {self.filename}>'

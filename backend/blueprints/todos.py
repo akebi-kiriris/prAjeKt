@@ -14,8 +14,8 @@ def get_todos():
     todo_id = request.args.get('id')
     
     if todo_id:
-        # 取得單一待辦事項
-        todo = Todo.query.filter_by(id=todo_id, user_id=user_id).first()
+        # 取得單一待辦事項（排除軟刪除）
+        todo = Todo.query.filter_by(id=todo_id, user_id=user_id).filter(Todo.deleted_at.is_(None)).first()
         if not todo:
             return jsonify({'error': '找不到該待辦事項'}), 404
         return jsonify([{
@@ -26,8 +26,8 @@ def get_todos():
             'completed': todo.completed
         }]), 200
     
-    # 取得所有待辦事項
-    todos = Todo.query.filter_by(user_id=user_id).order_by(Todo.completed, Todo.deadline).all()
+    # 取得所有待辦事項（排除軟刪除）
+    todos = Todo.query.filter_by(user_id=user_id).filter(Todo.deleted_at.is_(None)).order_by(Todo.completed, Todo.deadline).all()
     
     return jsonify([{
         'id': t.id,
@@ -72,7 +72,7 @@ def create_todo():
 def update_todo(todo_id):
     """更新待辦事項"""
     user_id = int(get_jwt_identity())
-    todo = Todo.query.filter_by(id=todo_id, user_id=user_id).first()
+    todo = Todo.query.filter_by(id=todo_id, user_id=user_id).filter(Todo.deleted_at.is_(None)).first()
     
     if not todo:
         return jsonify({'error': '找不到該待辦事項'}), 404
@@ -97,15 +97,15 @@ def update_todo(todo_id):
 @todos_bp.route('/<int:todo_id>', methods=['DELETE'])
 @jwt_required()
 def delete_todo(todo_id):
-    """刪除待辦事項"""
+    """刪除待辦事項（軟刪除）"""
     user_id = int(get_jwt_identity())
-    todo = Todo.query.filter_by(id=todo_id, user_id=user_id).first()
+    todo = Todo.query.filter_by(id=todo_id, user_id=user_id).filter(Todo.deleted_at.is_(None)).first()
     
     if not todo:
         return jsonify({'error': '找不到該待辦事項'}), 404
     
     try:
-        db.session.delete(todo)
+        todo.deleted_at = datetime.utcnow()
         db.session.commit()
         return jsonify({'message': '待辦事項刪除成功'}), 200
     except Exception as e:
@@ -117,7 +117,7 @@ def delete_todo(todo_id):
 def toggle_todo(todo_id):
     """切換待辦事項完成狀態"""
     user_id = int(get_jwt_identity())
-    todo = Todo.query.filter_by(id=todo_id, user_id=user_id).first()
+    todo = Todo.query.filter_by(id=todo_id, user_id=user_id).filter(Todo.deleted_at.is_(None)).first()
     
     if not todo:
         return jsonify({'error': '找不到該待辦事項'}), 404

@@ -1,4 +1,4 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, send_from_directory
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from functools import wraps
 from app import db
@@ -9,6 +9,7 @@ from models.timeline_user import TimelineUser
 from models.subtask import Subtask
 from models.user import User
 from datetime import datetime
+import os
 
 tasks_bp = Blueprint('tasks', __name__)
 
@@ -58,10 +59,10 @@ def get_tasks():
     """取得使用者的所有任務（包含被指派的）"""
     user_id = int(get_jwt_identity())
     
-    # 取得自己建立的任務和被指派的任務
-    own_tasks = Task.query.filter_by(user_id=user_id).all()
+    # 取得自己建立的任務和被指派的任務（排除軟刪除）
+    own_tasks = Task.query.filter_by(user_id=user_id).filter(Task.deleted_at.is_(None)).all()
     assigned_task_ids = [tu.task_id for tu in TaskUser.query.filter_by(user_id=user_id).all()]
-    assigned_tasks = Task.query.filter(Task.task_id.in_(assigned_task_ids)).all() if assigned_task_ids else []
+    assigned_tasks = Task.query.filter(Task.task_id.in_(assigned_task_ids), Task.deleted_at.is_(None)).all() if assigned_task_ids else []
     
     # 合併並去重
     all_tasks = {t.task_id: t for t in own_tasks + assigned_tasks}
@@ -169,7 +170,7 @@ def create_task():
 @require_task_role('member')
 def update_task(task_id):
     """更新任務"""
-    task = Task.query.filter_by(task_id=task_id).first()
+    task = Task.query.filter_by(task_id=task_id).filter(Task.deleted_at.is_(None)).first()
     
     if not task:
         return jsonify({'error': '找不到該任務'}), 404
@@ -202,18 +203,14 @@ def update_task(task_id):
 @jwt_required()
 @require_task_role('owner')
 def delete_task(task_id):
-    """刪除任務"""
-    task = Task.query.filter_by(task_id=task_id).first()
+    """刪除任務（軟刪除）"""
+    task = Task.query.filter_by(task_id=task_id).filter(Task.deleted_at.is_(None)).first()
     
     if not task:
         return jsonify({'error': '找不到該任務'}), 404
     
     try:
-        # 刪除相關的任務成員
-        TaskUser.query.filter_by(task_id=task_id).delete()
-        # 刪除相關的任務留言
-        TaskComment.query.filter_by(task_id=task_id).delete()
-        db.session.delete(task)
+        task.deleted_at = datetime.utcnow()
         db.session.commit()
         return jsonify({'message': '任務刪除成功'}), 200
     except Exception as e:
@@ -225,7 +222,7 @@ def delete_task(task_id):
 @require_task_role('member')
 def toggle_task(task_id):
     """切換任務完成狀態"""
-    task = Task.query.filter_by(task_id=task_id).first()
+    task = Task.query.filter_by(task_id=task_id).filter(Task.deleted_at.is_(None)).first()
     
     if not task:
         return jsonify({'error': '找不到該任務'}), 404
@@ -315,7 +312,7 @@ def remove_task_member(task_id, member_id):
 @require_task_role('member')
 def get_task_comments(task_id):
     """取得任務留言"""
-    comments = TaskComment.query.filter_by(task_id=task_id).order_by(TaskComment.created_at.desc()).all()
+    comments = TaskComment.query.filter_by(task_id=task_id).filter(TaskComment.deleted_at.is_(None)).order_by(TaskComment.created_at.desc()).all()
     result = []
     for c in comments:
         user = User.query.get(c.user_id)
@@ -349,7 +346,14 @@ def add_task_comment(task_id):
         )
         db.session.add(comment)
         db.session.commit()
-        return jsonify({'message': '留言新增成功', 'comment_id': comment.comment_id}), 201
+        user = User.query.get(user_id)
+        return jsonify({
+            'comment_id': comment.comment_id,
+            'user_id': user_id,
+            'user_name': user.name if user else '未知',
+            'task_message': message,
+            'created_at': comment.created_at.isoformat() if comment.created_at else None,
+        }), 201
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
@@ -357,9 +361,9 @@ def add_task_comment(task_id):
 @tasks_bp.route('/<int:task_id>/comments/<int:comment_id>', methods=['DELETE'])
 @jwt_required()
 def delete_task_comment(task_id, comment_id):
-    """刪除任務留言"""
+    """刪除任務留言（軟刪除）"""
     user_id = int(get_jwt_identity())
-    comment = TaskComment.query.filter_by(comment_id=comment_id, task_id=task_id).first()
+    comment = TaskComment.query.filter_by(comment_id=comment_id, task_id=task_id).filter(TaskComment.deleted_at.is_(None)).first()
     
     if not comment:
         return jsonify({'error': '找不到該留言'}), 404
@@ -368,7 +372,7 @@ def delete_task_comment(task_id, comment_id):
         return jsonify({'error': '只能刪除自己的留言'}), 403
     
     try:
-        db.session.delete(comment)
+        comment.deleted_at = datetime.utcnow()
         db.session.commit()
         return jsonify({'message': '留言刪除成功'}), 200
     except Exception as e:
@@ -376,7 +380,131 @@ def delete_task_comment(task_id, comment_id):
         return jsonify({'error': str(e)}), 500
 
 
-# ===== 子任務 API =====
+# ===== 任務檔案 API =====
+
+ALLOWED_FILE_EXTENSIONS = {
+    'txt', 'pdf', 'png', 'jpg', 'jpeg', 'gif', 'webp',
+    'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx',
+    'zip', 'csv', 'mp4', 'mov'
+}
+
+def allowed_task_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_FILE_EXTENSIONS
+
+@tasks_bp.route('/<int:task_id>/files', methods=['GET'])
+@jwt_required()
+@require_task_role('member')
+def get_task_files(task_id):
+    """取得任務所有附件"""
+    from models.timeline import TaskFile
+    files = TaskFile.query.filter_by(task_id=task_id).order_by(TaskFile.uploaded_at.desc()).all()
+    result = []
+    for f in files:
+        uploader = User.query.get(f.uploaded_by)
+        result.append({
+            'id': f.id,
+            'filename': f.filename,
+            'original_filename': f.original_filename,
+            'file_size': f.file_size,
+            'uploaded_at': f.uploaded_at.isoformat() if f.uploaded_at else None,
+            'uploaded_by_name': uploader.name if uploader else '未知',
+        })
+    return jsonify(result), 200
+
+@tasks_bp.route('/<int:task_id>/upload', methods=['POST'])
+@jwt_required()
+@require_task_role('member')
+def upload_task_file(task_id):
+    """上傳任務附件"""
+    import time
+    from models.timeline import TaskFile
+    from werkzeug.utils import secure_filename
+
+    user_id = int(get_jwt_identity())
+
+    if 'file' not in request.files:
+        return jsonify({'error': '沒有選擇檔案'}), 400
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({'error': '檔案名稱為空'}), 400
+    if not allowed_task_file(file.filename):
+        return jsonify({'error': '不支援的檔案格式'}), 400
+
+    file.seek(0, 2)
+    file_size = file.tell()
+    file.seek(0)
+    if file_size > 10 * 1024 * 1024:
+        return jsonify({'error': '檔案大小不可超過 10MB'}), 400
+
+    original_filename = file.filename  # 保留原始檔名（含中文）用於顯示
+    filename = secure_filename(file.filename)  # 安全檔名用於存磁碟
+    if not filename or filename.startswith('.'):
+        # secure_filename 把中文全濾掉時，用時間戳加副檔名當備援
+        ext = original_filename.rsplit('.', 1)[-1] if '.' in original_filename else 'bin'
+        filename = f"file.{ext}"
+    upload_folder = os.path.join(os.path.dirname(__file__), '..', 'uploads', 'task_files')
+    os.makedirs(upload_folder, exist_ok=True)
+    unique_filename = f"{int(time.time())}_{filename}"
+    file_path = os.path.join(upload_folder, unique_filename)
+    file.save(file_path)
+
+    task_file = TaskFile(
+        task_id=task_id,
+        filename=unique_filename,
+        original_filename=original_filename,
+        file_path=file_path,
+        file_size=file_size,
+        uploaded_by=user_id
+    )
+    try:
+        db.session.add(task_file)
+        db.session.commit()
+        return jsonify({
+            'id': task_file.id,
+            'message': '檔案上傳成功',
+            'filename': unique_filename,
+            'original_filename': filename,
+            'file_size': file_size,
+            'uploaded_at': task_file.uploaded_at.isoformat() if task_file.uploaded_at else None,
+        }), 201
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+@tasks_bp.route('/<int:task_id>/files/<int:file_id>', methods=['DELETE'])
+@jwt_required()
+def delete_task_file(task_id, file_id):
+    """刪除任務附件（上傳者或負責人可刪除）"""
+    from models.timeline import TaskFile
+    user_id = int(get_jwt_identity())
+    role = get_user_task_role(user_id, task_id)
+    if role is None:
+        return jsonify({'error': '你沒有權限存取此任務'}), 403
+
+    task_file = TaskFile.query.filter_by(id=file_id, task_id=task_id).first()
+    if not task_file:
+        return jsonify({'error': '找不到該檔案'}), 404
+    if task_file.uploaded_by != user_id and role != 0:
+        return jsonify({'error': '只有上傳者或負責人可刪除檔案'}), 403
+
+    try:
+        if task_file.file_path and os.path.exists(task_file.file_path):
+            os.remove(task_file.file_path)
+        db.session.delete(task_file)
+        db.session.commit()
+        return jsonify({'message': '檔案刪除成功'}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+@tasks_bp.route('/files/<filename>', methods=['GET'])
+def download_task_file(filename):
+    """下載/預覽任務附件（以原始檔名呈現）"""
+    from models.timeline import TaskFile
+    upload_folder = os.path.join(os.path.dirname(__file__), '..', 'uploads', 'task_files')
+    task_file = TaskFile.query.filter_by(filename=filename).first()
+    original_name = task_file.original_filename if task_file else filename
+    return send_from_directory(upload_folder, filename, as_attachment=False, download_name=original_name)
 
 @tasks_bp.route('/<int:task_id>/subtasks', methods=['GET'])
 @jwt_required()
@@ -484,7 +612,7 @@ def toggle_subtask(task_id, subtask_id):
 @require_task_role('member')
 def update_task_status(task_id):
     """更新任務狀態（看板拖曳用）"""
-    task = Task.query.filter_by(task_id=task_id).first()
+    task = Task.query.filter_by(task_id=task_id).filter(Task.deleted_at.is_(None)).first()
     
     if not task:
         return jsonify({'error': '找不到該任務'}), 404

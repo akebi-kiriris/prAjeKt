@@ -9,9 +9,10 @@ class TaskComment(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     task_message = db.Column(db.String(255), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    deleted_at = db.Column(db.DateTime, nullable=True)  # None=正常, 有值=軟刪除時間
     
     # 關聯
-    task = db.relationship('Task', backref=db.backref('comments', lazy=True))
+    task = db.relationship('Task', backref=db.backref('comments', lazy=True, cascade='all, delete-orphan'))
     user = db.relationship('User', backref=db.backref('task_comments', lazy=True))
     
     def __repr__(self):

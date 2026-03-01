@@ -16,4 +16,14 @@ export const taskService = {
   addMember:     (id, userId)          => api.post(`/tasks/${id}/members`, { user_id: userId }),
   removeMember:  (taskId, userId)      => api.delete(`/tasks/${taskId}/members/${userId}`),
   searchUser:    (email)               => api.post('/timelines/search_user', { email }),
+  // 留言
+  getComments:   (id)                  => api.get(`/tasks/${id}/comments`),
+  addComment:    (id, msg)             => api.post(`/tasks/${id}/comments`, { task_message: msg }),
+  deleteComment: (taskId, cid)         => api.delete(`/tasks/${taskId}/comments/${cid}`),
+  // 附件
+  getFiles:      (id)                  => api.get(`/tasks/${id}/files`),
+  uploadFile:    (id, formData)        => api.post(`/tasks/${id}/upload`, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  }),
+  deleteFile:    (taskId, fileId)      => api.delete(`/tasks/${taskId}/files/${fileId}`),
 };
