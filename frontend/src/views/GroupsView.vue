@@ -196,12 +196,16 @@
 </template>
 
 <script setup>
-import { ref, onMounted, nextTick } from 'vue';
-import { groupService } from '../services/groupService';
+import { ref, onMounted } from 'vue';
+import { storeToRefs } from 'pinia';
+import { useGroupStore } from '../stores/groups';
 
-const groups = ref([]);
-const currentGroup = ref(null);
-const messages = ref([]);
+const groupStore = useGroupStore();
+
+// ────────────── Store 狀態（響應式解構）──────────────
+const { groups, currentGroup, messages } = storeToRefs(groupStore);
+
+// ────────────── View-local UI 狀態 ──────────────
 const newMessage = ref('');
 const newGroupName = ref('');
 const inviteCode = ref('');
@@ -209,12 +213,9 @@ const showCreateGroup = ref(false);
 const showJoinGroup = ref(false);
 const messagesContainer = ref(null);
 
-const fetchGroups = async () => {
-  try {
-    const response = await groupService.getAll();
-    groups.value = response.data;
-  } catch (error) {
-    console.error('取得群組失敗:', error);
+const scrollToBottom = () => {
+  if (messagesContainer.value) {
+    messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight;
   }
 };
 
@@ -223,11 +224,9 @@ const handleCreateGroup = async () => {
     alert('請輸入群組名稱');
     return;
   }
-  
   try {
-    const response = await groupService.create(newGroupName.value);
-    alert(`群組建立成功！邀請碼: ${response.data.invite_code}`);
-    await fetchGroups();
+    const data = await groupStore.createGroup(newGroupName.value);
+    alert(`群組建立成功！邀請碼: ${data.invite_code}`);
     showCreateGroup.value = false;
     newGroupName.value = '';
   } catch (error) {
@@ -240,11 +239,9 @@ const handleJoinGroup = async () => {
     alert('請輸入邀請碼');
     return;
   }
-  
   try {
-    await groupService.join(inviteCode.value);
+    await groupStore.joinGroup(inviteCode.value);
     alert('成功加入群組');
-    await fetchGroups();
     showJoinGroup.value = false;
     inviteCode.value = '';
   } catch (error) {
@@ -253,28 +250,14 @@ const handleJoinGroup = async () => {
 };
 
 const openChat = async (group) => {
-  currentGroup.value = group;
-  await fetchMessages(group.group_id);
-};
-
-const fetchMessages = async (groupId) => {
-  try {
-    const response = await groupService.getMessages(groupId);
-    messages.value = response.data;
-    await nextTick();
-    scrollToBottom();
-  } catch (error) {
-    console.error('取得訊息失敗:', error);
-  }
+  await groupStore.openChat(group, scrollToBottom);
 };
 
 const sendMessage = async () => {
   if (!newMessage.value.trim()) return;
-  
   try {
-    await groupService.sendMessage(currentGroup.value.group_id, newMessage.value);
+    await groupStore.sendMessage(newMessage.value, scrollToBottom);
     newMessage.value = '';
-    await fetchMessages(currentGroup.value.group_id);
   } catch (error) {
     alert(error.response?.data?.error || '發送訊息失敗');
   }
@@ -282,22 +265,11 @@ const sendMessage = async () => {
 
 const leaveGroup = async (groupId) => {
   if (!confirm('確定要離開此群組？')) return;
-  
   try {
-    await groupService.leave(groupId);
+    await groupStore.leaveGroup(groupId);
     alert('已離開群組');
-    await fetchGroups();
-    if (currentGroup.value?.group_id === groupId) {
-      currentGroup.value = null;
-    }
   } catch (error) {
     alert(error.response?.data?.error || '離開群組失敗');
-  }
-};
-
-const scrollToBottom = () => {
-  if (messagesContainer.value) {
-    messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight;
   }
 };
 
@@ -312,6 +284,6 @@ const formatTime = (dateStr) => {
 };
 
 onMounted(() => {
-  fetchGroups();
+  groupStore.fetchGroups();
 });
 </script>

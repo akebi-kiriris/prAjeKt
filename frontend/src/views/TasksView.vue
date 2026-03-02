@@ -293,6 +293,29 @@
               <p class="text-gray-600 text-sm">{{ detailTask.task_remark }}</p>
             </div>
 
+            <!-- ── 子任務區 ── -->
+            <div>
+              <h4 class="font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                <span>📋</span> 子任務
+                <span class="text-sm font-normal text-gray-500">({{ detailSubtasks.filter(s => s.completed).length }}/{{ detailSubtasks.length }})</span>
+              </h4>
+              <div v-if="detailSubtasks.length > 0" class="h-2 bg-gray-200 rounded-full overflow-hidden mb-4">
+                <div class="h-full bg-primary rounded-full transition-all duration-300" :style="{ width: detailSubtaskProgress + '%' }"></div>
+              </div>
+              <div class="space-y-2 mb-3">
+                <div v-for="subtask in detailSubtasks" :key="subtask.id" class="flex items-center gap-3 p-3 bg-gray-50 rounded-lg group hover:bg-gray-100 transition-colors">
+                  <input type="checkbox" :checked="subtask.completed" @change="toggleDetailSubtask(subtask)" class="w-5 h-5 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer" />
+                  <span :class="['flex-1 text-sm', subtask.completed ? 'line-through text-gray-400' : 'text-gray-700']">{{ subtask.name }}</span>
+                  <button @click="deleteDetailSubtask(subtask)" class="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-600 transition-all">🗑️</button>
+                </div>
+                <div v-if="detailSubtasks.length === 0" class="text-center py-4 text-gray-400 text-sm">尚無子任務</div>
+              </div>
+              <div class="flex gap-2">
+                <input v-model="detailNewSubtask" type="text" placeholder="輸入子任務名稱..." @keyup.enter="addDetailSubtask" class="flex-1 px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none" />
+                <button @click="addDetailSubtask" class="px-4 py-2 bg-primary text-white rounded-xl hover:brightness-110 transition-all">新增</button>
+              </div>
+            </div>
+
             <!-- ── 附件區 ── -->
             <div>
               <div class="flex items-center justify-between mb-3">
@@ -374,7 +397,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, watch } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useTaskStore } from '../stores/tasks';
 import { taskService } from '../services/taskService';
@@ -451,22 +474,58 @@ const detailComments = ref([]);
 const detailFiles = ref([]);
 const detailNewComment = ref('');
 const detailFileInput = ref(null);
+const detailSubtasks = ref([]);
+const detailNewSubtask = ref('');
+
+const detailSubtaskProgress = computed(() => {
+  if (!detailSubtasks.value.length) return 0;
+  return Math.round(detailSubtasks.value.filter(s => s.completed).length / detailSubtasks.value.length * 100);
+});
 
 const openTaskDetail = async (task) => {
   detailTask.value = { ...task };
   detailComments.value = [];
   detailFiles.value = [];
+  detailSubtasks.value = [];
   showTaskDetail.value = true;
   try {
-    const [cRes, fRes] = await Promise.allSettled([
+    const [cRes, fRes, sRes] = await Promise.allSettled([
       taskService.getComments(task.task_id),
-      taskService.getFiles(task.task_id)
+      taskService.getFiles(task.task_id),
+      taskService.getSubtasks(task.task_id)
     ]);
     if (cRes.status === 'fulfilled') detailComments.value = cRes.value.data || [];
     if (fRes.status === 'fulfilled') detailFiles.value = fRes.value.data || [];
+    if (sRes.status === 'fulfilled') detailSubtasks.value = sRes.value.data || [];
   } catch (err) {
     console.error('取得任務詳情失敗:', err);
   }
+};
+
+const addDetailSubtask = async () => {
+  if (!detailNewSubtask.value.trim() || !detailTask.value) return;
+  try {
+    await taskService.createSubtask(detailTask.value.task_id, { name: detailNewSubtask.value.trim() });
+    detailNewSubtask.value = '';
+    const res = await taskService.getSubtasks(detailTask.value.task_id);
+    detailSubtasks.value = res.data || [];
+  } catch { alert('新增子任務失敗'); }
+};
+
+const toggleDetailSubtask = async (subtask) => {
+  try {
+    await taskService.toggleSubtask(detailTask.value.task_id, subtask.id);
+    const res = await taskService.getSubtasks(detailTask.value.task_id);
+    detailSubtasks.value = res.data || [];
+  } catch { alert('更新子任務狀態失敗'); }
+};
+
+const deleteDetailSubtask = async (subtask) => {
+  if (!confirm('確定要刪除此子任務？')) return;
+  try {
+    await taskService.deleteSubtask(detailTask.value.task_id, subtask.id);
+    detailSubtasks.value = detailSubtasks.value.filter(s => s.id !== subtask.id);
+  } catch { alert('刪除子任務失敗'); }
 };
 
 const addDetailComment = async () => {

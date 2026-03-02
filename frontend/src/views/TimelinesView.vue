@@ -96,19 +96,21 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue';
-import { taskService } from '../services/taskService';
-import { timelineService } from '../services/timelineService';
+import { storeToRefs } from 'pinia';
+import { useTimelineStore } from '../stores/timelines';
 import TimelineHeader from '../components/timelines/TimelineHeader.vue';
 import TimelineViewModes from '../components/timelines/TimelineViewModes.vue';
 import TimelineDetailDialog from '../components/timelines/TimelineDetailDialog.vue';
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
+const timelineStore = useTimelineStore();
 
-// ────────────── 核心狀態 ──────────────
-const timelines = ref([]);
+// ────────────── Store 狀態（響應式解構）──────────────
+const { timelines, allTasks, urgentCount, totalCompletedTasks, totalTasks, sortedTimelines } = storeToRefs(timelineStore);
+
+// ────────────── View-local UI 狀態 ──────────────
 const selectedTimeline = ref(null);
 const timelineTasks = ref([]);
-const allTasks = ref([]);
 const viewMode = ref('card');
 
 // Create/Edit Modal 狀態
@@ -122,31 +124,7 @@ const todayFormatted = computed(() => {
   return today.toLocaleDateString('zh-TW', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' });
 });
 
-const urgentCount = computed(() =>
-  timelines.value.filter(t => {
-    const days = getDaysRemaining(t.endDate).days;
-    return days !== null && days >= 0 && days <= 7;
-  }).length
-);
-
-const totalCompletedTasks = computed(() =>
-  timelines.value.reduce((sum, t) => sum + (t.completedTasks || 0), 0)
-);
-
-const totalTasks = computed(() =>
-  timelines.value.reduce((sum, t) => sum + (t.totalTasks || 0), 0)
-);
-
-const sortedTimelines = computed(() =>
-  [...timelines.value].sort((a, b) => {
-    if (!a.endDate && !b.endDate) return 0;
-    if (!a.endDate) return 1;
-    if (!b.endDate) return -1;
-    return new Date(a.endDate) - new Date(b.endDate);
-  })
-);
-
-// ────────────── 工具函式 ──────────────
+// ────────────── 工具函式（委派給 store）──────────────
 const getDaysRemaining = (endDate) => {
   if (!endDate) return { days: null, text: '未設定', display: '未設定', colorClass: 'text-gray-400' };
   const today = new Date(); today.setHours(0, 0, 0, 0);
@@ -160,32 +138,11 @@ const getDaysRemaining = (endDate) => {
   return { days: diffDays, text: `剩 ${diffDays} 天`, display: `剩 ${diffDays} 天`, colorClass: 'text-green-500' };
 };
 
-// ────────────── 資料取得 ──────────────
-const fetchTimelines = async () => {
-  try {
-    const response = await timelineService.getAll();
-    timelines.value = response.data;
-  } catch (error) {
-    console.error('取得專案失敗:', error);
-    alert('取得專案失敗');
-  }
-};
-
-const fetchAllTasks = async () => {
-  try {
-    const response = await taskService.getAll();
-    allTasks.value = response.data;
-  } catch (error) {
-    console.error('取得任務失敗:', error);
-  }
-};
-
 // ────────────── 專案 CRUD ──────────────
 const viewTimeline = async (timeline) => {
   selectedTimeline.value = timeline;
   try {
-    const response = await timelineService.getTasks(timeline.id);
-    timelineTasks.value = response.data;
+    timelineTasks.value = await timelineStore.getTimelineTasks(timeline.id);
   } catch (error) {
     console.error('取得任務失敗:', error);
   }
@@ -205,9 +162,8 @@ const editTimeline = (timeline) => {
 const deleteTimeline = async (id) => {
   if (!confirm('確定要刪除此專案？相關任務也會被刪除！')) return;
   try {
-    await timelineService.remove(id);
+    await timelineStore.removeTimeline(id);
     alert('專案刪除成功');
-    await fetchTimelines();
   } catch (error) {
     alert(error.response?.data?.error || '刪除失敗');
   }
@@ -223,13 +179,12 @@ const handleSubmit = async () => {
       remark: timelineForm.value.remark || ''
     };
     if (editingTimeline.value) {
-      await timelineService.update(editingTimeline.value.id, formData);
+      await timelineStore.updateTimeline(editingTimeline.value.id, formData);
       alert('專案更新成功');
     } else {
-      await timelineService.create(formData);
+      await timelineStore.addTimeline(formData);
       alert('專案新增成功');
     }
-    await fetchTimelines();
     closeModal();
   } catch (error) {
     alert(error.response?.data?.error || '操作失敗');
@@ -245,10 +200,8 @@ const closeModal = () => {
 // ────────────── 任務操作（來自 DetailDialog emit） ──────────────
 const onToggleTask = async (taskId) => {
   try {
-    await taskService.toggle(taskId);
+    await timelineStore.toggleTask(taskId);
     await viewTimeline(selectedTimeline.value);
-    await fetchTimelines();
-    await fetchAllTasks();
   } catch {
     alert('更新任務狀態失敗');
   }
@@ -257,10 +210,9 @@ const onToggleTask = async (taskId) => {
 const onDeleteTask = async (taskId) => {
   if (!confirm('確定要刪除此任務？')) return;
   try {
-    await taskService.remove(taskId);
+    await timelineStore.removeTask(taskId);
     alert('任務刪除成功');
     await viewTimeline(selectedTimeline.value);
-    await fetchTimelines();
   } catch (error) {
     alert(error.response?.data?.error || '刪除任務失敗');
   }
@@ -268,14 +220,12 @@ const onDeleteTask = async (taskId) => {
 
 // ────────────── 子元件請求全域重整 ──────────────
 const onRefreshAll = async () => {
-  await fetchTimelines();
-  await fetchAllTasks();
+  await timelineStore.fetchAll();
   if (selectedTimeline.value) await viewTimeline(selectedTimeline.value);
 };
 
 onMounted(() => {
-  fetchTimelines();
-  fetchAllTasks();
+  timelineStore.fetchAll();
 });
 </script>
 

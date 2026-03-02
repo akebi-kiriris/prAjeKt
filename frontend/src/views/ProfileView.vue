@@ -178,18 +178,22 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue';
-import { profileService } from '../services/profileService';
-import { taskService } from '../services/taskService';
-import { groupService } from '../services/groupService';
-import { timelineService } from '../services/timelineService';
+import { ref, onMounted } from 'vue';
+import { storeToRefs } from 'pinia';
+import { useProfileStore } from '../stores/profile';
 import { useAuthStore } from '../stores/auth';
 
+const profileStore = useProfileStore();
 const authStore = useAuthStore();
-const loading = ref(true);
+
+// ────────────── Store 狀態（響應式解構）──────────────
+const { profile, loading, statCards } = storeToRefs(profileStore);
+
+// ────────────── View-local UI 狀態 ──────────────
 const isEditing = ref(false);
 const profileForm = ref({
   name: '',
+  username: '',
   email: '',
   phone: '',
   current_password: '',
@@ -197,76 +201,28 @@ const profileForm = ref({
   confirm_password: ''
 });
 const originalProfile = ref({});
-const stats = ref({
-  totalTasks: 0,
-  completedTasks: 0,
-  totalProjects: 0,
-  totalGroups: 0
-});
-
-const statCards = computed(() => [
-  { icon: '📝', label: '我的任務', value: stats.value.totalTasks },
-  { icon: '✅', label: '已完成任務', value: stats.value.completedTasks },
-  { icon: '📊', label: '參與專案', value: stats.value.totalProjects },
-  { icon: '👥', label: '加入群組', value: stats.value.totalGroups },
-]);
-
-const fetchProfile = async () => {
-  try {
-    loading.value = true;
-    const response = await profileService.getMe();
-    profileForm.value = {
-      name: response.data.name || '',
-      username: response.data.username || '',
-      email: response.data.email || '',
-      phone: response.data.phone || '',
-      current_password: '',
-      new_password: '',
-      confirm_password: ''
-    };
-    originalProfile.value = { ...profileForm.value };
-  } catch (error) {
-    console.error('取得個人資料失敗:', error);
-  } finally {
-    loading.value = false;
-  }
+// ────────────── 初始化表單（從 store profile 同步）──────────────
+const syncFormFromStore = () => {
+  profileForm.value = {
+    name: profile.value.name || '',
+    username: profile.value.username || '',
+    email: profile.value.email || '',
+    phone: profile.value.phone || '',
+    current_password: '',
+    new_password: '',
+    confirm_password: ''
+  };
+  originalProfile.value = { ...profileForm.value };
 };
 
-const fetchStats = async () => {
-  try {
-    const [tasksRes, timelinesRes, groupsRes] = await Promise.all([
-      taskService.getAll(),
-      timelineService.getAll(),
-      groupService.getAll()
-    ]);
-    
-    stats.value = {
-      totalTasks: tasksRes.data.length,
-      completedTasks: tasksRes.data.filter(t => t.completed).length,
-      totalProjects: timelinesRes.data.length,
-      totalGroups: groupsRes.data.length
-    };
-  } catch (error) {
-    console.error('取得統計資料失敗:', error);
-  }
-};
-
+// ────────────── CRUD ──────────────
 const handleSubmit = async () => {
   if (profileForm.value.new_password) {
-    if (!profileForm.value.current_password) {
-      alert('請輸入目前密碼');
-      return;
-    }
-    if (profileForm.value.new_password !== profileForm.value.confirm_password) {
-      alert('新密碼與確認密碼不一致');
-      return;
-    }
-    if (profileForm.value.new_password.length < 6) {
-      alert('新密碼至少需要 6 個字元');
-      return;
-    }
+    if (!profileForm.value.current_password) { alert('請輸入目前密碼'); return; }
+    if (profileForm.value.new_password !== profileForm.value.confirm_password) { alert('新密碼與確認密碼不一致'); return; }
+    if (profileForm.value.new_password.length < 6) { alert('新密碼至少需要 6 個字元'); return; }
   }
-  
+
   try {
     const updateData = {
       name: profileForm.value.name,
@@ -274,22 +230,17 @@ const handleSubmit = async () => {
       email: profileForm.value.email,
       phone: profileForm.value.phone
     };
-    
     if (profileForm.value.new_password) {
       updateData.current_password = profileForm.value.current_password;
       updateData.new_password = profileForm.value.new_password;
     }
-    
-    await profileService.update(updateData);
+    await profileStore.updateProfile(updateData);
     await authStore.fetchCurrentUser();
-    
     alert('個人資料更新成功');
     isEditing.value = false;
-    
     profileForm.value.current_password = '';
     profileForm.value.new_password = '';
     profileForm.value.confirm_password = '';
-    
     originalProfile.value = { ...profileForm.value };
   } catch (error) {
     alert(error.response?.data?.error || '更新失敗');
@@ -304,8 +255,9 @@ const cancelEdit = () => {
   isEditing.value = false;
 };
 
-onMounted(() => {
-  fetchProfile();
-  fetchStats();
+onMounted(async () => {
+  await profileStore.fetchProfile();
+  await profileStore.fetchStats();
+  syncFormFromStore();
 });
 </script>

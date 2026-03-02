@@ -2,7 +2,7 @@
 
 基於 Vue 3 + Flask 的專案管理與協作平台，整合 Google Gemini AI 實現智能任務生成。
 
-> **開發狀態**：Phase 1 核心功能全部完成。已完成服務層重構、JWT token 自動刷新、AI 任務生成、任務留言 / 附件上傳、垃圾桶回收機制、多人協作專案管理等功能。
+> **開發狀態**：Phase 1 全部完成 ✅，Phase 2 進行中 🔄。已完成服務層重構、Store 層建立（6 個 store）、JWT token 自動刷新、AI 任務生成、任務留言／附件上傳、垂圾桶回收機制、多人協作專案管理、子任務 UI 等功能。
 
 ## 功能模組
 
@@ -70,7 +70,10 @@ Learnlink/
 │       ├── stores/               # Pinia 全域狀態
 │       │   ├── auth.js           # 登入狀態、token 儲存
 │       │   ├── tasks.js          # 任務狀態（全域）
-│       │   └── todos.js          # 待辦狀態（全域）
+        │   ├── todos.js          # 待辦狀態（全域）
+        │   ├── timelines.js      # 專案狀態（urgentCount / sortedTimelines 等 computed）
+        │   ├── groups.js         # 群組狀態（groups / messages / currentGroup）
+        │   └── profile.js        # 個人資料狀態（profile / stats / statCards）
 │       ├── views/                # 頁面元件
 │       │   ├── TimelinesView.vue   # 專案管理（多視圖切換）
 │       │   ├── TasksView.vue       # 任務管理（Modal 表單 + 留言 / 附件）
