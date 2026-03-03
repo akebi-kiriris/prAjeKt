@@ -30,6 +30,9 @@ Thumbs.db
 # SQL
 *.sql
 
+# 上傳檔案
+backend/uploads/task_files/
+
 # Docs / 筆記目錄（不追蹤）
 docs/
 # README 保留追蹤

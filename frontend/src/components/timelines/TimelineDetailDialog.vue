@@ -352,6 +352,7 @@
 import { ref, computed, watch } from 'vue';
 import { taskService } from '../../services/taskService';
 import { timelineService } from '../../services/timelineService';
+import { formatDate, formatDateTime, formatFileSize, isImageFile, getFileIcon } from '../../utils/formatters';
 
 const props = defineProps({
   selectedTimeline: Object,
@@ -597,33 +598,6 @@ const batchCreateAiTasks = async () => {
     aiGeneratedTasks.value = []; selectedAiTasks.value = [];
     emit('refresh-all');
   } catch (err) { alert(err.response?.data?.error || '批量新增失敗'); }
-};
-
-// ────────────── 工具函式 ──────────────
-const formatDate = (dateStr) => {
-  if (!dateStr) return '';
-  return new Date(dateStr).toLocaleDateString('zh-TW');
-};
-
-const formatDateTime = (dateStr) => {
-  if (!dateStr) return '';
-  return new Date(dateStr).toLocaleString('zh-TW', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
-};
-
-const isImageFile = (filename) => /\.(jpg|jpeg|png|gif|webp)$/i.test(filename || '');
-
-const getFileIcon = (filename) => {
-  if (!filename) return '📄';
-  const ext = filename.split('.').pop()?.toLowerCase();
-  const icons = { pdf: '📕', doc: '📝', docx: '📝', xls: '📊', xlsx: '📊', ppt: '📋', pptx: '📋', zip: '🗜️', csv: '📊', mp4: '🎬', mov: '🎬', txt: '📃' };
-  return icons[ext] || '📄';
-};
-
-const formatFileSize = (bytes) => {
-  if (!bytes) return '';
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 };
 
 const downloadFile = async (url, originalFilename) => {

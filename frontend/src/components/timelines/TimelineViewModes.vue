@@ -509,6 +509,7 @@
 
 <script setup>
 import { ref, computed } from 'vue';
+import { formatDate } from '../../utils/formatters';
 import draggable from 'vuedraggable';
 import FullCalendar from '@fullcalendar/vue3';
 import dayGridPlugin from '@fullcalendar/daygrid';
@@ -626,12 +627,6 @@ const calendarOptions = computed(() => ({
   eventClassNames: 'cursor-pointer fc-event-custom',
   dayMaxEvents: 3, moreLinkClick: 'popover'
 }));
-
-// ────────────── 純工具函式（與 TimelinesView 相同邏輯） ──────────────
-const formatDate = (dateStr) => {
-  if (!dateStr) return '';
-  return new Date(dateStr).toLocaleDateString('zh-TW');
-};
 
 const addDays = (dateStr, days) => {
   if (!dateStr) return null;

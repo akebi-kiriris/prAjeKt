@@ -94,6 +94,7 @@
 <script setup>
 import { ref, onMounted } from 'vue';
 import { trashService } from '../services/trashService';
+import { formatDateTimeCompact as formatDate, formatDateShort } from '../utils/formatters';
 
 const loading = ref(true);
 const tasks = ref([]);
@@ -151,15 +152,6 @@ const permanentDeleteTimeline = async (tl) => {
   }
 };
 
-// ── Helpers ──
-const formatDate = (str) => {
-  if (!str) return '';
-  return new Date(str).toLocaleString('zh-TW', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
-};
-const formatDateShort = (str) => {
-  if (!str) return '';
-  return new Date(str).toLocaleDateString('zh-TW', { month: '2-digit', day: '2-digit' });
-};
 const priorityLabel = (p) => ({ 1: '🔴 高', 2: '🟡 中', 3: '🟢 低' }[p] || '🟡 中');
 const priorityBadge = (p) => ({
   1: 'bg-red-100 text-red-700',

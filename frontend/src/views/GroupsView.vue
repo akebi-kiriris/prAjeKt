@@ -162,7 +162,7 @@
             <p class="text-gray-800 mb-1">{{ msg.content }}</p>
             <div class="text-xs text-gray-400 flex items-center gap-1">
               <span>⏰</span>
-              {{ formatTime(msg.created_at) }}
+              {{ formatDateTime(msg.created_at) }}
             </div>
           </div>
           
@@ -199,6 +199,7 @@
 import { ref, onMounted } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useGroupStore } from '../stores/groups';
+import { formatDate, formatDateTime } from '../utils/formatters';
 
 const groupStore = useGroupStore();
 
@@ -271,16 +272,6 @@ const leaveGroup = async (groupId) => {
   } catch (error) {
     alert(error.response?.data?.error || '離開群組失敗');
   }
-};
-
-const formatDate = (dateStr) => {
-  if (!dateStr) return '';
-  return new Date(dateStr).toLocaleDateString('zh-TW');
-};
-
-const formatTime = (dateStr) => {
-  if (!dateStr) return '';
-  return new Date(dateStr).toLocaleString('zh-TW');
 };
 
 onMounted(() => {
