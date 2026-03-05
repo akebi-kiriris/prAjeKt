@@ -166,7 +166,7 @@
                   class="mt-1 w-5 h-5 accent-primary cursor-pointer"
                 />
                 <div class="flex-1 min-w-0">
-                  <p class="text-gray-500 line-through">{{ todo.content }}</p>
+                  <p class="text-gray-500 line-through">{{ todo.title }}</p>
                   <div v-if="todo.deadline" class="flex items-center gap-2 mt-2 text-sm text-gray-400">
                     <span>⏰</span>
                     <span>{{ formatDeadline(todo.deadline) }}</span>

@@ -7,6 +7,7 @@ from models.timeline_user import TimelineUser
 from models.task import Task
 from models.task_user import TaskUser
 from models.user import User
+from models.notification import Notification
 from datetime import datetime
 import os
 import json
@@ -326,6 +327,19 @@ def add_timeline_member(timeline_id):
     try:
         member = TimelineUser(timeline_id=timeline_id, user_id=invited_user_id, role=role)
         db.session.add(member)
+        # 通知被邀請的成員
+        actor = User.query.get(int(get_jwt_identity()))
+        timeline = Timeline.query.get(timeline_id)
+        actor_name = actor.name if actor else '某人'
+        timeline_name = timeline.name if timeline else '專案'
+        notif = Notification(
+            user_id=invited_user_id,
+            type='timeline_invited',
+            title=f'你被邀請加入專案「{timeline_name}」',
+            content=f'{actor_name} 邀請你加入「{timeline_name}」',
+            link='/timelines'
+        )
+        db.session.add(notif)
         db.session.commit()
         return jsonify({'message': '成員新增成功'}), 201
     except Exception as e:
@@ -554,3 +568,43 @@ def batch_create_tasks(timeline_id):
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
+
+
+@timelines_bp.route('/upcoming', methods=['GET'])
+@jwt_required()
+def get_upcoming_timelines():
+    """取得即將到期（3天內）或時間進度超過80%的專案"""
+    from datetime import timedelta
+    user_id = int(get_jwt_identity())
+    today = datetime.utcnow().date()
+    threshold = today + timedelta(days=3)
+
+    memberships = db.session.query(Timeline, TimelineUser.role)\
+        .join(TimelineUser, Timeline.id == TimelineUser.timeline_id)\
+        .filter(TimelineUser.user_id == user_id, Timeline.deleted_at.is_(None))\
+        .all()
+
+    result = []
+    for timeline, role in memberships:
+        if not timeline.end_date:
+            continue
+        end = timeline.end_date.date() if hasattr(timeline.end_date, 'date') else timeline.end_date
+
+        upcoming = end <= threshold
+        if not upcoming and timeline.start_date:
+            start = timeline.start_date.date() if hasattr(timeline.start_date, 'date') else timeline.start_date
+            total = (end - start).days
+            if total > 0 and (today - start).days / total >= 0.8:
+                upcoming = True
+
+        if upcoming:
+            result.append({
+                'id': timeline.id,
+                'name': timeline.name,
+                'end_date': end.isoformat(),
+                'role': role,
+                'is_overdue': end < today,
+                'type': 'timeline',
+            })
+
+    return jsonify(result), 200

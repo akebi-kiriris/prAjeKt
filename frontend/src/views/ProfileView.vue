@@ -179,6 +179,7 @@
 
 <script setup>
 import { ref, onMounted } from 'vue';
+import { toast } from 'vue-sonner';
 import { storeToRefs } from 'pinia';
 import { useProfileStore } from '../stores/profile';
 import { useAuthStore } from '../stores/auth';
@@ -218,9 +219,9 @@ const syncFormFromStore = () => {
 // ────────────── CRUD ──────────────
 const handleSubmit = async () => {
   if (profileForm.value.new_password) {
-    if (!profileForm.value.current_password) { alert('請輸入目前密碼'); return; }
-    if (profileForm.value.new_password !== profileForm.value.confirm_password) { alert('新密碼與確認密碼不一致'); return; }
-    if (profileForm.value.new_password.length < 6) { alert('新密碼至少需要 6 個字元'); return; }
+    if (!profileForm.value.current_password) { toast.warning('請輸入目前密碼'); return; }
+    if (profileForm.value.new_password !== profileForm.value.confirm_password) { toast.warning('新密碼與確認密碼不一致'); return; }
+    if (profileForm.value.new_password.length < 6) { toast.warning('新密碼至少需要 6 個字元'); return; }
   }
 
   try {
@@ -236,14 +237,14 @@ const handleSubmit = async () => {
     }
     await profileStore.updateProfile(updateData);
     await authStore.fetchCurrentUser();
-    alert('個人資料更新成功');
+    toast.success('個人資料更新成功');
     isEditing.value = false;
     profileForm.value.current_password = '';
     profileForm.value.new_password = '';
     profileForm.value.confirm_password = '';
     originalProfile.value = { ...profileForm.value };
   } catch (error) {
-    alert(error.response?.data?.error || '更新失敗');
+    toast.error(error.response?.data?.error || '更新失敗');
   }
 };
 

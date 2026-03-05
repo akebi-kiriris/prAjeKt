@@ -93,6 +93,7 @@
 
 <script setup>
 import { ref, onMounted } from 'vue';
+import { toast } from 'vue-sonner';
 import { trashService } from '../services/trashService';
 import { formatDateTimeCompact as formatDate, formatDateShort } from '../utils/formatters';
 
@@ -107,7 +108,7 @@ const loadTrash = async () => {
     tasks.value = res.data.tasks || [];
     timelines.value = res.data.timelines || [];
   } catch (err) {
-    alert('無法載入垃圾桶內容');
+    toast.error('無法載入垃圾桶內容');
   } finally {
     loading.value = false;
   }
@@ -118,7 +119,7 @@ const restoreTask = async (task) => {
     await trashService.restoreTask(task.task_id);
     tasks.value = tasks.value.filter(t => t.task_id !== task.task_id);
   } catch (err) {
-    alert(err.response?.data?.error || '還原失敗');
+    toast.error(err.response?.data?.error || '還原失敗');
   }
 };
 
@@ -128,7 +129,7 @@ const permanentDeleteTask = async (task) => {
     await trashService.permanentDeleteTask(task.task_id);
     tasks.value = tasks.value.filter(t => t.task_id !== task.task_id);
   } catch (err) {
-    alert(err.response?.data?.error || '永久刪除失敗');
+    toast.error(err.response?.data?.error || '永久刪除失敗');
   }
 };
 
@@ -137,7 +138,7 @@ const restoreTimeline = async (tl) => {
     await trashService.restoreTimeline(tl.id);
     timelines.value = timelines.value.filter(t => t.id !== tl.id);
   } catch (err) {
-    alert(err.response?.data?.error || '還原失敗');
+    toast.error(err.response?.data?.error || '還原失敗');
   }
 };
 
@@ -148,7 +149,7 @@ const permanentDeleteTimeline = async (tl) => {
     // 重新 call API：cascade 同時刪除了底下所有任務，前端無法自行推算哪些要移除
     await loadTrash();
   } catch (err) {
-    alert(err.response?.data?.error || '永久刪除失敗');
+    toast.error(err.response?.data?.error || '永久刪除失敗');
   }
 };
 

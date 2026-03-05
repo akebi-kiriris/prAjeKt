@@ -2,17 +2,18 @@
 
 基於 Vue 3 + Flask 的專案管理與協作平台，整合 Google Gemini AI 實現智能任務生成。
 
-> **開發狀態**：Phase 1 全部完成 ✅，Phase 2 進行中 🔄。已完成服務層重構、Store 層建立（6 個 store）、JWT token 自動刷新、AI 任務生成、任務留言／附件上傳、垂圾桶回收機制、多人協作專案管理、子任務 UI 等功能。
+> **開發狀態**：Phase 1 全部完成 ✅，Phase 2 進行中 🔄（通知系統已完成 03/06）。已完成服務層重構、Store 層（6 個 store）、JWT token 自動刷新、AI 任務生成、任務留言／附件上傳、垃圾桶回收機制、多人協作專案管理、子任務 UI、通知系統（指派 / 邀請 / 到期提醒輪詢）等功能。
 
 ## 功能模組
 
 - **專案管理**：卡片 / 看板 / 日曆 / 列表 四種視圖，專案進度追蹤、成員邀請
-- **任務管理**：任務 CRUD、子任務、優先級、標籤、狀態拖曳切換、留言討論、附件上傳 / 下載
+- **任務管理**：任務 CRUD、子任務、優先級、標籤、狀態拖曳切換、留言討論、附件上傳 / 下載、任務成員指派
 - **待辦事項**：個人 Todo 列表，完成狀態管理
 - **群組協作**：群組建立 / 邀請碼加入 / 即時訊息
 - **個人資料**：個人資訊編輯、密碼變更、使用統計
 - **AI 任務生成**：Gemini 根據專案名稱自動生成任務建議，支援批次創建
 - **垃圾桶回收機制**：已刪任務 / 專案暫存，支援還原或永久刪除；非建立者唯讀
+- **通知系統**：任務指派 / 專案邀請通知、鈴鐺 30 秒輪詢更新、主頁即將到期提醒區塊（3 天內截止或進度 ≥80%）
 
 ## 技術架構
 
@@ -148,13 +149,16 @@ start_all.bat
 | POST | `/api/timelines/:id/generate-tasks` | AI 生成任務建議 |
 | POST | `/api/timelines/:id/batch-create-tasks` | 批次建立任務 |
 | GET | `/api/timelines/:id/members` | 搜尋可加入成員 |
-| POST | `/api/timelines/:id/add-member` | 加入成員 |
+| POST | `/api/timelines/:id/add-member` | 加入成員（同時發送邀請通知）|
+| DELETE | `/api/timelines/:id/members/:uid` | 移除成員 |
+| GET | `/api/timelines/upcoming` | 即將到期 / 進度落後的專案（3 天內 or ≥80%）|
 
 ### 任務（Tasks）
 
 | 方法 | 路徑 | 說明 |
 |------|------|------|
 | GET | `/api/tasks` | 取得任務列表 |
+| GET | `/api/tasks/upcoming` | 即將到期 / 進度落後的任務（3 天內 or ≥80%）|
 | POST | `/api/tasks` | 建立任務 |
 | PUT | `/api/tasks/:id` | 更新任務 |
 | DELETE | `/api/tasks/:id` | 刪除任務（軟刪除）|
@@ -179,6 +183,15 @@ start_all.bat
 | DELETE | `/api/trash/tasks/:id` | 永久刪除任務（含附件）|
 | PATCH | `/api/trash/timelines/:id/restore` | 還原專案 |
 | DELETE | `/api/trash/timelines/:id` | 永久刪除專案（cascade 清子任務）|
+
+### 通知（Notifications）
+
+| 方法 | 路徑 | 說明 |
+|------|------|------|
+| GET | `/api/notifications` | 取得通知列表 |
+| GET | `/api/notifications/unread-count` | 未讀數量 |
+| PATCH | `/api/notifications/:id/read` | 標記為已讀 |
+| PATCH | `/api/notifications/read-all` | 全部標記已讀 |
 
 ### 其他
 

@@ -26,4 +26,5 @@ export const taskService = {
     headers: { 'Content-Type': 'multipart/form-data' }
   }),
   deleteFile:    (taskId, fileId)      => api.delete(`/tasks/${taskId}/files/${fileId}`),
+  upcoming:      ()                    => api.get('/tasks/upcoming'),
 };

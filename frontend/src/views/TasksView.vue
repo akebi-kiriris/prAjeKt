@@ -147,9 +147,39 @@
             </div>
           </div>
 
+          <!-- 專案成員快速指派 -->
+          <div v-if="shareTask?.timeline_id" class="mb-4">
+            <p class="text-sm font-semibold text-gray-500 mb-2">專案成員（快速指派）</p>
+            <div class="space-y-1">
+              <p v-if="timelineMembers.length === 0" class="text-xs text-gray-400 text-center py-2">載入中...</p>
+              <template v-else-if="timelineMembers.filter(m => !taskMembers.some(tm => tm.user_id === m.user_id)).length">
+                <div
+                  v-for="m in timelineMembers.filter(m => !taskMembers.some(tm => tm.user_id === m.user_id))"
+                  :key="m.user_id"
+                  class="flex items-center justify-between gap-3 py-2 px-3 bg-gray-50 rounded-xl"
+                >
+                  <div class="flex items-center gap-3">
+                    <div class="w-8 h-8 rounded-full bg-indigo-100 text-indigo-600 font-bold flex items-center justify-center text-sm">
+                      {{ m.name?.charAt(0) || '?' }}
+                    </div>
+                    <div>
+                      <p class="text-sm font-semibold text-gray-800">{{ m.name }}</p>
+                      <p class="text-xs text-gray-400">{{ m.email }}</p>
+                    </div>
+                  </div>
+                  <button
+                    @click="quickAssignMember(m)"
+                    class="px-3 py-1 bg-primary text-white font-medium rounded-lg text-xs hover:brightness-110 transition-colors"
+                  >指派</button>
+                </div>
+              </template>
+              <p v-else class="text-xs text-gray-400 text-center py-1">所有專案成員已加入此任務</p>
+            </div>
+          </div>
+
           <!-- 邀請新成員 -->
           <div class="border-t pt-4">
-            <p class="text-sm font-semibold text-gray-500 mb-3">邀請協作者</p>
+            <p class="text-sm font-semibold text-gray-500 mb-3">以 Email 邀請協作者</p>
             <div class="flex gap-2">
               <input
                 v-model="shareInputEmail"
@@ -234,7 +264,7 @@
                 ✓
               </button>
               <button
-                v-if="task.is_owner"
+                v-if="task.is_owner || task.timeline_id"
                 @click="openSharePanel(task)"
                 class="w-10 h-10 rounded-full bg-indigo-500 hover:bg-indigo-600 text-white flex items-center justify-center transition-colors"
                 title="成員管理"
@@ -398,9 +428,11 @@
 
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue';
+import { toast } from 'vue-sonner';
 import { storeToRefs } from 'pinia';
 import { useTaskStore } from '../stores/tasks';
 import { taskService } from '../services/taskService';
+import { timelineService } from '../services/timelineService';
 import { formatDate, formatDateTime, formatFileSize, isImageFile, getFileIcon } from '../utils/formatters';
 
 const store = useTaskStore();
@@ -510,7 +542,7 @@ const addDetailSubtask = async () => {
     detailNewSubtask.value = '';
     const res = await taskService.getSubtasks(detailTask.value.task_id);
     detailSubtasks.value = res.data || [];
-  } catch { alert('新增子任務失敗'); }
+  } catch { toast.error('新增子任務失敗'); }
 };
 
 const toggleDetailSubtask = async (subtask) => {
@@ -518,7 +550,7 @@ const toggleDetailSubtask = async (subtask) => {
     await taskService.toggleSubtask(detailTask.value.task_id, subtask.id);
     const res = await taskService.getSubtasks(detailTask.value.task_id);
     detailSubtasks.value = res.data || [];
-  } catch { alert('更新子任務狀態失敗'); }
+  } catch { toast.error('更新子任務狀態失敗'); }
 };
 
 const deleteDetailSubtask = async (subtask) => {
@@ -526,7 +558,7 @@ const deleteDetailSubtask = async (subtask) => {
   try {
     await taskService.deleteSubtask(detailTask.value.task_id, subtask.id);
     detailSubtasks.value = detailSubtasks.value.filter(s => s.id !== subtask.id);
-  } catch { alert('刪除子任務失敗'); }
+  } catch { toast.error('刪除子任務失敗'); }
 };
 
 const addDetailComment = async () => {
@@ -536,7 +568,7 @@ const addDetailComment = async () => {
     detailNewComment.value = '';
     const res = await taskService.getComments(detailTask.value.task_id);
     detailComments.value = res.data || [];
-  } catch { alert('新增留言失敗'); }
+  } catch { toast.error('新增留言失敗'); }
 };
 
 const deleteDetailComment = async (commentId) => {
@@ -544,13 +576,13 @@ const deleteDetailComment = async (commentId) => {
   try {
     await taskService.deleteComment(detailTask.value.task_id, commentId);
     detailComments.value = detailComments.value.filter(c => c.comment_id !== commentId);
-  } catch { alert('刪除留言失敗'); }
+  } catch { toast.error('刪除留言失敗'); }
 };
 
 const handleDetailFileUpload = async (event) => {
   const file = event.target.files?.[0];
   if (!file || !detailTask.value) return;
-  if (file.size > 10 * 1024 * 1024) { alert('檔案大小不可超過 10MB'); return; }
+  if (file.size > 10 * 1024 * 1024) { toast.warning('檔案大小不可超過 10MB'); return; }
   const formData = new FormData();
   formData.append('file', file);
   try {
@@ -558,7 +590,7 @@ const handleDetailFileUpload = async (event) => {
     const res = await taskService.getFiles(detailTask.value.task_id);
     detailFiles.value = res.data || [];
   } catch (err) {
-    alert(err.response?.data?.error || '上傳失敗');
+    toast.error(err.response?.data?.error || '上傳失敗');
   } finally {
     if (detailFileInput.value) detailFileInput.value.value = '';
   }
@@ -569,13 +601,14 @@ const deleteDetailFile = async (fileId) => {
   try {
     await taskService.deleteFile(detailTask.value.task_id, fileId);
     detailFiles.value = detailFiles.value.filter(f => f.id !== fileId);
-  } catch { alert('刪除附件失敗'); }
+  } catch { toast.error('刪除附件失敗'); }
 };
 
 // ── 成員管理 ──
 const shareTask = ref(null);
 const isSharePanelOpen = ref(false);
 const taskMembers = ref([]);
+const timelineMembers = ref([]);
 const shareInputEmail = ref('');
 const shareSearchResult = ref(null);
 const shareSearchError = ref('');
@@ -588,10 +621,23 @@ const openSharePanel = async (task) => {
 watch(isSharePanelOpen, async (val) => {
   if (val && shareTask.value) {
     await loadTaskMembers();
+    // 若任務屬於某 timeline，也載入該 timeline 的成員供快速指派
+    if (shareTask.value.timeline_id) {
+      try {
+        const res = await timelineService.getMembers(shareTask.value.timeline_id);
+        timelineMembers.value = res.data || [];
+      } catch (e) {
+        console.error('載入專案成員失敗', e);
+        timelineMembers.value = [];
+      }
+    } else {
+      timelineMembers.value = [];
+    }
   } else {
     shareInputEmail.value = '';
     shareSearchResult.value = null;
     shareSearchError.value = '';
+    timelineMembers.value = [];
   }
 });
 
@@ -627,8 +673,20 @@ const confirmShare = async () => {
     shareSearchResult.value = null;
     await loadTaskMembers();
     await store.fetchTasks();
+    toast.success('已成功指派成員');
   } catch (e) {
     shareSearchError.value = e.response?.data?.error || '新增失敗';
+  }
+};
+
+const quickAssignMember = async (member) => {
+  try {
+    await taskService.addMember(shareTask.value.task_id, member.user_id);
+    await loadTaskMembers();
+    await store.fetchTasks();
+    toast.success(`已指派 ${member.name}`);
+  } catch (e) {
+    toast.error(e.response?.data?.error || '指派失敗');
   }
 };
 
@@ -639,7 +697,7 @@ const kickTaskMember = async (member) => {
     await loadTaskMembers();
     await store.fetchTasks();
   } catch (e) {
-    alert(e.response?.data?.error || '移除失敗');
+    toast.error(e.response?.data?.error || '移除失敗');
   }
 };
 
@@ -657,7 +715,7 @@ const downloadFile = async (url, originalFilename) => {
     document.body.removeChild(a);
     URL.revokeObjectURL(blobUrl);
   } catch {
-    alert('下載失敗，請稍後再試');
+    toast.error('下載失敗，請稍後再試');
   }
 };
 

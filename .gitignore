@@ -43,8 +43,8 @@ docs/
 *.swp
 *.swo
 
-# Alembic migration cache
-backend/migrations/versions/__pycache__/
-backend/migrations/versions/*.pyc
-backend/migrations/versions/*.pyo
-backend/migrations/versions/*.pyd
+# Python bytecode（backend 所有子目錄）
+backend/**/__pycache__/
+backend/**/*.pyc
+backend/**/*.pyo
+backend/**/*.pyd

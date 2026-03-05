@@ -8,8 +8,25 @@ from models.task_comment import TaskComment
 from models.timeline_user import TimelineUser
 from models.subtask import Subtask
 from models.user import User
+from models.notification import Notification
 from datetime import datetime
 import os
+
+
+def create_notification(user_id, ntype, title, content=None, link=None):
+    """建立通知的工具函式，失敗時靜默不影響主流程"""
+    try:
+        notif = Notification(
+            user_id=user_id,
+            type=ntype,
+            title=title,
+            content=content,
+            link=link
+        )
+        db.session.add(notif)
+        # 不在此 commit，由呼叫者的 commit 一起提交
+    except Exception:
+        pass
 
 tasks_bp = Blueprint('tasks', __name__)
 
@@ -59,11 +76,12 @@ def get_tasks():
     """取得使用者的所有任務（包含被指派的）"""
     user_id = int(get_jwt_identity())
     
-    # 取得自己建立的任務和被指派的任務（排除軟刪除）
+    # 取得自己建立的任務
     own_tasks = Task.query.filter_by(user_id=user_id).filter(Task.deleted_at.is_(None)).all()
+    # 取得明確被指派的任務（在 task_users 表中）
     assigned_task_ids = [tu.task_id for tu in TaskUser.query.filter_by(user_id=user_id).all()]
     assigned_tasks = Task.query.filter(Task.task_id.in_(assigned_task_ids), Task.deleted_at.is_(None)).all() if assigned_task_ids else []
-    
+
     # 合併並去重
     all_tasks = {t.task_id: t for t in own_tasks + assigned_tasks}
     tasks = sorted(all_tasks.values(), key=lambda t: (t.completed, t.end_date or datetime.max))
@@ -84,6 +102,15 @@ def get_tasks():
                     'name': user.name,
                     'role': m.role  # 0: 負責人, 1: 協作者
                 })
+
+        # 若在 task_users 找不到，試從 timeline_users 取得角色
+        if current_user_role is None and t.timeline_id:
+            tl_member = TimelineUser.query.filter_by(timeline_id=t.timeline_id, user_id=user_id).first()
+            if tl_member:
+                current_user_role = tl_member.role
+
+        # is_owner： task_users 或 timeline_users 中 role=0，或者是任務的建立者
+        is_owner = (current_user_role == 0) or (t.user_id == user_id)
         
         # 取得子任務
         subtasks = Subtask.query.filter_by(task_id=t.task_id).order_by(Subtask.sort_order).all()
@@ -107,7 +134,7 @@ def get_tasks():
             'updated_at': t.updated_at.isoformat() if t.updated_at else None,
             'task_remark': t.task_remark,
             'isWork': t.isWork,
-            'is_owner': current_user_role == 0
+            'is_owner': is_owner
         })
     
     return jsonify(result), 200
@@ -261,9 +288,23 @@ def get_task_members(task_id):
 
 @tasks_bp.route('/<int:task_id>/members', methods=['POST'])
 @jwt_required()
-@require_task_role('owner')
 def add_task_member(task_id):
-    """新增任務成員"""
+    """新增任務成員（任務負責人 或 所屬 timeline 的負責人 可操作）"""
+    user_id = int(get_jwt_identity())
+    task = Task.query.get(task_id)
+    if not task:
+        return jsonify({'error': '找不到該任務'}), 404
+
+    # 檢查權限：task owner、任務建立者、或 timeline owner
+    task_role = get_user_task_role(user_id, task_id)
+    is_task_owner = (task_role == 0) or (task.user_id == user_id)
+    is_timeline_owner = False
+    if task.timeline_id:
+        tl_role = TimelineUser.query.filter_by(timeline_id=task.timeline_id, user_id=user_id).first()
+        is_timeline_owner = tl_role is not None and tl_role.role == 0
+    if not (is_task_owner or is_timeline_owner):
+        return jsonify({'error': '只有負責人可新增成員'}), 403
+
     data = request.get_json()
     new_user_id = data.get('user_id')
     
@@ -282,6 +323,18 @@ def add_task_member(task_id):
             role=data.get('role', 1)
         )
         db.session.add(task_member)
+        # 通知被指派的成員
+        task = Task.query.get(task_id)
+        actor = User.query.get(int(get_jwt_identity()))
+        actor_name = actor.name if actor else '某人'
+        task_name = task.name if task else '任務'
+        create_notification(
+            user_id=new_user_id,
+            ntype='task_assigned',
+            title=f'你被指派到任務「{task_name}」',
+            content=f'{actor_name} 將你加入任務「{task_name}」',
+            link=f'/tasks'
+        )
         db.session.commit()
         return jsonify({'message': '成員新增成功'}), 201
     except Exception as e:
@@ -345,6 +398,25 @@ def add_task_comment(task_id):
             task_message=message
         )
         db.session.add(comment)
+        # 通知任務所有其他成員有新留言
+        actor = User.query.get(user_id)
+        task = Task.query.get(task_id)
+        actor_name = actor.name if actor else '某人'
+        task_name = task.name if task else '任務'
+        members = TaskUser.query.filter_by(task_id=task_id).all()
+        notified_ids = {m.user_id for m in members} - {user_id}
+        # 若無明確成員，嘗試從 timeline 成員通知
+        if not notified_ids and task and task.timeline_id:
+            tl_members = TimelineUser.query.filter_by(timeline_id=task.timeline_id).all()
+            notified_ids = {m.user_id for m in tl_members} - {user_id}
+        for uid in notified_ids:
+            create_notification(
+                user_id=uid,
+                ntype='comment',
+                title=f'「{task_name}」有新留言',
+                content=f'{actor_name}：{message[:50]}',
+                link=f'/tasks'
+            )
         db.session.commit()
         user = User.query.get(user_id)
         return jsonify({
@@ -633,3 +705,54 @@ def update_task_status(task_id):
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
+
+
+@tasks_bp.route('/upcoming', methods=['GET'])
+@jwt_required()
+def get_upcoming_tasks():
+    """取得即將到期（3天內）或時間進度超過80%的任務"""
+    from datetime import timedelta
+    from sqlalchemy import or_
+    user_id = int(get_jwt_identity())
+    today = datetime.utcnow().date()
+    threshold = today + timedelta(days=3)
+
+    user_timeline_ids = [tu.timeline_id for tu in TimelineUser.query.filter_by(user_id=user_id).all()]
+    assigned_task_ids = [tu.task_id for tu in TaskUser.query.filter_by(user_id=user_id).all()]
+
+    conditions = [Task.user_id == user_id]
+    if assigned_task_ids:
+        conditions.append(Task.task_id.in_(assigned_task_ids))
+    if user_timeline_ids:
+        conditions.append(Task.timeline_id.in_(user_timeline_ids))
+
+    tasks = Task.query.filter(
+        Task.deleted_at.is_(None),
+        Task.completed == False,
+        Task.end_date.isnot(None),
+        or_(*conditions)
+    ).all()
+
+    result = []
+    for t in tasks:
+        end = t.end_date.date() if hasattr(t.end_date, 'date') else t.end_date
+
+        upcoming = end <= threshold
+        if not upcoming and t.start_date:
+            start = t.start_date.date() if hasattr(t.start_date, 'date') else t.start_date
+            total = (end - start).days
+            if total > 0 and (today - start).days / total >= 0.8:
+                upcoming = True
+
+        if upcoming:
+            result.append({
+                'task_id': t.task_id,
+                'name': t.name,
+                'end_date': end.isoformat(),
+                'priority': t.priority,
+                'timeline_id': t.timeline_id,
+                'is_overdue': end < today,
+                'type': 'task',
+            })
+
+    return jsonify(result), 200

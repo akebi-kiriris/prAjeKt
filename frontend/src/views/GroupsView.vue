@@ -197,6 +197,7 @@
 
 <script setup>
 import { ref, onMounted } from 'vue';
+import { toast } from 'vue-sonner';
 import { storeToRefs } from 'pinia';
 import { useGroupStore } from '../stores/groups';
 import { formatDate, formatDateTime } from '../utils/formatters';
@@ -222,31 +223,31 @@ const scrollToBottom = () => {
 
 const handleCreateGroup = async () => {
   if (!newGroupName.value.trim()) {
-    alert('請輸入群組名稱');
+    toast.warning('請輸入群組名稱');
     return;
   }
   try {
     const data = await groupStore.createGroup(newGroupName.value);
-    alert(`群組建立成功！邀請碼: ${data.invite_code}`);
+    toast.success(`群組建立成功！邀請碼: ${data.invite_code}`);
     showCreateGroup.value = false;
     newGroupName.value = '';
   } catch (error) {
-    alert(error.response?.data?.error || '建立群組失敗');
+    toast.error(error.response?.data?.error || '建立群組失敗');
   }
 };
 
 const handleJoinGroup = async () => {
   if (!inviteCode.value.trim()) {
-    alert('請輸入邀請碼');
+    toast.warning('請輸入邀請碼');
     return;
   }
   try {
     await groupStore.joinGroup(inviteCode.value);
-    alert('成功加入群組');
+    toast.success('成功加入群組');
     showJoinGroup.value = false;
     inviteCode.value = '';
   } catch (error) {
-    alert(error.response?.data?.error || '加入群組失敗');
+    toast.error(error.response?.data?.error || '加入群組失敗');
   }
 };
 
@@ -260,7 +261,7 @@ const sendMessage = async () => {
     await groupStore.sendMessage(newMessage.value, scrollToBottom);
     newMessage.value = '';
   } catch (error) {
-    alert(error.response?.data?.error || '發送訊息失敗');
+    toast.error(error.response?.data?.error || '發送訊息失敗');
   }
 };
 
@@ -268,9 +269,9 @@ const leaveGroup = async (groupId) => {
   if (!confirm('確定要離開此群組？')) return;
   try {
     await groupStore.leaveGroup(groupId);
-    alert('已離開群組');
+    toast.success('已離開群組');
   } catch (error) {
-    alert(error.response?.data?.error || '離開群組失敗');
+    toast.error(error.response?.data?.error || '離開群組失敗');
   }
 };
 

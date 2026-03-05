@@ -96,6 +96,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue';
+import { toast } from 'vue-sonner';
 import { storeToRefs } from 'pinia';
 import { useTimelineStore } from '../stores/timelines';
 import TimelineHeader from '../components/timelines/TimelineHeader.vue';
@@ -163,14 +164,14 @@ const deleteTimeline = async (id) => {
   if (!confirm('確定要刪除此專案？相關任務也會被刪除！')) return;
   try {
     await timelineStore.removeTimeline(id);
-    alert('專案刪除成功');
+    toast.success('專案刪除成功');
   } catch (error) {
-    alert(error.response?.data?.error || '刪除失敗');
+    toast.error(error.response?.data?.error || '刪除失敗');
   }
 };
 
 const handleSubmit = async () => {
-  if (!timelineForm.value.name?.trim()) { alert('請輸入專案名稱'); return; }
+  if (!timelineForm.value.name?.trim()) { toast.warning('請輸入專案名稱'); return; }
   try {
     const formData = {
       name: timelineForm.value.name.trim(),
@@ -180,14 +181,14 @@ const handleSubmit = async () => {
     };
     if (editingTimeline.value) {
       await timelineStore.updateTimeline(editingTimeline.value.id, formData);
-      alert('專案更新成功');
+      toast.success('專案更新成功');
     } else {
       await timelineStore.addTimeline(formData);
-      alert('專案新增成功');
+      toast.success('專案新增成功');
     }
     closeModal();
   } catch (error) {
-    alert(error.response?.data?.error || '操作失敗');
+    toast.error(error.response?.data?.error || '操作失敗');
   }
 };
 
@@ -203,7 +204,7 @@ const onToggleTask = async (taskId) => {
     await timelineStore.toggleTask(taskId);
     await viewTimeline(selectedTimeline.value);
   } catch {
-    alert('更新任務狀態失敗');
+    toast.error('更新任務狀態失敗');
   }
 };
 
@@ -211,10 +212,10 @@ const onDeleteTask = async (taskId) => {
   if (!confirm('確定要刪除此任務？')) return;
   try {
     await timelineStore.removeTask(taskId);
-    alert('任務刪除成功');
+    toast.success('任務刪除成功');
     await viewTimeline(selectedTimeline.value);
   } catch (error) {
-    alert(error.response?.data?.error || '刪除任務失敗');
+    toast.error(error.response?.data?.error || '刪除任務失敗');
   }
 };
 

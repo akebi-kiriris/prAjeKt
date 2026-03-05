@@ -50,6 +50,7 @@
               <span :class="['flex-1 text-sm cursor-pointer', task.completed ? 'line-through text-gray-400' : 'text-gray-700']" @click="openTaskDetail(task)">{{ task.name }}</span>
               <span v-if="task.end_date" class="text-xs text-gray-400 hidden group-hover:inline">{{ formatDate(task.end_date) }}</span>
               <span :class="['text-xs px-2 py-0.5 rounded-full font-medium', getPriorityBadgeClass(task.priority)]">{{ getPriorityLabel(task.priority) }}</span>
+              <button v-if="selectedTimeline?.role === 0" @click.stop="openTaskMemberPanel(task)" class="opacity-0 group-hover:opacity-100 text-indigo-400 hover:text-indigo-600 transition-all text-sm" title="指派成員">👥</button>
               <button @click="$emit('delete-task', task.task_id)" class="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-600 transition-all text-sm">🗑️</button>
             </div>
             <div v-if="timelineTasks.length === 0" class="text-center py-10 text-gray-400">
@@ -160,6 +161,68 @@
       </div>
     </div>
 
+    <!-- 任務成員指派 Panel -->
+    <div v-if="isTaskMemberPanelOpen" class="fixed inset-0 bg-black/50 flex items-center justify-center z-60 p-4">
+      <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md animate-slideUp">
+        <div class="p-5 border-b border-gray-100 flex justify-between items-center">
+          <h3 class="text-lg font-semibold text-gray-800">👥 任務成員 — {{ assignTask?.name }}</h3>
+          <button @click="isTaskMemberPanelOpen = false" class="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">&times;</button>
+        </div>
+        <div class="p-5 space-y-4">
+          <!-- 現有任務成員 -->
+          <div>
+            <p class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">目前成員</p>
+            <div v-if="taskMembersForAssign.length === 0" class="text-center py-3 text-gray-400 text-sm">尚無指派成員</div>
+            <div v-else class="space-y-2">
+              <div v-for="member in taskMembersForAssign" :key="member.user_id" class="flex items-center justify-between p-2.5 bg-gray-50 rounded-xl">
+                <div class="flex items-center gap-2.5">
+                  <div class="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center text-sm font-bold text-primary shrink-0">
+                    {{ (member.name || '?')[0].toUpperCase() }}
+                  </div>
+                  <div>
+                    <p class="text-sm font-medium text-gray-800">{{ member.name }}</p>
+                    <p class="text-xs text-gray-500">{{ member.email }}</p>
+                  </div>
+                </div>
+                <div class="flex items-center gap-1.5">
+                  <span :class="['px-2 py-0.5 text-xs font-medium rounded-full', member.role === 0 ? 'bg-primary/10 text-primary' : 'bg-gray-100 text-gray-500']">
+                    {{ member.role === 0 ? '負責人' : '協作者' }}
+                  </span>
+                  <button v-if="member.role !== 0" @click="kickAssignedMember(member)" class="w-7 h-7 flex items-center justify-center text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors text-sm font-bold">✕</button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <!-- 快速指派：專案成員 -->
+          <div class="border-t border-gray-100 pt-4">
+            <p class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">專案成員快速指派</p>
+            <div v-if="timelineMembers.length === 0" class="text-center py-3 text-gray-400 text-sm">載入中...</div>
+            <template v-else>
+              <div v-if="timelineMembers.filter(m => !taskMembersForAssign.some(tm => tm.user_id === m.user_id)).length === 0" class="text-center py-3 text-gray-400 text-sm">所有專案成員皆已加入此任務</div>
+              <div v-else class="space-y-2">
+                <div
+                  v-for="m in timelineMembers.filter(m => !taskMembersForAssign.some(tm => tm.user_id === m.user_id))"
+                  :key="m.user_id"
+                  class="flex items-center justify-between p-2.5 bg-indigo-50 rounded-xl"
+                >
+                  <div class="flex items-center gap-2.5">
+                    <div class="w-8 h-8 bg-indigo-100 rounded-full flex items-center justify-center text-sm font-bold text-indigo-600 shrink-0">
+                      {{ (m.username || m.name || '?')[0].toUpperCase() }}
+                    </div>
+                    <div>
+                      <p class="text-sm font-medium text-gray-800">{{ m.username || m.name }}</p>
+                      <p class="text-xs text-gray-500">{{ m.email }}</p>
+                    </div>
+                  </div>
+                  <button @click="quickAssignTaskMember(m)" class="px-3 py-1 bg-primary text-white text-xs font-medium rounded-lg hover:brightness-110 transition-all">指派</button>
+                </div>
+              </div>
+            </template>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- 任務詳情 Dialog -->
     <div v-if="showTaskDetail && selectedTask" class="fixed inset-0 bg-black/50 flex items-center justify-center z-60 p-4">
       <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto animate-slideUp">
@@ -179,6 +242,47 @@
           <div v-if="selectedTask.task_remark" class="p-4 bg-yellow-50 rounded-xl">
             <h4 class="font-semibold text-gray-700 mb-2">📝 備註</h4>
             <p class="text-gray-600 text-sm">{{ selectedTask.task_remark }}</p>
+          </div>
+
+          <!-- ── 成員指派區 ── -->
+          <div v-if="selectedTimeline?.role === 0" class="p-4 bg-indigo-50/60 rounded-xl">
+            <h4 class="font-semibold text-gray-700 mb-3 flex items-center gap-2">
+              <span>👥</span> 指派成員
+            </h4>
+            <!-- 已指派成員 -->
+            <div v-if="taskMembersForAssign.length > 0" class="flex flex-wrap gap-2 mb-3">
+              <div
+                v-for="member in taskMembersForAssign"
+                :key="member.user_id"
+                class="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium"
+                :class="member.role === 0 ? 'bg-primary/20 text-primary' : 'bg-white border border-gray-200 text-gray-700'"
+              >
+                <span>{{ member.name }}</span>
+                <span class="text-gray-400 text-[10px]">{{ member.role === 0 ? '負責人' : '協作者' }}</span>
+                <button
+                  v-if="member.role !== 0"
+                  @click="kickAssignedMember(member)"
+                  class="ml-0.5 text-gray-400 hover:text-red-500 transition-colors leading-none"
+                >✕</button>
+              </div>
+            </div>
+            <div v-else class="text-xs text-gray-400 mb-3">尚未指派任何成員</div>
+            <!-- 專案成員快速指派 -->
+            <div v-if="timelineMembers.length > 0">
+              <p class="text-xs text-gray-500 mb-2">快速指派專案成員：</p>
+              <div class="flex flex-wrap gap-2">
+                <button
+                  v-for="m in timelineMembers.filter(m => !taskMembersForAssign.some(tm => tm.user_id === m.user_id))"
+                  :key="m.user_id"
+                  @click="quickAssignTaskMember(m)"
+                  class="flex items-center gap-1.5 px-3 py-1 bg-white border border-indigo-200 text-indigo-700 text-xs font-medium rounded-full hover:bg-indigo-100 transition-colors"
+                >
+                  <span class="w-5 h-5 bg-indigo-100 rounded-full flex items-center justify-center font-bold text-[10px]">{{ (m.username || m.name || '?')[0].toUpperCase() }}</span>
+                  {{ m.username || m.name }}
+                </button>
+                <span v-if="timelineMembers.filter(m => !taskMembersForAssign.some(tm => tm.user_id === m.user_id)).length === 0" class="text-xs text-gray-400">所有成員已加入</span>
+              </div>
+            </div>
           </div>
 
           <!-- ── 子任務區 ── -->
@@ -350,6 +454,7 @@
 
 <script setup>
 import { ref, computed, watch } from 'vue';
+import { toast } from 'vue-sonner';
 import { taskService } from '../../services/taskService';
 import { timelineService } from '../../services/timelineService';
 import { formatDate, formatDateTime, formatFileSize, isImageFile, getFileIcon } from '../../utils/formatters';
@@ -388,6 +493,9 @@ const inputEmail = ref('');
 const searchResult = ref(null);
 const searchError = ref('');
 const timelineMembers = ref([]);
+const isTaskMemberPanelOpen = ref(false);
+const assignTask = ref(null);
+const taskMembersForAssign = ref([]);
 
 const taskForm = ref({ name: '', start_date: '', end_date: '', priority: 2, tags: '', task_remark: '' });
 
@@ -415,7 +523,7 @@ const saveRemark = async () => {
     props.selectedTimeline.remark = localRemark.value;
     isEditingRemark.value = false;
     emit('refresh-all');
-  } catch { alert('更新備註失敗'); }
+  } catch { toast.error('更新備註失敗'); }
 };
 
 // ────────────── 任務 ──────────────
@@ -427,27 +535,33 @@ const handleAddTask = async () => {
     showAddTaskModal.value = false;
     resetTaskForm();
     emit('refresh-all');
-  } catch { alert('新增任務失敗'); }
+  } catch { toast.error('新增任務失敗'); }
 };
 
 const openTaskDetail = async (task) => {
   selectedTask.value = { ...task };
+  assignTask.value = { ...task };
   taskComments.value = [];
   taskFiles.value = [];
   taskSubtasks.value = [];
+  taskMembersForAssign.value = [];
   showTaskDetail.value = true;
   try {
-    const [commentsRes, filesRes, subtasksRes] = await Promise.allSettled([
+    const [commentsRes, filesRes, subtasksRes, membersRes] = await Promise.allSettled([
       taskService.getComments(task.task_id),
       taskService.getFiles(task.task_id),
-      taskService.getSubtasks(task.task_id)
+      taskService.getSubtasks(task.task_id),
+      taskService.getMembers(task.task_id)
     ]);
     if (commentsRes.status === 'fulfilled') taskComments.value = commentsRes.value.data || [];
     if (filesRes.status === 'fulfilled') taskFiles.value = filesRes.value.data || [];
     if (subtasksRes.status === 'fulfilled') taskSubtasks.value = subtasksRes.value.data || [];
+    if (membersRes.status === 'fulfilled') taskMembersForAssign.value = membersRes.value.data || [];
   } catch (err) {
     console.error('取得任務詳情失敗:', err);
   }
+  // 載入專案成員供快速指派
+  if (timelineMembers.value.length === 0) await loadMembers();
 };
 
 const addSubtask = async () => {
@@ -457,7 +571,7 @@ const addSubtask = async () => {
     newSubtaskName.value = '';
     const res = await taskService.getSubtasks(selectedTask.value.task_id);
     taskSubtasks.value = res.data || [];
-  } catch { alert('新增子任務失敗'); }
+  } catch { toast.error('新增子任務失敗'); }
 };
 
 const toggleSubtask = async (subtask) => {
@@ -465,7 +579,7 @@ const toggleSubtask = async (subtask) => {
     await taskService.toggleSubtask(selectedTask.value.task_id, subtask.id);
     const res = await taskService.getSubtasks(selectedTask.value.task_id);
     taskSubtasks.value = res.data || [];
-  } catch { alert('更新子任務狀態失敗'); }
+  } catch { toast.error('更新子任務狀態失敗'); }
 };
 
 const deleteSubtask = async (subtask) => {
@@ -473,7 +587,7 @@ const deleteSubtask = async (subtask) => {
   try {
     await taskService.deleteSubtask(selectedTask.value.task_id, subtask.id);
     taskSubtasks.value = taskSubtasks.value.filter(s => s.id !== subtask.id);
-  } catch { alert('刪除子任務失敗'); }
+  } catch { toast.error('刪除子任務失敗'); }
 };
 
 const addComment = async () => {
@@ -483,7 +597,7 @@ const addComment = async () => {
     newComment.value = '';
     const res = await taskService.getComments(selectedTask.value.task_id);
     taskComments.value = res.data || [];
-  } catch { alert('新增留言失敗'); }
+  } catch { toast.error('新增留言失敗'); }
 };
 
 const deleteComment = async (commentId) => {
@@ -491,13 +605,13 @@ const deleteComment = async (commentId) => {
   try {
     await taskService.deleteComment(selectedTask.value.task_id, commentId);
     taskComments.value = taskComments.value.filter(c => c.comment_id !== commentId);
-  } catch { alert('刪除留言失敗'); }
+  } catch { toast.error('刪除留言失敗'); }
 };
 
 const handleFileUpload = async (event) => {
   const file = event.target.files?.[0];
   if (!file || !selectedTask.value) return;
-  if (file.size > 10 * 1024 * 1024) { alert('檔案大小不可超過 10MB'); return; }
+  if (file.size > 10 * 1024 * 1024) { toast.warning('檔案大小不可超過 10MB'); return; }
   const formData = new FormData();
   formData.append('file', file);
   try {
@@ -505,7 +619,7 @@ const handleFileUpload = async (event) => {
     const res = await taskService.getFiles(selectedTask.value.task_id);
     taskFiles.value = res.data || [];
   } catch (err) {
-    alert(err.response?.data?.error || '上傳失敗');
+    toast.error(err.response?.data?.error || '上傳失敗');
   } finally {
     if (fileInput.value) fileInput.value.value = '';
   }
@@ -516,7 +630,49 @@ const deleteFile = async (fileId) => {
   try {
     await taskService.deleteFile(selectedTask.value.task_id, fileId);
     taskFiles.value = taskFiles.value.filter(f => f.id !== fileId);
-  } catch { alert('刪除附件失敗'); }
+  } catch { toast.error('刪除附件失敗'); }
+};
+
+// ────────────── 任務成員指派 ──────────────
+const openTaskMemberPanel = async (task) => {
+  assignTask.value = task;
+  isTaskMemberPanelOpen.value = true;
+};
+
+watch(isTaskMemberPanelOpen, async (val) => {
+  if (val && assignTask.value) {
+    await loadTaskMembersForAssign();
+    if (timelineMembers.value.length === 0) await loadMembers();
+  } else {
+    taskMembersForAssign.value = [];
+  }
+});
+
+const loadTaskMembersForAssign = async () => {
+  try {
+    const res = await taskService.getMembers(assignTask.value.task_id);
+    taskMembersForAssign.value = res.data || [];
+  } catch { taskMembersForAssign.value = []; }
+};
+
+const quickAssignTaskMember = async (member) => {
+  try {
+    await taskService.addMember(assignTask.value.task_id, member.user_id);
+    await loadTaskMembersForAssign();
+    toast.success(`已指派 ${member.username || member.name}`);
+  } catch (err) {
+    toast.error(err.response?.data?.error || '指派失敗');
+  }
+};
+
+const kickAssignedMember = async (member) => {
+  if (!confirm(`確定要將「${member.name}」從此任務移除？`)) return;
+  try {
+    await taskService.removeMember(assignTask.value.task_id, member.user_id);
+    await loadTaskMembersForAssign();
+  } catch (err) {
+    toast.error(err.response?.data?.error || '移除失敗');
+  }
 };
 
 // ────────────── 成員管理 ──────────────
@@ -550,9 +706,9 @@ const confirmShare = async () => {
     await timelineService.addMember(props.selectedTimeline.id, searchResult.value.id);
     inputEmail.value = ''; searchResult.value = null;
     await loadMembers();
-    alert('邀請成功！');
+    toast.success('邀請成功！');
   } catch (err) {
-    alert(err.response?.data?.error || '邀請失敗');
+    toast.error(err.response?.data?.error || '邀請失敗');
   }
 };
 
@@ -562,7 +718,7 @@ const kickMember = async (member) => {
     await timelineService.removeMember(props.selectedTimeline.id, member.user_id);
     await loadMembers();
   } catch (err) {
-    alert(err.response?.data?.error || '移除成員失敗');
+    toast.error(err.response?.data?.error || '移除成員失敗');
   }
 };
 
@@ -574,7 +730,7 @@ const generateTasksWithAi = async () => {
     const res = await timelineService.generateTasks(props.selectedTimeline.id);
     aiGeneratedTasks.value = res.data.tasks || [];
     selectedAiTasks.value = aiGeneratedTasks.value.map((_, i) => i);
-  } catch (err) { alert(err.response?.data?.error || 'AI 生成失敗，請稍後再試'); }
+  } catch (err) { toast.error(err.response?.data?.error || 'AI 生成失敗，請稍後再試'); }
   finally { isGeneratingAi.value = false; }
 };
 
@@ -597,7 +753,7 @@ const batchCreateAiTasks = async () => {
     showAiGenerateModal.value = false;
     aiGeneratedTasks.value = []; selectedAiTasks.value = [];
     emit('refresh-all');
-  } catch (err) { alert(err.response?.data?.error || '批量新增失敗'); }
+  } catch (err) { toast.error(err.response?.data?.error || '批量新增失敗'); }
 };
 
 const downloadFile = async (url, originalFilename) => {
@@ -614,7 +770,7 @@ const downloadFile = async (url, originalFilename) => {
     document.body.removeChild(a);
     URL.revokeObjectURL(blobUrl);
   } catch {
-    alert('下載失敗，請稍後再試');
+    toast.error('下載失敗，請稍後再試');
   }
 };
 

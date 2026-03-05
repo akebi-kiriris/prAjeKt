@@ -5,6 +5,7 @@ import router from './router';
 import App from './App.vue';
 
 import './style.css';
+import 'vue-sonner/style.css';
 
 const app = createApp(App);
 

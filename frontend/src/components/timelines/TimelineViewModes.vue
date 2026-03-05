@@ -509,6 +509,7 @@
 
 <script setup>
 import { ref, computed } from 'vue';
+import { toast } from 'vue-sonner';
 import { formatDate } from '../../utils/formatters';
 import draggable from 'vuedraggable';
 import FullCalendar from '@fullcalendar/vue3';
@@ -716,7 +717,7 @@ const onTaskMoved = async (evt, newStatus) => {
     const local = props.allTasks.find(t => t.task_id === task.task_id);
     if (local) { local.status = newStatus; local.completed = newStatus === 'completed'; }
   } catch {
-    alert('更新狀態失敗');
+    toast.error('更新狀態失敗');
     emit('refresh-all');
   }
 };
@@ -739,7 +740,7 @@ const addSubtask = async () => {
     selectedKanbanTask.value.subtasks.push(res.data.subtask);
     newSubtaskName.value = '';
     emit('refresh-all');
-  } catch { alert('新增子任務失敗'); }
+  } catch { toast.error('新增子任務失敗'); }
 };
 
 const toggleSubtask = async (subtask) => {
@@ -747,7 +748,7 @@ const toggleSubtask = async (subtask) => {
     await taskService.toggleSubtask(selectedKanbanTask.value.task_id, subtask.id);
     subtask.completed = !subtask.completed;
     emit('refresh-all');
-  } catch { alert('更新子任務失敗'); }
+  } catch { toast.error('更新子任務失敗'); }
 };
 
 const deleteSubtask = async (subtask) => {
@@ -755,7 +756,7 @@ const deleteSubtask = async (subtask) => {
     await taskService.deleteSubtask(selectedKanbanTask.value.task_id, subtask.id);
     selectedKanbanTask.value.subtasks = selectedKanbanTask.value.subtasks.filter(s => s.id !== subtask.id);
     emit('refresh-all');
-  } catch { alert('刪除子任務失敗'); }
+  } catch { toast.error('刪除子任務失敗'); }
 };
 
 const updateTaskPriority = async (priority) => {
@@ -764,7 +765,7 @@ const updateTaskPriority = async (priority) => {
     await taskService.update(selectedKanbanTask.value.task_id, { ...selectedKanbanTask.value, priority });
     selectedKanbanTask.value.priority = priority;
     emit('refresh-all');
-  } catch { alert('更新優先級失敗'); }
+  } catch { toast.error('更新優先級失敗'); }
 };
 
 const updateTaskTags = async () => {
@@ -772,6 +773,6 @@ const updateTaskTags = async () => {
   try {
     await taskService.update(selectedKanbanTask.value.task_id, { ...selectedKanbanTask.value, tags: selectedKanbanTask.value.tags });
     emit('refresh-all');
-  } catch { alert('更新標籤失敗'); }
+  } catch { toast.error('更新標籤失敗'); }
 };
 </script>
