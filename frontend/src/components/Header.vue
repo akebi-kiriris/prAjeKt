@@ -8,7 +8,7 @@
         </svg>
       </button>
       <!-- prAjeKt 文字 logo -->
-      <span class="text-2xl font-bold text-primary tracking-wider select-none ml-2">prAjeKt</span>
+      <span class="text-2xl font-bold text-primary tracking-wider select-none ml-2">PrAjeKt</span>
     </div>
     
     <div class="flex items-center gap-4 mr-16">

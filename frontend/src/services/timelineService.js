@@ -13,5 +13,6 @@ export const timelineService = {
   batchCreateTasks: (id, tasks)     => api.post(`/timelines/${id}/batch-create-tasks`, { tasks }),
   getMembers:       (id)            => api.get(`/timelines/${id}/members`),
   removeMember:     (id, userId)    => api.delete(`/timelines/${id}/members/${userId}`),
-  upcoming:       ()                         => api.get('/timelines/upcoming'),
+  upcoming:       ()              => api.get('/timelines/upcoming'),
+  getMemberStats: (id)            => api.get(`/timelines/${id}/member-stats`),
 };

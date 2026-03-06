@@ -20,6 +20,9 @@ export const useProfileStore = defineStore('profile', () => {
     totalGroups: 0,
   });
   const loading = ref(false);
+  const ownedTimelines = ref([]);   // role=0 的專案
+  const chartStats = ref(null);     // 個人圖表資料
+  const chartLoading = ref(false);
 
   // ────────────── Computed ──────────────
   const statCards = computed(() => [
@@ -82,8 +85,21 @@ export const useProfileStore = defineStore('profile', () => {
         totalProjects: timelinesRes.data.length,
         totalGroups: groupsRes.data.length,
       };
+      ownedTimelines.value = timelinesRes.data.filter(t => t.role === 0);
     } catch (error) {
       console.error('取得統計資料失敗:', error);
+    }
+  }
+
+  async function fetchChartStats() {
+    chartLoading.value = true;
+    try {
+      const res = await profileService.getChartStats();
+      chartStats.value = res.data;
+    } catch (error) {
+      console.error('取得圖表資料失敗:', error);
+    } finally {
+      chartLoading.value = false;
     }
   }
 
@@ -92,11 +108,15 @@ export const useProfileStore = defineStore('profile', () => {
     profile,
     stats,
     loading,
+    ownedTimelines,
+    chartStats,
+    chartLoading,
     // Computed
     statCards,
     // 方法
     fetchProfile,
     updateProfile,
     fetchStats,
+    fetchChartStats,
   };
 });

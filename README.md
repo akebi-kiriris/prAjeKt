@@ -2,7 +2,7 @@
 
 基於 Vue 3 + Flask 的專案管理與協作平台，整合 Google Gemini AI 實現智能任務生成。
 
-> **開發狀態**：Phase 1 全部完成 ✅，Phase 2 進行中 🔄（通知系統已完成 03/06）。已完成服務層重構、Store 層（6 個 store）、JWT token 自動刷新、AI 任務生成、任務留言／附件上傳、垃圾桶回收機制、多人協作專案管理、子任務 UI、通知系統（指派 / 邀請 / 到期提醒輪詢）等功能。
+> **開發狀態**：Phase 1 全部完成 ✅，Phase 2 進行中 🔄（通知系統 03/06、數據儀表板 + confirm 技術債 03/07 完成）。已完成服務層重構、Store 層（6 個 store）、JWT token 自動刷新、AI 任務生成、任務留言／附件上傳、垃圾桶回收機制、多人協作專案管理、子任務 UI、通知系統（指派 / 邀請 / 到期提醒輪詢）、ConfirmDialog 取代原生 confirm()、數據分析儀表板（個人 + 專案雙層圖表）等功能。
 
 ## 功能模組
 
@@ -11,6 +11,7 @@
 - **待辦事項**：個人 Todo 列表，完成狀態管理
 - **群組協作**：群組建立 / 邀請碼加入 / 即時訊息
 - **個人資料**：個人資訊編輯、密碼變更、使用統計
+- **數據分析儀表板**：整合於個人資料頁，Level 1 個人圖表（30 天完成趨勢、任務狀態分布、各專案任務量）+ Level 2 專案圖表（成員貢獻、任務狀態，負責人限定）
 - **AI 任務生成**：Gemini 根據專案名稱自動生成任務建議，支援批次創建
 - **垃圾桶回收機制**：已刪任務 / 專案暫存，支援還原或永久刪除；非建立者唯讀
 - **通知系統**：任務指派 / 專案邀請通知、鈴鐺 30 秒輪詢更新、主頁即將到期提醒區塊（3 天內截止或進度 ≥80%）
@@ -24,6 +25,8 @@
 | 路由 | Vue Router |
 | HTTP | Axios（含 JWT 自動刷新攔截器）|
 | 樣式 | Tailwind CSS |
+| UI 元件 | Headless UI（ConfirmDialog）、vue-sonner（Toast）|
+| 圖表 | vue-echarts + ECharts 6 |
 | 後端 | Flask 3 + SQLAlchemy + Flask-Migrate |
 | 認證 | Flask-JWT-Extended（access + refresh token）|
 | 資料庫 | SQLite（開發）|
@@ -58,23 +61,27 @@ Learnlink/
 ├── frontend/
 │   └── src/
 │       ├── components/
-│       │   ├── Header.vue        # 頂部導覽列（用戶名、登出）
+│       │   ├── Header.vue        # 頂部導覽列（用戶名、通知鈴鐺 30s 輪詢）
 │       │   └── Sidebar.vue       # 側邊導覽列（可收合）
+│       │   ├── ConfirmDialog.vue # 全域確認對話框（取代原生 confirm）
+│       │   └── timelines/        # TimelineHeader / TimelineViewModes / TimelineDetailDialog
 │       ├── services/             # API 封裝層（所有 HTTP 呼叫集中於此）
 │       │   ├── api.js            # Axios 實例 + JWT 自動刷新攔截器
 │       │   ├── todoService.js    # 待辦 API（5 個方法）
 │       │   ├── taskService.js    # 任務 API（含子任務、留言、附件）
 │       │   ├── trashService.js   # 垃圾桶 API（5 個方法）
 │       │   ├── groupService.js   # 群組 API（6 個方法）
-│       │   ├── profileService.js # 個人資料 API（2 個方法）
-│       │   └── timelineService.js # 專案 API（含 AI 生成）
+│       │   ├── profileService.js # 個人資料 API（getMe / update / getChartStats）
+│       │   └── timelineService.js # 專案 API（含 AI 生成 / 成員統計）
 │       ├── stores/               # Pinia 全域狀態
 │       │   ├── auth.js           # 登入狀態、token 儲存
 │       │   ├── tasks.js          # 任務狀態（全域）
         │   ├── todos.js          # 待辦狀態（全域）
         │   ├── timelines.js      # 專案狀態（urgentCount / sortedTimelines 等 computed）
         │   ├── groups.js         # 群組狀態（groups / messages / currentGroup）
-        │   └── profile.js        # 個人資料狀態（profile / stats / statCards）
+        │   └── profile.js        # 個人資料狀態（profile / stats / chartStats / ownedTimelines）
+│   ├── composables/
+│   │   └── useConfirm.js     # Promise-based 確認對話框（全域單例）
 │       ├── views/                # 頁面元件
 │       │   ├── TimelinesView.vue   # 專案管理（多視圖切換）
 │       │   ├── TasksView.vue       # 任務管理（Modal 表單 + 留言 / 附件）
@@ -152,6 +159,7 @@ start_all.bat
 | POST | `/api/timelines/:id/add-member` | 加入成員（同時發送邀請通知）|
 | DELETE | `/api/timelines/:id/members/:uid` | 移除成員 |
 | GET | `/api/timelines/upcoming` | 即將到期 / 進度落後的專案（3 天內 or ≥80%）|
+| GET | `/api/timelines/:id/member-stats` | 成員任務貢獻統計（負責人限定）|
 
 ### 任務（Tasks）
 
@@ -193,13 +201,21 @@ start_all.bat
 | PATCH | `/api/notifications/:id/read` | 標記為已讀 |
 | PATCH | `/api/notifications/read-all` | 全部標記已讀 |
 
+### 個人資料 / 統計
+
+| 方法 | 路徑 | 說明 |
+|------|------|------|
+| GET | `/api/profile/me` | 取得個人資料 |
+| PUT | `/api/profile/me` | 更新個人資料 |
+| POST | `/api/profile/search` | 搜尋使用者（username / email）|
+| GET | `/api/profile/chart-stats` | 個人圖表資料（30 天趨勢、狀態分布、各專案量）|
+
 ### 其他
 
 | 資源 | 路徑 |
 |------|------|
 | 待辦 | `CRUD /api/todos` + `PATCH /api/todos/:id/toggle` |
 | 群組 | `CRUD /api/groups` + `POST /api/groups/join` + `GET/POST /api/groups/:id/messages` |
-| 個人資料 | `GET/PUT /api/profile/me` |
 
 ## 注意事項
 

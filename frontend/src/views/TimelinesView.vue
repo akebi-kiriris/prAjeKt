@@ -102,6 +102,9 @@ import { useTimelineStore } from '../stores/timelines';
 import TimelineHeader from '../components/timelines/TimelineHeader.vue';
 import TimelineViewModes from '../components/timelines/TimelineViewModes.vue';
 import TimelineDetailDialog from '../components/timelines/TimelineDetailDialog.vue';
+import { useConfirm } from '../composables/useConfirm';
+
+const { confirm } = useConfirm();
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
 const timelineStore = useTimelineStore();
@@ -161,7 +164,7 @@ const editTimeline = (timeline) => {
 };
 
 const deleteTimeline = async (id) => {
-  if (!confirm('確定要刪除此專案？相關任務也會被刪除！')) return;
+  if (!await confirm({ title: '確定要刪除此專案？', message: '相關任務也會被刪除！', danger: true })) return;
   try {
     await timelineStore.removeTimeline(id);
     toast.success('專案刪除成功');
@@ -209,7 +212,7 @@ const onToggleTask = async (taskId) => {
 };
 
 const onDeleteTask = async (taskId) => {
-  if (!confirm('確定要刪除此任務？')) return;
+  if (!await confirm({ title: '確定要刪除此任務？', danger: true })) return;
   try {
     await timelineStore.removeTask(taskId);
     toast.success('任務刪除成功');

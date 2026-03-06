@@ -172,23 +172,93 @@
           </div>
         </div>
       </div>
+
+      <!-- ── Level 1: 個人數據分析 ── -->
+      <div v-if="chartLoading" class="mt-8 flex justify-center py-8">
+        <span class="text-2xl animate-spin">⏳</span>
+      </div>
+      <div v-else-if="chartStats" class="mt-8 space-y-6">
+        <h3 class="text-lg font-semibold text-gray-700 flex items-center gap-2">
+          <span>📊</span> 個人數據分析
+        </h3>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="bg-white rounded-xl shadow-md p-4">
+            <h4 class="text-sm font-semibold text-gray-600 mb-3">近 30 天完成趨勢</h4>
+            <v-chart :option="trendOption" autoresize style="height:220px" />
+          </div>
+          <div class="bg-white rounded-xl shadow-md p-4">
+            <h4 class="text-sm font-semibold text-gray-600 mb-3">任務狀態分布</h4>
+            <v-chart :option="statusPieOption" autoresize style="height:220px" />
+          </div>
+        </div>
+        <div v-if="chartStats.tasks_by_project.length > 0" class="bg-white rounded-xl shadow-md p-4">
+          <h4 class="text-sm font-semibold text-gray-600 mb-3">各專案任務量</h4>
+          <v-chart
+            :option="projectBarOption"
+            autoresize
+            :style="`height:${Math.max(160, chartStats.tasks_by_project.length * 36 + 60)}px`"
+          />
+        </div>
+      </div>
+
+      <!-- ── Level 2: 專案數據分析（負責人） ── -->
+      <div v-if="ownedTimelines.length > 0" class="mt-8 space-y-4 mb-8">
+        <h3 class="text-lg font-semibold text-gray-700 flex items-center gap-2">
+          <span>🏗️</span> 專案數據分析
+          <span class="text-xs font-normal text-gray-400 ml-1">（僅負責人可見）</span>
+        </h3>
+        <div class="flex items-center gap-3 flex-wrap">
+          <label class="text-sm text-gray-600 whitespace-nowrap">選擇專案：</label>
+          <select
+            v-model="selectedTimelineId"
+            @change="loadProjectStats"
+            class="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
+          >
+            <option v-for="tl in ownedTimelines" :key="tl.id" :value="tl.id">{{ tl.name }}</option>
+          </select>
+          <span v-if="loadingProjectStats" class="animate-spin text-lg">⏳</span>
+        </div>
+        <div v-if="projectStats" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="bg-white rounded-xl shadow-md p-4">
+            <h4 class="text-sm font-semibold text-gray-600 mb-3">成員任務貢獻</h4>
+            <v-chart
+              :option="memberBarOption"
+              autoresize
+              :style="`height:${Math.max(160, projectStats.members.length * 44 + 60)}px`"
+            />
+          </div>
+          <div class="bg-white rounded-xl shadow-md p-4">
+            <h4 class="text-sm font-semibold text-gray-600 mb-1">專案任務狀態</h4>
+            <p class="text-xs text-gray-400 mb-2">共 {{ projectStats.total_tasks }} 筆任務</p>
+            <v-chart :option="projectStatusOption" autoresize style="height:220px" />
+          </div>
+        </div>
+      </div>
     </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { toast } from 'vue-sonner';
 import { storeToRefs } from 'pinia';
 import { useProfileStore } from '../stores/profile';
 import { useAuthStore } from '../stores/auth';
+import VChart from 'vue-echarts';
+import { use } from 'echarts/core';
+import { CanvasRenderer } from 'echarts/renderers';
+import { LineChart, BarChart, PieChart } from 'echarts/charts';
+import { GridComponent, TooltipComponent, LegendComponent } from 'echarts/components';
+import { timelineService } from '../services/timelineService';
+
+use([CanvasRenderer, LineChart, BarChart, PieChart, GridComponent, TooltipComponent, LegendComponent]);
 
 const profileStore = useProfileStore();
 const authStore = useAuthStore();
 
 // ────────────── Store 狀態（響應式解構）──────────────
-const { profile, loading, statCards } = storeToRefs(profileStore);
+const { profile, loading, statCards, chartStats, chartLoading, ownedTimelines } = storeToRefs(profileStore);
 
 // ────────────── View-local UI 狀態 ──────────────
 const isEditing = ref(false);
@@ -256,9 +326,133 @@ const cancelEdit = () => {
   isEditing.value = false;
 };
 
+// ──────────────── ECharts 輔助常量 ────────────────
+const STATUS_LABELS = {
+  pending: '待辦', in_progress: '進行中', review: '審核中',
+  completed: '已完成', cancelled: '已取消',
+};
+const STATUS_COLORS = {
+  pending: '#6366f1', in_progress: '#f59e0b', review: '#3b82f6',
+  completed: '#10b981', cancelled: '#9ca3af',
+};
+
+// ──────────────── Level 1：個人圖表 Options ────────────────
+const trendOption = computed(() => {
+  if (!chartStats.value) return {};
+  const data = chartStats.value.daily_completions;
+  return {
+    tooltip: { trigger: 'axis' },
+    grid: { left: 40, right: 16, top: 16, bottom: 36 },
+    xAxis: {
+      type: 'category',
+      data: data.map(d => d.date.slice(5)),
+      axisLabel: { fontSize: 10, interval: 5 },
+    },
+    yAxis: { type: 'value', minInterval: 1, axisLabel: { fontSize: 10 } },
+    series: [{
+      data: data.map(d => d.count),
+      type: 'line',
+      smooth: true,
+      itemStyle: { color: '#6366f1' },
+      areaStyle: { color: 'rgba(99,102,241,0.1)' },
+    }],
+  };
+});
+
+const statusPieOption = computed(() => {
+  if (!chartStats.value) return {};
+  const dist = chartStats.value.status_distribution;
+  const pieData = Object.entries(dist)
+    .filter(([, v]) => v > 0)
+    .map(([k, v]) => ({ name: STATUS_LABELS[k] || k, value: v, itemStyle: { color: STATUS_COLORS[k] } }));
+  return {
+    tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
+    legend: { orient: 'vertical', right: 8, top: 'center', textStyle: { fontSize: 11 } },
+    series: [{ type: 'pie', radius: ['45%', '70%'], center: ['35%', '50%'], data: pieData, label: { show: false } }],
+  };
+});
+
+const projectBarOption = computed(() => {
+  if (!chartStats.value || !chartStats.value.tasks_by_project.length) return {};
+  const data = [...chartStats.value.tasks_by_project].reverse();
+  return {
+    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+    grid: { left: 120, right: 24, top: 12, bottom: 28 },
+    xAxis: { type: 'value', minInterval: 1 },
+    yAxis: {
+      type: 'category',
+      data: data.map(d => d.name),
+      axisLabel: { fontSize: 11, overflow: 'truncate', width: 110 },
+    },
+    series: [{
+      data: data.map(d => d.count),
+      type: 'bar',
+      itemStyle: { color: '#6366f1', borderRadius: [0, 4, 4, 0] },
+      label: { show: true, position: 'right', fontSize: 10 },
+    }],
+  };
+});
+
+// ──────────────── Level 2：專案圖表 ────────────────
+const selectedTimelineId = ref(null);
+const projectStats = ref(null);
+const loadingProjectStats = ref(false);
+
+const loadProjectStats = async () => {
+  if (!selectedTimelineId.value) return;
+  loadingProjectStats.value = true;
+  projectStats.value = null;
+  try {
+    const res = await timelineService.getMemberStats(selectedTimelineId.value);
+    projectStats.value = res.data;
+  } catch (e) {
+    toast.error('載入專案統計失敗');
+  } finally {
+    loadingProjectStats.value = false;
+  }
+};
+
+const memberBarOption = computed(() => {
+  if (!projectStats.value) return {};
+  const members = [...projectStats.value.members].reverse();
+  return {
+    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+    legend: { data: ['總任務', '已完成'], bottom: 0, textStyle: { fontSize: 10 } },
+    grid: { left: 80, right: 24, top: 12, bottom: 32 },
+    xAxis: { type: 'value', minInterval: 1 },
+    yAxis: {
+      type: 'category',
+      data: members.map(m => m.name),
+      axisLabel: { fontSize: 10, overflow: 'truncate', width: 70 },
+    },
+    series: [
+      { name: '總任務', type: 'bar', data: members.map(m => m.total_tasks), itemStyle: { color: '#cbd5e1', borderRadius: [0, 4, 4, 0] } },
+      { name: '已完成', type: 'bar', data: members.map(m => m.completed_tasks), itemStyle: { color: '#10b981', borderRadius: [0, 4, 4, 0] } },
+    ],
+  };
+});
+
+const projectStatusOption = computed(() => {
+  if (!projectStats.value) return {};
+  const dist = projectStats.value.status_distribution;
+  const pieData = Object.entries(dist)
+    .filter(([, v]) => v > 0)
+    .map(([k, v]) => ({ name: STATUS_LABELS[k] || k, value: v, itemStyle: { color: STATUS_COLORS[k] } }));
+  return {
+    tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
+    legend: { orient: 'vertical', right: 8, top: 'center', textStyle: { fontSize: 11 } },
+    series: [{ type: 'pie', radius: ['45%', '70%'], center: ['35%', '50%'], data: pieData, label: { show: false } }],
+  };
+});
+
 onMounted(async () => {
   await profileStore.fetchProfile();
   await profileStore.fetchStats();
   syncFormFromStore();
+  profileStore.fetchChartStats();
+  if (ownedTimelines.value.length > 0) {
+    selectedTimelineId.value = ownedTimelines.value[0].id;
+    await loadProjectStats();
+  }
 });
 </script>

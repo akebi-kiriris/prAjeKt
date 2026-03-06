@@ -201,6 +201,9 @@ import { toast } from 'vue-sonner';
 import { storeToRefs } from 'pinia';
 import { useGroupStore } from '../stores/groups';
 import { formatDate, formatDateTime } from '../utils/formatters';
+import { useConfirm } from '../composables/useConfirm';
+
+const { confirm } = useConfirm();
 
 const groupStore = useGroupStore();
 
@@ -266,7 +269,7 @@ const sendMessage = async () => {
 };
 
 const leaveGroup = async (groupId) => {
-  if (!confirm('確定要離開此群組？')) return;
+  if (!await confirm({ title: '確定要離開此群組？', danger: true })) return;
   try {
     await groupStore.leaveGroup(groupId);
     toast.success('已離開群組');

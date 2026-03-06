@@ -608,3 +608,53 @@ def get_upcoming_timelines():
             })
 
     return jsonify(result), 200
+
+
+@timelines_bp.route('/<int:timeline_id>/member-stats', methods=['GET'])
+@jwt_required()
+@require_timeline_role('owner')
+def get_member_stats(timeline_id):
+    """取得專案成員任務統計（負責人限定）"""
+    members = TimelineUser.query.filter_by(timeline_id=timeline_id).all()
+    member_ids = [m.user_id for m in members]
+    users_map = {u.id: u.name for u in User.query.filter(User.id.in_(member_ids)).all()}
+
+    tasks = Task.query.filter(
+        Task.timeline_id == timeline_id,
+        Task.deleted_at.is_(None)
+    ).all()
+    task_ids = [t.task_id for t in tasks]
+
+    # 各任務的被指派成員（task_users）
+    task_user_map = {}  # task_id -> set of user_ids
+    if task_ids:
+        for tu in TaskUser.query.filter(TaskUser.task_id.in_(task_ids)).all():
+            task_user_map.setdefault(tu.task_id, set()).add(tu.user_id)
+
+    result = []
+    for member in members:
+        uid = member.user_id
+        member_tasks = [
+            t for t in tasks
+            if t.user_id == uid or uid in task_user_map.get(t.task_id, set())
+        ]
+        result.append({
+            'user_id': uid,
+            'name': users_map.get(uid, f'User {uid}'),
+            'role': member.role,
+            'total_tasks': len(member_tasks),
+            'completed_tasks': sum(1 for t in member_tasks if t.completed),
+        })
+
+    status_keys = ['pending', 'in_progress', 'review', 'completed', 'cancelled']
+    status_dist = {k: 0 for k in status_keys}
+    for t in tasks:
+        s = t.status or 'pending'
+        if s in status_dist:
+            status_dist[s] += 1
+
+    return jsonify({
+        'members': sorted(result, key=lambda x: -x['total_tasks']),
+        'status_distribution': status_dist,
+        'total_tasks': len(tasks),
+    }), 200

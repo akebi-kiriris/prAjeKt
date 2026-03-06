@@ -91,3 +91,85 @@ def search_user():
         'username': user.username,
         'email': user.email
     }), 200
+
+
+@profile_bp.route('/chart-stats', methods=['GET'])
+@jwt_required()
+def get_chart_stats():
+    """取得個人數據分析圖表資料"""
+    from datetime import datetime, timedelta
+    from sqlalchemy import or_
+    from models.task import Task
+    from models.task_user import TaskUser
+    from models.timeline_user import TimelineUser
+    from models.timeline import Timeline
+
+    user_id = int(get_jwt_identity())
+    today = datetime.utcnow().date()
+
+    # 取得使用者所在的 timeline IDs
+    timeline_ids = [tu.timeline_id for tu
+                    in TimelineUser.query.filter_by(user_id=user_id).all()]
+    # 取得直接指派的任務 IDs
+    direct_task_ids = [tu.task_id for tu
+                       in TaskUser.query.filter_by(user_id=user_id).all()]
+
+    # OR 條件：自建 | 直接指派 | timeline 成員
+    conditions = [Task.user_id == user_id]
+    if direct_task_ids:
+        conditions.append(Task.task_id.in_(direct_task_ids))
+    if timeline_ids:
+        conditions.append(Task.timeline_id.in_(timeline_ids))
+
+    tasks = Task.query.filter(
+        Task.deleted_at.is_(None),
+        or_(*conditions)
+    ).all()
+
+    # 1. 狀態分布
+    status_keys = ['pending', 'in_progress', 'review', 'completed', 'cancelled']
+    status_dist = {k: 0 for k in status_keys}
+    for t in tasks:
+        s = t.status or 'pending'
+        if s in status_dist:
+            status_dist[s] += 1
+
+    # 2. 近 30 天完成趨勢（以 updated_at 且 completed=True 近似）
+    daily = {}
+    for i in range(30):
+        d = (today - timedelta(days=29 - i)).isoformat()
+        daily[d] = 0
+    for t in tasks:
+        if t.completed and t.updated_at:
+            d = t.updated_at.date().isoformat()
+            if d in daily:
+                daily[d] += 1
+    daily_completions = [{'date': k, 'count': v} for k, v in sorted(daily.items())]
+
+    # 3. 各專案任務量（取前 8）
+    if timeline_ids:
+        timelines_map = {tl.id: tl.name for tl in Timeline.query.filter(
+            Timeline.id.in_(timeline_ids),
+            Timeline.deleted_at.is_(None)
+        ).all()}
+    else:
+        timelines_map = {}
+
+    project_counts = {}
+    for t in tasks:
+        if t.timeline_id and t.timeline_id in timelines_map:
+            tid = t.timeline_id
+            if tid not in project_counts:
+                project_counts[tid] = {'name': timelines_map[tid], 'count': 0}
+            project_counts[tid]['count'] += 1
+
+    tasks_by_project = sorted(
+        list(project_counts.values()),
+        key=lambda x: -x['count']
+    )[:8]
+
+    return jsonify({
+        'status_distribution': status_dist,
+        'daily_completions': daily_completions,
+        'tasks_by_project': tasks_by_project,
+    }), 200

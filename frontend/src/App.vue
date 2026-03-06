@@ -1,5 +1,6 @@
 <template>
   <Toaster position="top-right" richColors />
+  <ConfirmDialog />
   <div id="app" class="min-h-screen" :class="isAuthenticated ? 'bg-gray-100 grid grid-rows-[4rem_1fr]' : ''" :style="isAuthenticated ? gridTemplateColumns : {}">
     <!-- Header -->
     <Header v-if="isAuthenticated" :sidebarOpen="sidebarOpen" @logout="handleLogout" @toggle-sidebar="sidebarOpen = !sidebarOpen" class="row-start-1 row-end-2 col-start-1 col-end-3 z-50" />
@@ -20,6 +21,7 @@ import { useAuthStore } from './stores/auth';
 import Header from './components/Header.vue';
 import Sidebar from './components/Sidebar.vue';
 import { Toaster } from 'vue-sonner';
+import ConfirmDialog from './components/ConfirmDialog.vue';
 
 const router = useRouter();
 const route = useRoute();

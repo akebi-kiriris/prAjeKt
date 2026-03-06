@@ -458,6 +458,9 @@ import { toast } from 'vue-sonner';
 import { taskService } from '../../services/taskService';
 import { timelineService } from '../../services/timelineService';
 import { formatDate, formatDateTime, formatFileSize, isImageFile, getFileIcon } from '../../utils/formatters';
+import { useConfirm } from '../../composables/useConfirm';
+
+const { confirm } = useConfirm();
 
 const props = defineProps({
   selectedTimeline: Object,
@@ -583,7 +586,7 @@ const toggleSubtask = async (subtask) => {
 };
 
 const deleteSubtask = async (subtask) => {
-  if (!confirm('確定要刪除此子任務？')) return;
+  if (!await confirm({ title: '確定要刪除此子任務？', danger: true })) return;
   try {
     await taskService.deleteSubtask(selectedTask.value.task_id, subtask.id);
     taskSubtasks.value = taskSubtasks.value.filter(s => s.id !== subtask.id);
@@ -601,7 +604,7 @@ const addComment = async () => {
 };
 
 const deleteComment = async (commentId) => {
-  if (!confirm('確定要刪除此留言？')) return;
+  if (!await confirm({ title: '確定要刪除此留言？', danger: true })) return;
   try {
     await taskService.deleteComment(selectedTask.value.task_id, commentId);
     taskComments.value = taskComments.value.filter(c => c.comment_id !== commentId);
@@ -626,7 +629,7 @@ const handleFileUpload = async (event) => {
 };
 
 const deleteFile = async (fileId) => {
-  if (!confirm('確定要刪除此附件？')) return;
+  if (!await confirm({ title: '確定要刪除此附件？', danger: true })) return;
   try {
     await taskService.deleteFile(selectedTask.value.task_id, fileId);
     taskFiles.value = taskFiles.value.filter(f => f.id !== fileId);
@@ -666,7 +669,7 @@ const quickAssignTaskMember = async (member) => {
 };
 
 const kickAssignedMember = async (member) => {
-  if (!confirm(`確定要將「${member.name}」從此任務移除？`)) return;
+  if (!await confirm({ title: `確定要將「${member.name}」從此任務移除？`, danger: true })) return;
   try {
     await taskService.removeMember(assignTask.value.task_id, member.user_id);
     await loadTaskMembersForAssign();
@@ -713,7 +716,7 @@ const confirmShare = async () => {
 };
 
 const kickMember = async (member) => {
-  if (!confirm(`確定要將「${member.username || member.name}」移出此專案？`)) return;
+  if (!await confirm({ title: `確定要將「${member.username || member.name}」移出此專案？`, danger: true })) return;
   try {
     await timelineService.removeMember(props.selectedTimeline.id, member.user_id);
     await loadMembers();

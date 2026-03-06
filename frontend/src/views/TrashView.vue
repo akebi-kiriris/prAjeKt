@@ -1,7 +1,7 @@
 <template>
-  <div class="p-6 max-w-4xl mx-auto">
+  <div class="p-6 bg-gray-50 overflow-y-auto w-full h-full">
     <!-- 標題 -->
-    <div class="mb-6">
+    <div class="mb-6 justify-center flex">
       <h1 class="text-2xl font-bold text-gray-800 flex items-center gap-2">🗑️ 垃圾桶</h1>
       <p class="text-sm text-gray-500 mt-1">已刪除的項目會保留在這裡，可以還原或永久刪除。只有建立者可以操作。</p>
     </div>
@@ -96,6 +96,9 @@ import { ref, onMounted } from 'vue';
 import { toast } from 'vue-sonner';
 import { trashService } from '../services/trashService';
 import { formatDateTimeCompact as formatDate, formatDateShort } from '../utils/formatters';
+import { useConfirm } from '../composables/useConfirm';
+
+const { confirm } = useConfirm();
 
 const loading = ref(true);
 const tasks = ref([]);
@@ -124,7 +127,11 @@ const restoreTask = async (task) => {
 };
 
 const permanentDeleteTask = async (task) => {
-  if (!confirm(`確定要永久刪除「${task.name}」？此操作無法復原，所有附件也會一併刪除。`)) return;
+  if (!await confirm({
+    title: `確定要永久刪除「${task.name}」？`,
+    message: '此操作無法復原，所有附件也會一並刪除。',
+    danger: true,
+  })) return;
   try {
     await trashService.permanentDeleteTask(task.task_id);
     tasks.value = tasks.value.filter(t => t.task_id !== task.task_id);
@@ -143,7 +150,11 @@ const restoreTimeline = async (tl) => {
 };
 
 const permanentDeleteTimeline = async (tl) => {
-  if (!confirm(`確定要永久刪除專案「${tl.name}」？此操作無法復原，專案內所有任務與附件也會一併刪除。`)) return;
+  if (!await confirm({
+    title: `確定要永久刪除專案「${tl.name}」？`,
+    message: '此操作無法復原，專案內所有任務與附件也會一並刪除。',
+    danger: true,
+  })) return;
   try {
     await trashService.permanentDeleteTimeline(tl.id);
     // 重新 call API：cascade 同時刪除了底下所有任務，前端無法自行推算哪些要移除

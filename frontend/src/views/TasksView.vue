@@ -434,6 +434,9 @@ import { useTaskStore } from '../stores/tasks';
 import { taskService } from '../services/taskService';
 import { timelineService } from '../services/timelineService';
 import { formatDate, formatDateTime, formatFileSize, isImageFile, getFileIcon } from '../utils/formatters';
+import { useConfirm } from '../composables/useConfirm';
+
+const { confirm } = useConfirm();
 
 const store = useTaskStore();
 const { tasks } = storeToRefs(store);
@@ -478,7 +481,7 @@ const editTask = (task) => {
 const cancelEdit = () => { resetForm(); };
 
 const deleteTask = async (taskId) => {
-  if (!confirm('確定要刪除此任務？')) return;
+  if (!await confirm({ title: '確定要刪除此任務？', danger: true })) return;
   try {
     await store.removeTask(taskId);
   } catch (error) {
@@ -554,7 +557,7 @@ const toggleDetailSubtask = async (subtask) => {
 };
 
 const deleteDetailSubtask = async (subtask) => {
-  if (!confirm('確定要刪除此子任務？')) return;
+  if (!await confirm({ title: '確定要刪除此子任務？', danger: true })) return;
   try {
     await taskService.deleteSubtask(detailTask.value.task_id, subtask.id);
     detailSubtasks.value = detailSubtasks.value.filter(s => s.id !== subtask.id);
@@ -572,7 +575,7 @@ const addDetailComment = async () => {
 };
 
 const deleteDetailComment = async (commentId) => {
-  if (!confirm('確定要刪除此留言？')) return;
+  if (!await confirm({ title: '確定要刪除此留言？', danger: true })) return;
   try {
     await taskService.deleteComment(detailTask.value.task_id, commentId);
     detailComments.value = detailComments.value.filter(c => c.comment_id !== commentId);
@@ -597,7 +600,7 @@ const handleDetailFileUpload = async (event) => {
 };
 
 const deleteDetailFile = async (fileId) => {
-  if (!confirm('確定要刪除此附件？')) return;
+  if (!await confirm({ title: '確定要刪除此附件？', danger: true })) return;
   try {
     await taskService.deleteFile(detailTask.value.task_id, fileId);
     detailFiles.value = detailFiles.value.filter(f => f.id !== fileId);
@@ -691,7 +694,7 @@ const quickAssignMember = async (member) => {
 };
 
 const kickTaskMember = async (member) => {
-  if (!confirm(`確定要移除「${member.name}」？`)) return;
+  if (!await confirm({ title: `確定要移除「${member.name}」？`, danger: true })) return;
   try {
     await taskService.removeMember(shareTask.value.task_id, member.user_id);
     await loadTaskMembers();

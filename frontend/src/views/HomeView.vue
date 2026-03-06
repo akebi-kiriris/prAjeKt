@@ -5,7 +5,7 @@
     <div class="mt-4 mb-8 bg-linear-to-r from-primary to-primary-light rounded-2xl shadow-lg animate-slideDown">
       <div class="p-12 text-center text-white">
         <div class="flex items-center justify-center gap-4 mb-4">
-          <h1 class="text-4xl font-bold">ProjectHub 專案管理</h1>
+          <h1 class="text-4xl font-bold">PrAjeKt 專案管理</h1>
         </div>
         <p class="text-xl opacity-95">高效團隊協作，輕鬆管理專案進度！</p>
       </div>

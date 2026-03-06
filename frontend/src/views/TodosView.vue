@@ -192,6 +192,9 @@
 import { ref, onMounted } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useTodoStore } from '../stores/todos';
+import { useConfirm } from '../composables/useConfirm';
+
+const { confirm } = useConfirm();
 
 const store = useTodoStore();
 
@@ -238,7 +241,7 @@ const editTodo = (todo) => {
 const toggleTodo = (id) => store.toggleTodo(id);
 
 const deleteTodo = async (id) => {
-  if (!confirm('確定要刪除此待辦事項？')) return;
+  if (!await confirm({ title: '確定要刪除此待辦事項？', danger: true })) return;
   await store.removeTodo(id);
 };
 
