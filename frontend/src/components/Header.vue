@@ -1,5 +1,5 @@
 <template>
-  <header class="fixed top-0 left-0 right-0 h-16 bg-white shadow-md flex justify-between items-center z-50 px-8">
+  <header class="fixed top-0 left-0 right-0 h-16 bg-white shadow-md flex justify-between items-center z-50 px-3 md:px-8">
     <div class="flex items-center ml-3">
       <!-- 漢堡選單按鈕（僅桌面版顯示，手機版使用底部導航列） -->
       <button @click="$emit('toggle-sidebar')" class="hidden md:block mr-4 focus:outline-none">
@@ -11,7 +11,7 @@
       <span class="text-2xl font-bold text-primary tracking-wider select-none ml-2">PrAjeKt</span>
     </div>
     
-    <div class="flex items-center gap-4 mr-16">
+    <div class="flex items-center gap-2 md:gap-4 mr-2 md:mr-16">
       <!-- 通知鈴鐺 -->
       <div class="relative" ref="notifRef">
         <button @click.stop="toggleNotifPanel" class="relative p-2 rounded-full hover:bg-gray-100 transition-colors">
@@ -23,7 +23,7 @@
         </button>
 
         <!-- 通知下拉面板 -->
-        <div v-if="showNotifPanel" class="absolute right-0 top-12 w-80 bg-white rounded-xl shadow-lg border border-gray-200 z-50">
+        <div v-if="showNotifPanel" class="absolute right-0 top-12 w-[min(20rem,calc(100vw-1rem))] bg-white rounded-xl shadow-lg border border-gray-200 z-50">
           <div class="flex justify-between items-center px-4 py-3 border-b">
             <span class="font-semibold text-gray-800">通知</span>
             <button @click="store.markAllAsRead()" class="text-xs text-blue-500 hover:underline">全部已讀</button>
@@ -52,11 +52,11 @@
         </div>
       </div>
 
-      <div class="flex items-center gap-8">
-        <span class="text-gray-600 text-lg">{{ userName }}</span>
+      <div class="flex items-center gap-2 md:gap-8">
+        <span class="hidden md:block text-gray-600 text-lg">{{ userName }}</span>
         <button 
           @click="$emit('logout')" 
-          class="min-w-12 px-12 py-2 bg-red-500 text-white rounded-lg font-medium cursor-pointer hover:bg-red-600 transition-colors active:scale-95" 
+          class="px-3 md:px-8 py-2 bg-red-500 text-white rounded-lg font-medium cursor-pointer hover:bg-red-600 transition-colors active:scale-95" 
         >
           登出
         </button>

@@ -356,7 +356,7 @@
     </div>
 
     <!-- Card View -->
-    <div v-if="viewMode === 'card'" class="px-4 pb-8">
+    <div v-if="viewMode === 'card'" class="px-4 pb-24">
       <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
         <div 
           v-for="timeline in sortedTimelines" :key="timeline.id"

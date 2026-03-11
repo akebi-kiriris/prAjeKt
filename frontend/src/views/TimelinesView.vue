@@ -1,5 +1,5 @@
 <template>
-  <div class="h-full w-full bg-linear-to-br from-slate-50 to-blue-50/30 p-6 overflow-y-auto">
+  <div class="h-full w-full bg-linear-to-br from-slate-50 to-blue-50/30 px-6 pt-6 pb-24 md:pb-6 overflow-y-auto">
     <div class="grid grid-cols-1 gap-6 max-w-7xl mx-auto">
 
       <!-- Header + Stats + View Toggle -->

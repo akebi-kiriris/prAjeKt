@@ -1,5 +1,5 @@
 <template>
-  <div class="p-6 bg-gray-50 overflow-y-auto w-full h-full">
+  <div class="px-6 pt-6 pb-24 md:pb-6 bg-gray-50 overflow-y-auto w-full h-full">
     <!-- 標題 -->
     <div class="mb-6 justify-center flex">
       <h1 class="text-2xl font-bold text-gray-800 flex items-center gap-2">🗑️ 垃圾桶</h1>

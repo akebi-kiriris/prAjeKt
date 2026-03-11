@@ -1,10 +1,10 @@
 <template>
-  <div class="h-full w-full bg-gray-50 p-6 overflow-y-auto">
+  <div class="h-full w-full bg-gray-50 px-6 pt-6 pb-24 md:pb-6 overflow-y-auto">
     <div class="grid grid-cols-1 gap-6 max-w-4xl mx-auto">
     <!-- Header -->
     <div class="text-center pt-8 pb-4 px-4 animate-slideDown">
-      <span class="text-6xl mb-4 block animate-pulse-custom">👤</span>
-      <h1 class="text-4xl font-bold mb-2 text-gray-800">個人資料</h1>
+      <span class="text-4xl md:text-6xl mb-4 block animate-pulse-custom">👤</span>
+      <h1 class="text-2xl md:text-4xl font-bold mb-2 text-gray-800">個人資料</h1>
       <p class="text-lg text-gray-600">管理您的個人資訊與設定</p>
     </div>
     

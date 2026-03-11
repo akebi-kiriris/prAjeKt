@@ -1,13 +1,13 @@
 <template>
-  <div class="h-full w-full bg-gray-50 p-6 overflow-y-auto">
+  <div class="h-full w-full bg-gray-50 px-6 pt-6 pb-24 md:pb-6 overflow-y-auto">
     <div class="grid grid-cols-1 gap-6 max-w-6xl mx-auto">
     <!-- Welcome Card -->
     <div class="mt-4 mb-8 bg-linear-to-r from-primary to-primary-light rounded-2xl shadow-lg animate-slideDown">
-      <div class="p-12 text-center text-white">
+      <div class="p-6 md:p-12 text-center text-white">
         <div class="flex items-center justify-center gap-4 mb-4">
-          <h1 class="text-4xl font-bold">PrAjeKt 專案管理</h1>
+          <h1 class="text-2xl md:text-4xl font-bold">PrAjeKt 專案管理</h1>
         </div>
-        <p class="text-xl opacity-95">高效團隊協作，輕鬆管理專案進度！</p>
+        <p class="text-base md:text-xl opacity-95">高效團隊協作，輕鬆管理專案進度！</p>
       </div>
     </div>
 
