@@ -128,20 +128,6 @@ const todayFormatted = computed(() => {
   return today.toLocaleDateString('zh-TW', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' });
 });
 
-// ────────────── 工具函式（委派給 store）──────────────
-const getDaysRemaining = (endDate) => {
-  if (!endDate) return { days: null, text: '未設定', display: '未設定', colorClass: 'text-gray-400' };
-  const today = new Date(); today.setHours(0, 0, 0, 0);
-  const end = new Date(endDate); end.setHours(0, 0, 0, 0);
-  const diffDays = Math.ceil((end - today) / (1000 * 60 * 60 * 24));
-  if (diffDays < 0) return { days: diffDays, text: `已過期 ${Math.abs(diffDays)} 天`, display: `過期 ${Math.abs(diffDays)} 天`, colorClass: 'text-red-500' };
-  if (diffDays === 0) return { days: 0, text: '今天到期', display: '今天到期', colorClass: 'text-red-500' };
-  if (diffDays <= 3) return { days: diffDays, text: `剩 ${diffDays} 天`, display: `剩 ${diffDays} 天`, colorClass: 'text-orange-500' };
-  if (diffDays <= 7) return { days: diffDays, text: `剩 ${diffDays} 天`, display: `剩 ${diffDays} 天`, colorClass: 'text-yellow-600' };
-  if (diffDays <= 30) return { days: diffDays, text: `剩 ${diffDays} 天`, display: `剩 ${diffDays} 天`, colorClass: 'text-blue-500' };
-  return { days: diffDays, text: `剩 ${diffDays} 天`, display: `剩 ${diffDays} 天`, colorClass: 'text-green-500' };
-};
-
 // ────────────── 專案 CRUD ──────────────
 const viewTimeline = async (timeline) => {
   selectedTimeline.value = timeline;
