@@ -1,4 +1,4 @@
-from flask import Blueprint, request, jsonify, send_from_directory
+﻿from flask import Blueprint, request, jsonify, send_from_directory
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from functools import wraps
 from app import db
@@ -128,10 +128,10 @@ def get_tasks():
             'actual_hours': t.actual_hours,
             'members': member_list,
             'subtasks': subtask_list,
-            'created_at': t.created_at.isoformat() if t.created_at else None,
-            'start_date': t.start_date.isoformat() if t.start_date else None,
-            'end_date': t.end_date.isoformat() if t.end_date else None,
-            'updated_at': t.updated_at.isoformat() if t.updated_at else None,
+            'created_at': t.created_at.isoformat() + 'Z' if t.created_at else None,
+            'start_date': t.start_date.isoformat() + 'Z' if t.start_date else None,
+            'end_date': t.end_date.isoformat() + 'Z' if t.end_date else None,
+            'updated_at': t.updated_at.isoformat() + 'Z' if t.updated_at else None,
             'task_remark': t.task_remark,
             'isWork': t.isWork,
             'is_owner': is_owner
@@ -282,7 +282,7 @@ def get_task_members(task_id):
                 'email': user.email,
                 'avatar': user.avatar,
                 'role': m.role,
-                'assigned_at': m.assigned_at.isoformat() if m.assigned_at else None
+                'assigned_at': m.assigned_at.isoformat() + 'Z' if m.assigned_at else None
             })
     return jsonify(result), 200
 
@@ -375,7 +375,7 @@ def get_task_comments(task_id):
             'user_name': user.name if user else '未知使用者',
             'user_avatar': user.avatar if user else None,
             'task_message': c.task_message,
-            'created_at': c.created_at.isoformat() if c.created_at else None
+            'created_at': c.created_at.isoformat() + 'Z' if c.created_at else None
         })
     return jsonify(result), 200
 
@@ -424,7 +424,7 @@ def add_task_comment(task_id):
             'user_id': user_id,
             'user_name': user.name if user else '未知',
             'task_message': message,
-            'created_at': comment.created_at.isoformat() if comment.created_at else None,
+            'created_at': comment.created_at.isoformat() + 'Z' if comment.created_at else None,
         }), 201
     except Exception as e:
         db.session.rollback()
@@ -478,7 +478,7 @@ def get_task_files(task_id):
             'filename': f.filename,
             'original_filename': f.original_filename,
             'file_size': f.file_size,
-            'uploaded_at': f.uploaded_at.isoformat() if f.uploaded_at else None,
+            'uploaded_at': f.uploaded_at.isoformat() + 'Z' if f.uploaded_at else None,
             'uploaded_by_name': uploader.name if uploader else '未知',
         })
     return jsonify(result), 200
@@ -537,7 +537,7 @@ def upload_task_file(task_id):
             'filename': unique_filename,
             'original_filename': filename,
             'file_size': file_size,
-            'uploaded_at': task_file.uploaded_at.isoformat() if task_file.uploaded_at else None,
+            'uploaded_at': task_file.uploaded_at.isoformat() + 'Z' if task_file.uploaded_at else None,
         }), 201
     except Exception as e:
         db.session.rollback()

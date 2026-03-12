@@ -1,4 +1,4 @@
-from flask import Blueprint, request, jsonify
+﻿from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from app import db
 from models.group import Group, GroupMember
@@ -22,7 +22,7 @@ def get_groups():
         'group_name': g.group_name,
         'group_type': g.group_type,
         'invite_code': g.group_inviteCode,
-        'created_at': g.created_at.isoformat() if g.created_at else None
+        'created_at': g.created_at.isoformat() + 'Z' if g.created_at else None
     } for g in groups]), 200
 
 @groups_bp.route('', methods=['POST'])
@@ -150,7 +150,7 @@ def get_group_messages(group_id):
         'message_id': m.message_id,
         'content': m.content,
         'sender_name': m.sender_name,
-        'created_at': m.created_at.isoformat() if m.created_at else None
+        'created_at': m.created_at.isoformat() + 'Z' if m.created_at else None
     } for m in messages]), 200
 
 @groups_bp.route('/<int:group_id>/messages', methods=['POST'])

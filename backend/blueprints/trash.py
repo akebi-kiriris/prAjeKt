@@ -1,4 +1,4 @@
-from flask import Blueprint, jsonify
+﻿from flask import Blueprint, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from app import db
 from models.task import Task
@@ -34,8 +34,8 @@ def get_trash():
         tasks_result.append({
             'task_id': t.task_id,
             'name': t.name,
-            'deleted_at': t.deleted_at.isoformat() if t.deleted_at else None,
-            'end_date': t.end_date.isoformat() if t.end_date else None,
+            'deleted_at': t.deleted_at.isoformat() + 'Z' if t.deleted_at else None,
+            'end_date': t.end_date.isoformat() + 'Z' if t.end_date else None,
             'priority': t.priority,
             'is_owner': t.user_id == user_id,
         })
@@ -54,9 +54,9 @@ def get_trash():
         timelines_result.append({
             'id': tl.id,
             'name': tl.name,
-            'deleted_at': tl.deleted_at.isoformat() if tl.deleted_at else None,
-            'start_date': tl.start_date.isoformat() if tl.start_date else None,
-            'end_date': tl.end_date.isoformat() if tl.end_date else None,
+            'deleted_at': tl.deleted_at.isoformat() + 'Z' if tl.deleted_at else None,
+            'start_date': tl.start_date.isoformat() + 'Z' if tl.start_date else None,
+            'end_date': tl.end_date.isoformat() + 'Z' if tl.end_date else None,
             'is_owner': tl.user_id == user_id,
         })
 

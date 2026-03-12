@@ -1,4 +1,4 @@
-from flask import Blueprint, request, jsonify
+﻿from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from app import db
 from models.notification import Notification
@@ -26,7 +26,7 @@ def get_notifications():
         'content': n.content,
         'link': n.link,
         'is_read': n.is_read,
-        'created_at': n.created_at.isoformat() if n.created_at else None,
+        'created_at': n.created_at.isoformat() + 'Z' if n.created_at else None,
     } for n in notifications]), 200
 
 

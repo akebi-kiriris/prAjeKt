@@ -1,4 +1,4 @@
-from flask import Blueprint, request, jsonify
+﻿from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from functools import wraps
 from app import db
@@ -80,8 +80,8 @@ def get_timelines():
         result.append({
             'id': timeline.id,
             'name': timeline.name,
-            'startDate': timeline.start_date.isoformat() if timeline.start_date else None,
-            'endDate': timeline.end_date.isoformat() if timeline.end_date else None,
+            'startDate': timeline.start_date.isoformat() + 'Z' if timeline.start_date else None,
+            'endDate': timeline.end_date.isoformat() + 'Z' if timeline.end_date else None,
             'remark': timeline.remark,
             'role': role,  # 0=負責人, 1=協作者（前端用來判斷顯示哪些按鈕）
             'totalTasks': total_tasks,
@@ -234,8 +234,8 @@ def get_timeline_tasks(timeline_id):
             'name': task.name,
             'assignee': assignee_name,
             'assistant': assistant_list,
-            'start_date': task.start_date.isoformat() if task.start_date else None,
-            'end_date': task.end_date.isoformat() if task.end_date else None,
+            'start_date': task.start_date.isoformat() + 'Z' if task.start_date else None,
+            'end_date': task.end_date.isoformat() + 'Z' if task.end_date else None,
             'completed': task.completed,
             'timeline_id': task.timeline_id,
             'remark': task.task_remark,

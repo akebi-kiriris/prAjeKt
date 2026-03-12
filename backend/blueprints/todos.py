@@ -1,4 +1,4 @@
-from flask import Blueprint, request, jsonify
+﻿from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from app import db
 from models.todo import Todo
@@ -22,7 +22,7 @@ def get_todos():
             'id': todo.id,
             'title': todo.title,
             'content': todo.content,
-            'deadline': todo.deadline.isoformat() if todo.deadline else None,
+            'deadline': todo.deadline.isoformat() + 'Z' if todo.deadline else None,
             'completed': todo.completed
         }]), 200
     
@@ -33,7 +33,7 @@ def get_todos():
         'id': t.id,
         'title':t.title,
         'content': t.content,
-        'deadline': t.deadline.isoformat() if t.deadline else None,
+        'deadline': t.deadline.isoformat() + 'Z' if t.deadline else None,
         'completed': t.completed
     } for t in todos]), 200
 

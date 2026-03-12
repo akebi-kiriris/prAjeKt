@@ -1,0 +1,38 @@
+import api from './api';
+import type { AxiosResponse } from 'axios';
+import type { Task, CreateTaskPayload, Subtask, TaskComment, TaskFile, TaskMember } from '../types';
+
+export const taskService = {
+  getAll:        (): Promise<AxiosResponse<Task[]>>                                    => api.get('/tasks'),
+  create:        (data: CreateTaskPayload): Promise<AxiosResponse<Task>>               => api.post('/tasks', data),
+  update:        (id: number, data: Partial<Task>): Promise<AxiosResponse<Task>>       => api.put(`/tasks/${id}`, data),
+  remove:        (id: number): Promise<AxiosResponse<void>>                            => api.delete(`/tasks/${id}`),
+  toggle:        (id: number): Promise<AxiosResponse<Task>>                            => api.patch(`/tasks/${id}/toggle`),
+  updateStatus:  (id: number, status: Task['status']): Promise<AxiosResponse<Task>>    => api.patch(`/tasks/${id}/status`, { status }),
+
+  // 子任務
+  getSubtasks:   (id: number): Promise<AxiosResponse<Subtask[]>>                      => api.get(`/tasks/${id}/subtasks`),
+  createSubtask: (id: number, data: Pick<Subtask, 'name'>): Promise<AxiosResponse<Subtask>> => api.post(`/tasks/${id}/subtasks`, data),
+  toggleSubtask: (taskId: number, subtaskId: number): Promise<AxiosResponse<Subtask>> => api.patch(`/tasks/${taskId}/subtasks/${subtaskId}/toggle`),
+  deleteSubtask: (taskId: number, subtaskId: number): Promise<AxiosResponse<void>>    => api.delete(`/tasks/${taskId}/subtasks/${subtaskId}`),
+
+  // 成員管理
+  getMembers:    (id: number): Promise<AxiosResponse<TaskMember[]>>                   => api.get(`/tasks/${id}/members`),
+  addMember:     (id: number, userId: number): Promise<AxiosResponse<TaskMember>>     => api.post(`/tasks/${id}/members`, { user_id: userId }),
+  removeMember:  (taskId: number, userId: number): Promise<AxiosResponse<void>>       => api.delete(`/tasks/${taskId}/members/${userId}`),
+  searchUser:    (email: string): Promise<AxiosResponse<{ id: number; name: string; email: string }>> => api.post('/timelines/search_user', { email }),
+
+  // 留言
+  getComments:   (id: number): Promise<AxiosResponse<TaskComment[]>>                  => api.get(`/tasks/${id}/comments`),
+  addComment:    (id: number, msg: string): Promise<AxiosResponse<TaskComment>>       => api.post(`/tasks/${id}/comments`, { task_message: msg }),
+  deleteComment: (taskId: number, cid: number): Promise<AxiosResponse<void>>          => api.delete(`/tasks/${taskId}/comments/${cid}`),
+
+  // 附件
+  getFiles:      (id: number): Promise<AxiosResponse<TaskFile[]>>                     => api.get(`/tasks/${id}/files`),
+  uploadFile:    (id: number, formData: FormData): Promise<AxiosResponse<TaskFile>>   => api.post(`/tasks/${id}/upload`, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  }),
+  deleteFile:    (taskId: number, fileId: number): Promise<AxiosResponse<void>>       => api.delete(`/tasks/${taskId}/files/${fileId}`),
+
+  upcoming:      (): Promise<AxiosResponse<Task[]>>                                   => api.get('/tasks/upcoming'),
+};

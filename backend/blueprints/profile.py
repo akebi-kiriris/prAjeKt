@@ -1,4 +1,4 @@
-from flask import Blueprint, request, jsonify
+﻿from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from werkzeug.security import check_password_hash, generate_password_hash
 from app import db
@@ -22,7 +22,7 @@ def get_profile():
         'username': user.username,
         'email': user.email,
         'phone': user.phone,
-        'created_at': user.created_at.isoformat() if user.created_at else None
+        'created_at': user.created_at.isoformat() + 'Z' if user.created_at else None
     }), 200
 
 @profile_bp.route('/me', methods=['PUT'])

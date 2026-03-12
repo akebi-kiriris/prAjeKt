@@ -1,4 +1,4 @@
-from models import db
+﻿from models import db
 from datetime import datetime
 
 class Subtask(db.Model):
@@ -26,5 +26,5 @@ class Subtask(db.Model):
             'name': self.name,
             'completed': self.completed,
             'sort_order': self.sort_order,
-            'created_at': self.created_at.isoformat() if self.created_at else None
+            'created_at': self.created_at.isoformat() + 'Z' if self.created_at else None
         }

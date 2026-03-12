@@ -1,0 +1,20 @@
+import api from './api';
+import type { AxiosResponse } from 'axios';
+import type { Timeline, CreateTimelinePayload, Task, TaskMember, MemberStat } from '../types';
+
+export const timelineService = {
+  getAll:           (): Promise<AxiosResponse<Timeline[]>>                                       => api.get('/timelines'),
+  create:           (data: CreateTimelinePayload): Promise<AxiosResponse<Timeline>>              => api.post('/timelines', data),
+  update:           (id: number, data: Partial<CreateTimelinePayload>): Promise<AxiosResponse<Timeline>> => api.put(`/timelines/${id}`, data),
+  remove:           (id: number): Promise<AxiosResponse<void>>                                   => api.delete(`/timelines/${id}`),
+  getTasks:         (id: number): Promise<AxiosResponse<Task[]>>                                 => api.get(`/timelines/${id}/tasks`),
+  updateRemark:     (id: number, remark: string): Promise<AxiosResponse<Timeline>>               => api.put(`/timelines/${id}/remark`, { remark }),
+  searchUser:       (email: string): Promise<AxiosResponse<{ id: number; name: string; email: string }>> => api.post('/timelines/search_user', { email }),
+  addMember:        (id: number, userId: number): Promise<AxiosResponse<TaskMember>>             => api.post(`/timelines/${id}/members`, { user_id: userId, role: 1 }),
+  generateTasks:    (id: number): Promise<AxiosResponse<Task[]>>                                 => api.post(`/timelines/${id}/generate-tasks`, {}),
+  batchCreateTasks: (id: number, tasks: CreateTimelinePayload[]): Promise<AxiosResponse<Task[]>> => api.post(`/timelines/${id}/batch-create-tasks`, { tasks }),
+  getMembers:       (id: number): Promise<AxiosResponse<TaskMember[]>>                           => api.get(`/timelines/${id}/members`),
+  removeMember:     (id: number, userId: number): Promise<AxiosResponse<void>>                   => api.delete(`/timelines/${id}/members/${userId}`),
+  upcoming:         (): Promise<AxiosResponse<Timeline[]>>                                       => api.get('/timelines/upcoming'),
+  getMemberStats:   (id: number): Promise<AxiosResponse<MemberStat[]>>                          => api.get(`/timelines/${id}/member-stats`),
+};

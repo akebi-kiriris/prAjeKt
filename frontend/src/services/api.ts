@@ -1,8 +1,18 @@
-import axios from 'axios';
+import axios, { type InternalAxiosRequestConfig, type AxiosResponse } from 'axios';
 import router from '../router';
 
 // 統一管理 baseURL
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
+
+// 擴充 InternalAxiosRequestConfig，加入 _retry 防止無限重試
+interface RetryableAxiosRequestConfig extends InternalAxiosRequestConfig {
+  _retry?: boolean;
+}
+
+type FailedQueueItem = {
+  resolve: (token: string) => void;
+  reject: (err: unknown) => void;
+};
 
 const api = axios.create({
   baseURL: BASE_URL,
@@ -11,16 +21,16 @@ const api = axios.create({
 });
 
 // Token 刷新相關變數
-let isRefreshing = false;  // 是否正在刷新 token
-let failedQueue = [];      // 等待刷新完成的請求佇列
+let isRefreshing = false;
+let failedQueue: FailedQueueItem[] = [];
 
 // 處理佇列中的請求
-const processQueue = (error, token = null) => {
+const processQueue = (error: unknown, token: string | null = null): void => {
   failedQueue.forEach(prom => {
     if (error) {
       prom.reject(error);
     } else {
-      prom.resolve(token);
+      prom.resolve(token as string);
     }
   });
   failedQueue = [];
@@ -35,21 +45,19 @@ api.interceptors.request.use(
     }
     return config;
   },
-  (error) => {
-    return Promise.reject(error);
-  }
+  (error) => Promise.reject(error),
 );
 
 // Response 攔截器：處理 401 錯誤並自動刷新 token
 api.interceptors.response.use(
-  (response) => response,
+  (response: AxiosResponse) => response,
   async (error) => {
-    const originalRequest = error.config;
+    const originalRequest = error.config as RetryableAxiosRequestConfig;
 
     // 如果是 401 錯誤且還沒重試過
     if (error.response?.status === 401 && !originalRequest._retry) {
       // 避免 refresh endpoint 本身失敗時無限循環
-      if (originalRequest.url.includes('/auth/refresh')) {
+      if (originalRequest.url?.includes('/auth/refresh')) {
         localStorage.removeItem('access_token');
         localStorage.removeItem('refresh_token');
         router.push('/login');
@@ -58,16 +66,14 @@ api.interceptors.response.use(
 
       // 如果正在刷新中，將此請求加入佇列等待
       if (isRefreshing) {
-        return new Promise((resolve, reject) => {
+        return new Promise<string>((resolve, reject) => {
           failedQueue.push({ resolve, reject });
         })
           .then(token => {
             originalRequest.headers.Authorization = `Bearer ${token}`;
             return api(originalRequest);
           })
-          .catch(err => {
-            return Promise.reject(err);
-          });
+          .catch(err => Promise.reject(err));
       }
 
       originalRequest._retry = true;
@@ -84,14 +90,10 @@ api.interceptors.response.use(
 
       try {
         // 使用 refresh_token 取得新的 access_token
-        const response = await axios.post(
+        const response = await axios.post<{ access_token: string }>(
           `${BASE_URL}/auth/refresh`,
           {},
-          {
-            headers: {
-              Authorization: `Bearer ${refreshToken}`
-            }
-          }
+          { headers: { Authorization: `Bearer ${refreshToken}` } },
         );
 
         const newAccessToken = response.data.access_token;
@@ -118,7 +120,7 @@ api.interceptors.response.use(
     }
 
     return Promise.reject(error);
-  }
+  },
 );
 
 export default api;
