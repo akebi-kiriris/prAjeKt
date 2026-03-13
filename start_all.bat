@@ -1,6 +1,6 @@
 @echo off
 chcp 65001 >nul
-REM 啟動 Learnlink 專案前後端
+REM 啟動 PrAjeKt 專案前後端
 
 REM 啟動後端 (進入虛擬環境)
 cd backend

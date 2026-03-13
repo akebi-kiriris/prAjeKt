@@ -160,7 +160,7 @@ def test_task_generation():
 def main():
     """主函數"""
     print("\n" + "=" * 50)
-    print("🤖 LearnLink AI 功能測試")
+    print("🤖 PrAjeKt AI 功能測試")
     print("=" * 50)
     
     # 執行測試

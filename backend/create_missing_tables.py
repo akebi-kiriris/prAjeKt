@@ -1,7 +1,7 @@
 import sqlite3
 
 # 連接資料庫
-conn = sqlite3.connect('instance/learnlink.db')
+conn = sqlite3.connect('instance/prajekt.db')
 c = conn.cursor()
 
 # 創建 task_users 表 (任務成員表，記錄任務的負責人和協助者)

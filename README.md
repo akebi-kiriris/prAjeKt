@@ -1,4 +1,4 @@
-# LearnLink
+# PrAjeKt
 
 基於 Vue 3 + Flask 的專案管理與協作平台，整合 Google Gemini AI 實現智能任務生成。
 
@@ -35,7 +35,7 @@
 ## 專案結構
 
 ```
-Learnlink/
+PrAjeKt/
 ├── backend/
 │   ├── app.py                    # Flask 應用入口，註冊 blueprints、JWT、CORS
 │   ├── blueprints/               # 路由層（每個模組一個 blueprint）

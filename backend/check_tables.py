@@ -1,6 +1,6 @@
 import sqlite3
 
-conn = sqlite3.connect('instance/learnlink.db')
+conn = sqlite3.connect('instance/prajekt.db')
 c = conn.cursor()
 
 # Check timelines columns

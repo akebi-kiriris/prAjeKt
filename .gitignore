@@ -48,3 +48,7 @@ backend/**/__pycache__/
 backend/**/*.pyc
 backend/**/*.pyo
 backend/**/*.pyd
+
+# Legacy root entry files (use frontend/ and backend/ versions instead)
+/App.vue
+/app.py

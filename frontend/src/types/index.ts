@@ -1,5 +1,5 @@
 /**
- * LearnLink 全站共用 TypeScript 型別定義
+ * PrAjeKt 全站共用 TypeScript 型別定義
  *
  * 命名規則：
  * - API 回傳的 Timeline/Task 命名欄位依後端實際 JSON key（timelines 用 camelCase，tasks 用 snake_case）
