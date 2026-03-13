@@ -2,7 +2,7 @@
 
 基於 Vue 3 + Flask 的專案管理與協作平台，整合 Google Gemini AI 實現智能任務生成。
 
-> **開發狀態**：Phase 1 & 2 全部完成 ✅（03/11 提前結束），Phase 3 TypeScript 遷移待定。已完成服務層重構、Store 層（6 個 store）、JWT token 自動刷新、AI 任務生成、任務留言／附件上傳、垃圾桶回收機制、多人協作專案管理、子任務 UI、通知系統（指派 / 邀請 / 到期提醒輪詢）、ConfirmDialog 取代原生 confirm()、數據分析儀表板（個人 + 專案雙層圖表）、行動版 RWD（底部導航 / 單欄佈局 / Header 收縮）等功能。
+> **開發狀態**：Phase 1 & 2 全部完成 ✅（03/11 提前結束），Phase 3 TypeScript 遷移進行中 🔄（已完成基礎層 + Service + Store + Composables，元件層待做）。已完成 JWT token 自動刷新、AI 任務生成、任務留言／附件上傳、垃圾桶回收機制、多人協作專案管理、子任務 UI、通知系統（指派 / 邀請 / 到期提醒輪詢）、ConfirmDialog 取代原生 confirm()、數據分析儀表板（個人 + 專案雙層圖表）、行動版 RWD（底部導航 / 單欄佈局 / Header 收縮）等功能。
 
 ## 功能模組
 
@@ -66,22 +66,24 @@ Learnlink/
 │       │   ├── ConfirmDialog.vue # 全域確認對話框（取代原生 confirm）
 │       │   └── timelines/        # TimelineHeader / TimelineViewModes / TimelineDetailDialog
 │       ├── services/             # API 封裝層（所有 HTTP 呼叫集中於此）
-│       │   ├── api.js            # Axios 實例 + JWT 自動刷新攔截器
-│       │   ├── todoService.js    # 待辦 API（5 個方法）
-│       │   ├── taskService.js    # 任務 API（含子任務、留言、附件）
-│       │   ├── trashService.js   # 垃圾桶 API（5 個方法）
-│       │   ├── groupService.js   # 群組 API（6 個方法）
-│       │   ├── profileService.js # 個人資料 API（getMe / update / getChartStats）
-│       │   └── timelineService.js # 專案 API（含 AI 生成 / 成員統計）
+│       │   ├── api.ts            # Axios 實例 + JWT 自動刷新攔截器
+│       │   ├── todoService.ts    # 待辦 API（5 個方法）
+│       │   ├── taskService.ts    # 任務 API（含子任務、留言、附件）
+│       │   ├── trashService.ts   # 垃圾桶 API（5 個方法）
+│       │   ├── groupService.ts   # 群組 API（6 個方法）
+│       │   ├── profileService.ts # 個人資料 API（getMe / update / getChartStats）
+│       │   ├── notificationService.ts # 通知 API（列表/未讀/已讀）
+│       │   └── timelineService.ts # 專案 API（含 AI 生成 / 成員統計）
 │       ├── stores/               # Pinia 全域狀態
-│       │   ├── auth.js           # 登入狀態、token 儲存
-│       │   ├── tasks.js          # 任務狀態（全域）
-        │   ├── todos.js          # 待辦狀態（全域）
-        │   ├── timelines.js      # 專案狀態（urgentCount / sortedTimelines 等 computed）
-        │   ├── groups.js         # 群組狀態（groups / messages / currentGroup）
-        │   └── profile.js        # 個人資料狀態（profile / stats / chartStats / ownedTimelines）
-│   ├── composables/
-│   │   └── useConfirm.js     # Promise-based 確認對話框（全域單例）
+│       │   ├── auth.ts           # 登入狀態、token 儲存
+│       │   ├── tasks.ts          # 任務狀態（全域）
+│       │   ├── todos.ts          # 待辦狀態（全域）
+│       │   ├── timelines.ts      # 專案狀態（urgentCount / sortedTimelines 等 computed）
+│       │   ├── groups.ts         # 群組狀態（groups / messages / currentGroup）
+│       │   ├── profile.ts        # 個人資料狀態（profile / stats / chartStats / ownedTimelines）
+│       │   └── notifications.ts  # 通知狀態（notifications / unreadCount）
+│       ├── composables/
+│       │   └── useConfirm.ts     # Promise-based 確認對話框（全域單例）
 │       ├── views/                # 頁面元件
 │       │   ├── TimelinesView.vue   # 專案管理（多視圖切換）
 │       │   ├── TasksView.vue       # 任務管理（Modal 表單 + 留言 / 附件）

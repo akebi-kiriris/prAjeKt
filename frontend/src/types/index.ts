@@ -122,9 +122,9 @@ export interface Task {
 
 export interface CreateTaskPayload {
   name: string;
-  start_date?: string;
-  end_date?: string;
-  task_remark?: string;
+  start_date?: string | null;
+  end_date?: string | null;
+  task_remark?: string | null;
   timeline_id?: number;
 }
 

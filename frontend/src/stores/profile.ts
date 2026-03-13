@@ -1,39 +1,62 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
+import type { ChartStats, Task, Timeline } from '../types';
 import { profileService } from '../services/profileService';
 import { taskService } from '../services/taskService';
 import { timelineService } from '../services/timelineService';
 import { groupService } from '../services/groupService';
 
+interface ProfileForm {
+  name: string;
+  username: string;
+  email: string;
+  phone: string;
+}
+
+interface ProfileStats {
+  totalTasks: number;
+  completedTasks: number;
+  totalProjects: number;
+  totalGroups: number;
+}
+
+interface UpdateProfilePayload {
+  name: string;
+  username: string;
+  email: string;
+  phone: string;
+  current_password?: string;
+  new_password?: string;
+}
+
 export const useProfileStore = defineStore('profile', () => {
-  // ────────────── 狀態 ──────────────
-  const profile = ref({
+  const profile = ref<ProfileForm>({
     name: '',
     username: '',
     email: '',
     phone: '',
   });
-  const stats = ref({
+
+  const stats = ref<ProfileStats>({
     totalTasks: 0,
     completedTasks: 0,
     totalProjects: 0,
     totalGroups: 0,
   });
+
   const loading = ref(false);
-  const ownedTimelines = ref([]);   // role=0 的專案
-  const chartStats = ref(null);     // 個人圖表資料
+  const ownedTimelines = ref<Timeline[]>([]);
+  const chartStats = ref<ChartStats | null>(null);
   const chartLoading = ref(false);
 
-  // ────────────── Computed ──────────────
   const statCards = computed(() => [
-    { icon: '📝', label: '我的任務',   value: stats.value.totalTasks },
+    { icon: '📝', label: '我的任務', value: stats.value.totalTasks },
     { icon: '✅', label: '已完成任務', value: stats.value.completedTasks },
-    { icon: '📊', label: '參與專案',   value: stats.value.totalProjects },
-    { icon: '👥', label: '加入群組',   value: stats.value.totalGroups },
+    { icon: '📊', label: '參與專案', value: stats.value.totalProjects },
+    { icon: '👥', label: '加入群組', value: stats.value.totalGroups },
   ]);
 
-  // ────────────── 方法 ──────────────
-  async function fetchProfile() {
+  async function fetchProfile(): Promise<void> {
     loading.value = true;
     try {
       const response = await profileService.getMe();
@@ -51,19 +74,20 @@ export const useProfileStore = defineStore('profile', () => {
     }
   }
 
-  async function updateProfile(data) {
-    const updateData = {
+  async function updateProfile(data: UpdateProfilePayload): Promise<void> {
+    const updateData: Record<string, string> = {
       name: data.name,
       username: data.username,
       email: data.email,
       phone: data.phone,
     };
+
     if (data.new_password) {
-      updateData.current_password = data.current_password;
+      updateData.current_password = data.current_password || '';
       updateData.new_password = data.new_password;
     }
+
     await profileService.update(updateData);
-    // 更新 store 裡的快取
     profile.value = {
       name: data.name,
       username: data.username,
@@ -72,26 +96,31 @@ export const useProfileStore = defineStore('profile', () => {
     };
   }
 
-  async function fetchStats() {
+  async function fetchStats(): Promise<void> {
     try {
       const [tasksRes, timelinesRes, groupsRes] = await Promise.all([
         taskService.getAll(),
         timelineService.getAll(),
         groupService.getAll(),
       ]);
+
+      const taskList = tasksRes.data as Task[];
+      const timelineList = timelinesRes.data as Timeline[];
+
       stats.value = {
-        totalTasks: tasksRes.data.length,
-        completedTasks: tasksRes.data.filter(t => t.completed).length,
-        totalProjects: timelinesRes.data.length,
+        totalTasks: taskList.length,
+        completedTasks: taskList.filter(t => t.completed).length,
+        totalProjects: timelineList.length,
         totalGroups: groupsRes.data.length,
       };
-      ownedTimelines.value = timelinesRes.data.filter(t => t.role === 0);
+
+      ownedTimelines.value = timelineList.filter(t => t.role === 0);
     } catch (error) {
       console.error('取得統計資料失敗:', error);
     }
   }
 
-  async function fetchChartStats() {
+  async function fetchChartStats(): Promise<void> {
     chartLoading.value = true;
     try {
       const res = await profileService.getChartStats();
@@ -104,16 +133,13 @@ export const useProfileStore = defineStore('profile', () => {
   }
 
   return {
-    // 狀態
     profile,
     stats,
     loading,
     ownedTimelines,
     chartStats,
     chartLoading,
-    // Computed
     statCards,
-    // 方法
     fetchProfile,
     updateProfile,
     fetchStats,

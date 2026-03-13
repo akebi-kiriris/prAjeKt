@@ -1,16 +1,17 @@
 import { defineStore } from 'pinia';
 import { ref, nextTick } from 'vue';
+import type { Group, Message } from '../types';
 import { groupService } from '../services/groupService';
 
+type ScrollCallback = () => void;
+
 export const useGroupStore = defineStore('groups', () => {
-  // ────────────── 狀態 ──────────────
-  const groups = ref([]);
-  const currentGroup = ref(null);
-  const messages = ref([]);
+  const groups = ref<Group[]>([]);
+  const currentGroup = ref<Group | null>(null);
+  const messages = ref<Message[]>([]);
   const loading = ref(false);
 
-  // ────────────── 群組操作 ──────────────
-  async function fetchGroups() {
+  async function fetchGroups(): Promise<void> {
     loading.value = true;
     try {
       const response = await groupService.getAll();
@@ -23,18 +24,18 @@ export const useGroupStore = defineStore('groups', () => {
     }
   }
 
-  async function createGroup(name) {
+  async function createGroup(name: string): Promise<Group> {
     const response = await groupService.create(name);
     await fetchGroups();
-    return response.data; // 回傳含 invite_code 的資料
+    return response.data;
   }
 
-  async function joinGroup(inviteCode) {
+  async function joinGroup(inviteCode: string): Promise<void> {
     await groupService.join(inviteCode);
     await fetchGroups();
   }
 
-  async function leaveGroup(groupId) {
+  async function leaveGroup(groupId: number): Promise<void> {
     await groupService.leave(groupId);
     await fetchGroups();
     if (currentGroup.value?.group_id === groupId) {
@@ -43,18 +44,17 @@ export const useGroupStore = defineStore('groups', () => {
     }
   }
 
-  // ────────────── 訊息操作 ──────────────
-  async function openChat(group, scrollCallback) {
+  async function openChat(group: Group, scrollCallback?: ScrollCallback): Promise<void> {
     currentGroup.value = group;
     await fetchMessages(group.group_id, scrollCallback);
   }
 
-  function closeChat() {
+  function closeChat(): void {
     currentGroup.value = null;
     messages.value = [];
   }
 
-  async function fetchMessages(groupId, scrollCallback) {
+  async function fetchMessages(groupId: number, scrollCallback?: ScrollCallback): Promise<void> {
     try {
       const response = await groupService.getMessages(groupId);
       messages.value = response.data;
@@ -67,19 +67,17 @@ export const useGroupStore = defineStore('groups', () => {
     }
   }
 
-  async function sendMessage(content, scrollCallback) {
+  async function sendMessage(content: string, scrollCallback?: ScrollCallback): Promise<void> {
     if (!currentGroup.value) return;
     await groupService.sendMessage(currentGroup.value.group_id, content);
     await fetchMessages(currentGroup.value.group_id, scrollCallback);
   }
 
   return {
-    // 狀態
     groups,
     currentGroup,
     messages,
     loading,
-    // 方法
     fetchGroups,
     createGroup,
     joinGroup,

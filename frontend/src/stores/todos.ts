@@ -1,15 +1,16 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
+import type { Todo, CreateTodoPayload } from '../types';
 import { todoService } from '../services/todoService';
 
 export const useTodoStore = defineStore('todos', () => {
-  const todos = ref([]);
+  const todos = ref<Todo[]>([]);
   const loading = ref(false);
 
   const incompleteTodos = computed(() => todos.value.filter(t => !t.completed));
   const completedTodos = computed(() => todos.value.filter(t => t.completed));
 
-  async function fetchTodos() {
+  async function fetchTodos(): Promise<void> {
     loading.value = true;
     try {
       const res = await todoService.getAll();
@@ -21,22 +22,22 @@ export const useTodoStore = defineStore('todos', () => {
     }
   }
 
-  async function addTodo(data) {
+  async function addTodo(data: CreateTodoPayload): Promise<void> {
     await todoService.create(data);
     await fetchTodos();
   }
 
-  async function updateTodo(id, data) {
+  async function updateTodo(id: number, data: Partial<Todo>): Promise<void> {
     await todoService.update(id, data);
     await fetchTodos();
   }
 
-  async function removeTodo(id) {
+  async function removeTodo(id: number): Promise<void> {
     await todoService.remove(id);
     await fetchTodos();
   }
 
-  async function toggleTodo(id) {
+  async function toggleTodo(id: number): Promise<void> {
     await todoService.toggleComplete(id);
     await fetchTodos();
   }

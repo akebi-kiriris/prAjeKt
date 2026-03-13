@@ -3,7 +3,7 @@ import type { AxiosResponse } from 'axios';
 import type { Notification } from '../types';
 
 interface UnreadCountResponse {
-  unread_count: number;
+  count: number;
 }
 
 export const notificationService = {

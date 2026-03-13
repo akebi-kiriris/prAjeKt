@@ -1,28 +1,27 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
+import type { Timeline, Task, DaysRemainingResult, CreateTimelinePayload } from '../types';
 import { timelineService } from '../services/timelineService';
 import { taskService } from '../services/taskService';
 
 export const useTimelineStore = defineStore('timelines', () => {
-  // ────────────── 狀態 ──────────────
-  const timelines = ref([]);
-  const allTasks = ref([]);
+  const timelines = ref<Timeline[]>([]);
+  const allTasks = ref<Task[]>([]);
   const loading = ref(false);
 
-  // ────────────── Computed ──────────────
   const urgentCount = computed(() =>
     timelines.value.filter(t => {
       const days = getDaysRemaining(t.endDate).days;
       return days !== null && days >= 0 && days <= 7;
-    }).length
+    }).length,
   );
 
   const totalCompletedTasks = computed(() =>
-    timelines.value.reduce((sum, t) => sum + (t.completedTasks || 0), 0)
+    timelines.value.reduce((sum, t) => sum + (t.completedTasks || 0), 0),
   );
 
   const totalTasks = computed(() =>
-    timelines.value.reduce((sum, t) => sum + (t.totalTasks || 0), 0)
+    timelines.value.reduce((sum, t) => sum + (t.totalTasks || 0), 0),
   );
 
   const sortedTimelines = computed(() =>
@@ -30,26 +29,39 @@ export const useTimelineStore = defineStore('timelines', () => {
       if (!a.endDate && !b.endDate) return 0;
       if (!a.endDate) return 1;
       if (!b.endDate) return -1;
-      return new Date(a.endDate) - new Date(b.endDate);
-    })
+      return new Date(a.endDate).getTime() - new Date(b.endDate).getTime();
+    }),
   );
 
-  // ────────────── 工具函式 ──────────────
-  function getDaysRemaining(endDate) {
-    if (!endDate) return { days: null, text: '未設定', display: '未設定', colorClass: 'text-gray-400' };
-    const today = new Date(); today.setHours(0, 0, 0, 0);
-    const end = new Date(endDate); end.setHours(0, 0, 0, 0);
-    const diffDays = Math.ceil((end - today) / (1000 * 60 * 60 * 24));
-    if (diffDays < 0)  return { days: diffDays, text: `已過期 ${Math.abs(diffDays)} 天`, display: `過期 ${Math.abs(diffDays)} 天`, colorClass: 'text-red-500' };
-    if (diffDays === 0) return { days: 0, text: '今天到期', display: '今天到期', colorClass: 'text-red-500' };
-    if (diffDays <= 3) return { days: diffDays, text: `剩 ${diffDays} 天`, display: `剩 ${diffDays} 天`, colorClass: 'text-orange-500' };
-    if (diffDays <= 7) return { days: diffDays, text: `剩 ${diffDays} 天`, display: `剩 ${diffDays} 天`, colorClass: 'text-yellow-600' };
-    if (diffDays <= 30) return { days: diffDays, text: `剩 ${diffDays} 天`, display: `剩 ${diffDays} 天`, colorClass: 'text-blue-500' };
+  function getDaysRemaining(endDate: string | null | undefined): DaysRemainingResult {
+    if (!endDate) {
+      return { days: null, text: '未設定', display: '未設定', colorClass: 'text-gray-400' };
+    }
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const end = new Date(endDate);
+    end.setHours(0, 0, 0, 0);
+    const diffDays = Math.ceil((end.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+
+    if (diffDays < 0) {
+      return { days: diffDays, text: `已過期 ${Math.abs(diffDays)} 天`, display: `過期 ${Math.abs(diffDays)} 天`, colorClass: 'text-red-500' };
+    }
+    if (diffDays === 0) {
+      return { days: 0, text: '今天到期', display: '今天到期', colorClass: 'text-red-500' };
+    }
+    if (diffDays <= 3) {
+      return { days: diffDays, text: `剩 ${diffDays} 天`, display: `剩 ${diffDays} 天`, colorClass: 'text-orange-500' };
+    }
+    if (diffDays <= 7) {
+      return { days: diffDays, text: `剩 ${diffDays} 天`, display: `剩 ${diffDays} 天`, colorClass: 'text-yellow-600' };
+    }
+    if (diffDays <= 30) {
+      return { days: diffDays, text: `剩 ${diffDays} 天`, display: `剩 ${diffDays} 天`, colorClass: 'text-blue-500' };
+    }
     return { days: diffDays, text: `剩 ${diffDays} 天`, display: `剩 ${diffDays} 天`, colorClass: 'text-green-500' };
   }
 
-  // ────────────── 資料取得 ──────────────
-  async function fetchTimelines() {
+  async function fetchTimelines(): Promise<void> {
     loading.value = true;
     try {
       const response = await timelineService.getAll();
@@ -62,7 +74,7 @@ export const useTimelineStore = defineStore('timelines', () => {
     }
   }
 
-  async function fetchAllTasks() {
+  async function fetchAllTasks(): Promise<void> {
     try {
       const response = await taskService.getAll();
       allTasks.value = response.data;
@@ -71,12 +83,11 @@ export const useTimelineStore = defineStore('timelines', () => {
     }
   }
 
-  async function fetchAll() {
+  async function fetchAll(): Promise<void> {
     await Promise.all([fetchTimelines(), fetchAllTasks()]);
   }
 
-  // ────────────── 專案 CRUD ──────────────
-  async function addTimeline(data) {
+  async function addTimeline(data: CreateTimelinePayload): Promise<void> {
     const formData = {
       name: data.name.trim(),
       start_date: data.start_date ? new Date(data.start_date).toISOString().split('T')[0] : '',
@@ -87,7 +98,7 @@ export const useTimelineStore = defineStore('timelines', () => {
     await fetchTimelines();
   }
 
-  async function updateTimeline(id, data) {
+  async function updateTimeline(id: number, data: CreateTimelinePayload): Promise<void> {
     const formData = {
       name: data.name.trim(),
       start_date: data.start_date ? new Date(data.start_date).toISOString().split('T')[0] : '',
@@ -98,41 +109,36 @@ export const useTimelineStore = defineStore('timelines', () => {
     await fetchTimelines();
   }
 
-  async function removeTimeline(id) {
+  async function removeTimeline(id: number): Promise<void> {
     await timelineService.remove(id);
     await fetchTimelines();
   }
 
-  // ────────────── 任務操作 ──────────────
-  async function getTimelineTasks(timelineId) {
+  async function getTimelineTasks(timelineId: number): Promise<Task[]> {
     const response = await timelineService.getTasks(timelineId);
     return response.data;
   }
 
-  async function toggleTask(taskId) {
+  async function toggleTask(taskId: number): Promise<void> {
     await taskService.toggle(taskId);
     await fetchTimelines();
     await fetchAllTasks();
   }
 
-  async function removeTask(taskId) {
+  async function removeTask(taskId: number): Promise<void> {
     await taskService.remove(taskId);
     await fetchTimelines();
   }
 
   return {
-    // 狀態
     timelines,
     allTasks,
     loading,
-    // Computed
     urgentCount,
     totalCompletedTasks,
     totalTasks,
     sortedTimelines,
-    // 工具
     getDaysRemaining,
-    // 方法
     fetchTimelines,
     fetchAllTasks,
     fetchAll,
