@@ -30,6 +30,39 @@ def create_notification(user_id, ntype, title, content=None, link=None):
 
 tasks_bp = Blueprint('tasks', __name__)
 
+TASK_CREATE_ALLOWED_FIELDS = {
+    'name',
+    'timeline_id',
+    'priority',
+    'status',
+    'tags',
+    'estimated_hours',
+    'start_date',
+    'end_date',
+    'task_remark',
+    'isWork',
+}
+
+TASK_UPDATE_ALLOWED_FIELDS = {
+    'name',
+    'timeline_id',
+    'priority',
+    'status',
+    'tags',
+    'estimated_hours',
+    'actual_hours',
+    'start_date',
+    'end_date',
+    'task_remark',
+    'isWork',
+}
+
+TASK_STATUS_VALUES = {'pending', 'in_progress', 'review', 'completed', 'cancelled'}
+
+
+def _find_unknown_fields(payload, allowed_fields):
+    return sorted(set(payload.keys()) - allowed_fields)
+
 
 def get_user_task_role(user_id, task_id):
     """查詢使用者在某任務的角色。
@@ -144,21 +177,50 @@ def get_tasks():
 def create_task():
     """新增任務"""
     user_id = int(get_jwt_identity())
-    data = request.get_json()
+    data = request.get_json() or {}
+
+    if not isinstance(data, dict):
+        return jsonify({'error': '請提供正確的 JSON 物件'}), 400
+
+    unknown_fields = _find_unknown_fields(data, TASK_CREATE_ALLOWED_FIELDS)
+    if unknown_fields:
+        return jsonify({'error': f'不允許的欄位: {", ".join(unknown_fields)}'}), 400
     
     if not data.get('name') or not data.get('end_date'):
         return jsonify({'error': '請提供標題和截止日期'}), 400
+
+    status = data.get('status', 'pending')
+    if status not in TASK_STATUS_VALUES:
+        return jsonify({'error': 'status 欄位值不合法'}), 400
+
+    try:
+        priority = int(data.get('priority', 2))
+    except (TypeError, ValueError):
+        return jsonify({'error': 'priority 必須是數字'}), 400
+
+    if priority < 1 or priority > 3:
+        return jsonify({'error': 'priority 必須介於 1 到 3'}), 400
+
+    try:
+        start_date = datetime.fromisoformat(data['start_date']) if data.get('start_date') else None
+    except ValueError:
+        return jsonify({'error': 'start_date 格式錯誤'}), 400
+
+    try:
+        end_date = datetime.fromisoformat(data['end_date'])
+    except (TypeError, ValueError):
+        return jsonify({'error': 'end_date 格式錯誤'}), 400
 
     new_task = Task(
         user_id=user_id,
         name=data['name'],
         timeline_id=data.get('timeline_id'),
-        priority=data.get('priority', 2),
-        status=data.get('status', 'pending'),
+        priority=priority,
+        status=status,
         tags=data.get('tags'),
         estimated_hours=data.get('estimated_hours'),
-        start_date=datetime.fromisoformat(data['start_date']) if data.get('start_date') else None,
-        end_date=datetime.fromisoformat(data['end_date']),
+        start_date=start_date,
+        end_date=end_date,
         task_remark=data.get('task_remark'),
         isWork=data.get('isWork', 0)
     )
@@ -174,17 +236,6 @@ def create_task():
             role=0  # 負責人
         )
         db.session.add(task_owner)
-        
-        # 如果有指定成員，加入他們
-        if data.get('members'):
-            for member in data['members']:
-                if member.get('user_id') != user_id:  # 不重複加入建立者
-                    task_member = TaskUser(
-                        task_id=new_task.task_id,
-                        user_id=member['user_id'],
-                        role=member.get('role', 1)  # 默認為協作者
-                    )
-                    db.session.add(task_member)
         
         db.session.commit()
         return jsonify({'message': '任務新增成功', 'task_id': new_task.task_id}), 201
@@ -202,22 +253,70 @@ def update_task(task_id):
     if not task:
         return jsonify({'error': '找不到該任務'}), 404
     
-    data = request.get_json()
+    data = request.get_json() or {}
+
+    if not isinstance(data, dict):
+        return jsonify({'error': '請提供正確的 JSON 物件'}), 400
+
+    unknown_fields = _find_unknown_fields(data, TASK_UPDATE_ALLOWED_FIELDS)
+    if unknown_fields:
+        return jsonify({'error': f'不允許的欄位: {", ".join(unknown_fields)}'}), 400
+
+    if 'status' in data and data['status'] not in TASK_STATUS_VALUES:
+        return jsonify({'error': 'status 欄位值不合法'}), 400
+
+    if 'priority' in data:
+        try:
+            priority = int(data['priority'])
+        except (TypeError, ValueError):
+            return jsonify({'error': 'priority 必須是數字'}), 400
+        if priority < 1 or priority > 3:
+            return jsonify({'error': 'priority 必須介於 1 到 3'}), 400
+        task.priority = priority
     
-    task.name = data.get('name', task.name)
-    task.timeline_id = data.get('timeline_id', task.timeline_id)
-    task.priority = data.get('priority', task.priority)
-    task.status = data.get('status', task.status)
-    task.tags = data.get('tags', task.tags)
-    task.estimated_hours = data.get('estimated_hours', task.estimated_hours)
-    task.actual_hours = data.get('actual_hours', task.actual_hours)
-    task.task_remark = data.get('task_remark', task.task_remark)
-    task.isWork = data.get('isWork', task.isWork)
+    if 'name' in data:
+        if not data['name'] or not str(data['name']).strip():
+            return jsonify({'error': 'name 不可為空'}), 400
+        task.name = str(data['name']).strip()
+
+    if 'timeline_id' in data:
+        task.timeline_id = data['timeline_id']
+
+    if 'status' in data:
+        task.status = data['status']
+
+    if 'tags' in data:
+        task.tags = data['tags']
+
+    if 'estimated_hours' in data:
+        task.estimated_hours = data['estimated_hours']
+
+    if 'actual_hours' in data:
+        task.actual_hours = data['actual_hours']
+
+    if 'task_remark' in data:
+        task.task_remark = data['task_remark']
+
+    if 'isWork' in data:
+        task.isWork = data['isWork']
     
-    if data.get('start_date'):
-        task.start_date = datetime.fromisoformat(data['start_date'])
-    if data.get('end_date'):
-        task.end_date = datetime.fromisoformat(data['end_date'])
+    if 'start_date' in data:
+        if data['start_date']:
+            try:
+                task.start_date = datetime.fromisoformat(data['start_date'])
+            except ValueError:
+                return jsonify({'error': 'start_date 格式錯誤'}), 400
+        else:
+            task.start_date = None
+
+    if 'end_date' in data:
+        if data['end_date']:
+            try:
+                task.end_date = datetime.fromisoformat(data['end_date'])
+            except ValueError:
+                return jsonify({'error': 'end_date 格式錯誤'}), 400
+        else:
+            task.end_date = None
     
     try:
         db.session.commit()

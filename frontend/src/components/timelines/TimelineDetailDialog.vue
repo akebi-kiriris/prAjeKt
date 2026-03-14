@@ -452,55 +452,78 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, computed, watch } from 'vue';
+import { isAxiosError } from 'axios';
 import { toast } from 'vue-sonner';
 import { taskService } from '../../services/taskService';
 import { timelineService } from '../../services/timelineService';
 import { formatDate, formatDateTime, formatFileSize, isImageFile, getFileIcon } from '../../utils/formatters';
 import { useConfirm } from '../../composables/useConfirm';
+import { mapToCreateTaskPayload } from '../../utils/payloadMappers';
+import type {
+  TimelineDetailDialogProps,
+  Task,
+  TaskComment,
+  TaskFile,
+  Subtask,
+  TaskMember,
+  SearchUserResult,
+  AiGeneratedTask,
+  CreateTaskPayload,
+  ApiErrorPayload,
+  GenerateTasksResponse,
+} from '../../types';
 
 const { confirm } = useConfirm();
 
-const props = defineProps({
-  selectedTimeline: Object,
-  timelineTasks: Array,
-  apiBaseUrl: String,
-});
+const props = defineProps<TimelineDetailDialogProps>();
 
-const emit = defineEmits(['close', 'toggle-task', 'delete-task', 'refresh-all']);
+const getApiErrorMessage = (error: unknown, fallback: string) => {
+  if (isAxiosError<ApiErrorPayload>(error)) {
+    return error.response?.data?.error || fallback;
+  }
+  return fallback;
+};
+
+const emit = defineEmits<{
+  (e: 'close'): void;
+  (e: 'toggle-task', taskId: number): void;
+  (e: 'delete-task', taskId: number): void;
+  (e: 'refresh-all'): void;
+}>();
 
 // 本元件管理的狀態
 const showAddTaskModal = ref(false);
 const isSharePanelOpen = ref(false);
 const showTaskDetail = ref(false);
-const selectedTask = ref(null);
-const taskComments = ref([]);
-const taskFiles = ref([]);
-const taskSubtasks = ref([]);
+const selectedTask = ref<Task | null>(null);
+const taskComments = ref<TaskComment[]>([]);
+const taskFiles = ref<TaskFile[]>([]);
+const taskSubtasks = ref<Subtask[]>([]);
 const newSubtaskName = ref('');
-const fileInput = ref(null);
+const fileInput = ref<HTMLInputElement | null>(null);
 
 const subtaskProgress = computed(() => {
   if (!taskSubtasks.value.length) return 0;
   return Math.round(taskSubtasks.value.filter(s => s.completed).length / taskSubtasks.value.length * 100);
 });
 const showAiGenerateModal = ref(false);
-const aiGeneratedTasks = ref([]);
-const selectedAiTasks = ref([]);
+const aiGeneratedTasks = ref<AiGeneratedTask[]>([]);
+const selectedAiTasks = ref<number[]>([]);
 const isGeneratingAi = ref(false);
 const isEditingRemark = ref(false);
 const localRemark = ref('');
 const newComment = ref('');
 const inputEmail = ref('');
-const searchResult = ref(null);
+const searchResult = ref<SearchUserResult | null>(null);
 const searchError = ref('');
-const timelineMembers = ref([]);
+const timelineMembers = ref<TaskMember[]>([]);
 const isTaskMemberPanelOpen = ref(false);
-const assignTask = ref(null);
-const taskMembersForAssign = ref([]);
+const assignTask = ref<Task | null>(null);
+const taskMembersForAssign = ref<TaskMember[]>([]);
 
-const taskForm = ref({ name: '', start_date: '', end_date: '', priority: 2, tags: '', task_remark: '' });
+const taskForm = ref<CreateTaskPayload>({ name: '', start_date: '', end_date: '', priority: 2, tags: '', task_remark: '' });
 
 // 每次開啟新的 selectedTimeline 時重置 remark 狀態
 watch(() => props.selectedTimeline, (val) => {
@@ -521,6 +544,7 @@ const startEditRemark = () => {
 };
 
 const saveRemark = async () => {
+  if (!props.selectedTimeline) return;
   try {
     await timelineService.updateRemark(props.selectedTimeline.id, localRemark.value);
     props.selectedTimeline.remark = localRemark.value;
@@ -533,7 +557,10 @@ const saveRemark = async () => {
 const handleAddTask = async () => {
   if (!props.selectedTimeline) return;
   try {
-    const data = { ...taskForm.value, timeline_id: props.selectedTimeline.id };
+    const data = mapToCreateTaskPayload({
+      ...taskForm.value,
+      timeline_id: props.selectedTimeline.id,
+    });
     await taskService.create(data);
     showAddTaskModal.value = false;
     resetTaskForm();
@@ -541,7 +568,7 @@ const handleAddTask = async () => {
   } catch { toast.error('新增任務失敗'); }
 };
 
-const openTaskDetail = async (task) => {
+const openTaskDetail = async (task: Task) => {
   selectedTask.value = { ...task };
   assignTask.value = { ...task };
   taskComments.value = [];
@@ -577,7 +604,8 @@ const addSubtask = async () => {
   } catch { toast.error('新增子任務失敗'); }
 };
 
-const toggleSubtask = async (subtask) => {
+const toggleSubtask = async (subtask: Subtask) => {
+  if (!selectedTask.value) return;
   try {
     await taskService.toggleSubtask(selectedTask.value.task_id, subtask.id);
     const res = await taskService.getSubtasks(selectedTask.value.task_id);
@@ -585,7 +613,8 @@ const toggleSubtask = async (subtask) => {
   } catch { toast.error('更新子任務狀態失敗'); }
 };
 
-const deleteSubtask = async (subtask) => {
+const deleteSubtask = async (subtask: Subtask) => {
+  if (!selectedTask.value) return;
   if (!await confirm({ title: '確定要刪除此子任務？', danger: true })) return;
   try {
     await taskService.deleteSubtask(selectedTask.value.task_id, subtask.id);
@@ -603,7 +632,8 @@ const addComment = async () => {
   } catch { toast.error('新增留言失敗'); }
 };
 
-const deleteComment = async (commentId) => {
+const deleteComment = async (commentId: number) => {
+  if (!selectedTask.value) return;
   if (!await confirm({ title: '確定要刪除此留言？', danger: true })) return;
   try {
     await taskService.deleteComment(selectedTask.value.task_id, commentId);
@@ -611,8 +641,9 @@ const deleteComment = async (commentId) => {
   } catch { toast.error('刪除留言失敗'); }
 };
 
-const handleFileUpload = async (event) => {
-  const file = event.target.files?.[0];
+const handleFileUpload = async (event: Event) => {
+  const target = event.target as HTMLInputElement | null;
+  const file = target?.files?.[0];
   if (!file || !selectedTask.value) return;
   if (file.size > 10 * 1024 * 1024) { toast.warning('檔案大小不可超過 10MB'); return; }
   const formData = new FormData();
@@ -621,14 +652,15 @@ const handleFileUpload = async (event) => {
     await taskService.uploadFile(selectedTask.value.task_id, formData);
     const res = await taskService.getFiles(selectedTask.value.task_id);
     taskFiles.value = res.data || [];
-  } catch (err) {
-    toast.error(err.response?.data?.error || '上傳失敗');
+  } catch (err: unknown) {
+    toast.error(getApiErrorMessage(err, '上傳失敗'));
   } finally {
     if (fileInput.value) fileInput.value.value = '';
   }
 };
 
-const deleteFile = async (fileId) => {
+const deleteFile = async (fileId: number) => {
+  if (!selectedTask.value) return;
   if (!await confirm({ title: '確定要刪除此附件？', danger: true })) return;
   try {
     await taskService.deleteFile(selectedTask.value.task_id, fileId);
@@ -637,12 +669,12 @@ const deleteFile = async (fileId) => {
 };
 
 // ────────────── 任務成員指派 ──────────────
-const openTaskMemberPanel = async (task) => {
+const openTaskMemberPanel = async (task: Task) => {
   assignTask.value = task;
   isTaskMemberPanelOpen.value = true;
 };
 
-watch(isTaskMemberPanelOpen, async (val) => {
+watch(isTaskMemberPanelOpen, async (val: boolean) => {
   if (val && assignTask.value) {
     await loadTaskMembersForAssign();
     if (timelineMembers.value.length === 0) await loadMembers();
@@ -652,29 +684,32 @@ watch(isTaskMemberPanelOpen, async (val) => {
 });
 
 const loadTaskMembersForAssign = async () => {
+  if (!assignTask.value) return;
   try {
     const res = await taskService.getMembers(assignTask.value.task_id);
     taskMembersForAssign.value = res.data || [];
   } catch { taskMembersForAssign.value = []; }
 };
 
-const quickAssignTaskMember = async (member) => {
+const quickAssignTaskMember = async (member: TaskMember) => {
+  if (!assignTask.value) return;
   try {
     await taskService.addMember(assignTask.value.task_id, member.user_id);
     await loadTaskMembersForAssign();
     toast.success(`已指派 ${member.username || member.name}`);
-  } catch (err) {
-    toast.error(err.response?.data?.error || '指派失敗');
+  } catch (err: unknown) {
+    toast.error(getApiErrorMessage(err, '指派失敗'));
   }
 };
 
-const kickAssignedMember = async (member) => {
+const kickAssignedMember = async (member: TaskMember) => {
+  if (!assignTask.value) return;
   if (!await confirm({ title: `確定要將「${member.name}」從此任務移除？`, danger: true })) return;
   try {
     await taskService.removeMember(assignTask.value.task_id, member.user_id);
     await loadTaskMembersForAssign();
-  } catch (err) {
-    toast.error(err.response?.data?.error || '移除失敗');
+  } catch (err: unknown) {
+    toast.error(getApiErrorMessage(err, '移除失敗'));
   }
 };
 
@@ -687,7 +722,7 @@ const loadMembers = async () => {
   } catch { timelineMembers.value = []; }
 };
 
-watch(isSharePanelOpen, (val) => {
+watch(isSharePanelOpen, (val: boolean) => {
   if (val) loadMembers();
   else { inputEmail.value = ''; searchResult.value = null; searchError.value = ''; }
 });
@@ -698,8 +733,8 @@ const searchUser = async () => {
   try {
     const res = await timelineService.searchUser(inputEmail.value);
     searchResult.value = res.data;
-  } catch (err) {
-    searchError.value = err.response?.data?.error || '找不到用戶';
+  } catch (err: unknown) {
+    searchError.value = getApiErrorMessage(err, '找不到用戶');
   }
 };
 
@@ -710,18 +745,19 @@ const confirmShare = async () => {
     inputEmail.value = ''; searchResult.value = null;
     await loadMembers();
     toast.success('邀請成功！');
-  } catch (err) {
-    toast.error(err.response?.data?.error || '邀請失敗');
+  } catch (err: unknown) {
+    toast.error(getApiErrorMessage(err, '邀請失敗'));
   }
 };
 
-const kickMember = async (member) => {
+const kickMember = async (member: TaskMember) => {
+  if (!props.selectedTimeline) return;
   if (!await confirm({ title: `確定要將「${member.username || member.name}」移出此專案？`, danger: true })) return;
   try {
     await timelineService.removeMember(props.selectedTimeline.id, member.user_id);
     await loadMembers();
-  } catch (err) {
-    toast.error(err.response?.data?.error || '移除成員失敗');
+  } catch (err: unknown) {
+    toast.error(getApiErrorMessage(err, '移除成員失敗'));
   }
 };
 
@@ -731,13 +767,18 @@ const generateTasksWithAi = async () => {
   isGeneratingAi.value = true;
   try {
     const res = await timelineService.generateTasks(props.selectedTimeline.id);
-    aiGeneratedTasks.value = res.data.tasks || [];
+    const payload: GenerateTasksResponse = res.data;
+    if (Array.isArray(payload)) {
+      aiGeneratedTasks.value = payload;
+    } else {
+      aiGeneratedTasks.value = payload.tasks || [];
+    }
     selectedAiTasks.value = aiGeneratedTasks.value.map((_, i) => i);
-  } catch (err) { toast.error(err.response?.data?.error || 'AI 生成失敗，請稍後再試'); }
+  } catch (err: unknown) { toast.error(getApiErrorMessage(err, 'AI 生成失敗，請稍後再試')); }
   finally { isGeneratingAi.value = false; }
 };
 
-const toggleAiTaskSelection = (index) => {
+const toggleAiTaskSelection = (index: number) => {
   const pos = selectedAiTasks.value.indexOf(index);
   if (pos === -1) selectedAiTasks.value.push(index);
   else selectedAiTasks.value.splice(pos, 1);
@@ -750,16 +791,28 @@ const toggleAllAiTasks = () => {
 
 const batchCreateAiTasks = async () => {
   if (!props.selectedTimeline || selectedAiTasks.value.length === 0) return;
-  const tasksToCreate = selectedAiTasks.value.map(i => ({ ...aiGeneratedTasks.value[i], timeline_id: props.selectedTimeline.id }));
+  const timelineId = props.selectedTimeline.id;
+  const tasksToCreate: CreateTaskPayload[] = selectedAiTasks.value
+    .map(i => aiGeneratedTasks.value[i])
+    .filter((task): task is AiGeneratedTask => Boolean(task))
+    .map(task => mapToCreateTaskPayload({
+      name: task.name,
+      start_date: task.start_date ?? null,
+      end_date: task.end_date ?? null,
+      priority: task.priority,
+      tags: task.tags ?? null,
+      task_remark: task.task_remark ?? task.remark ?? null,
+      timeline_id: timelineId,
+    }));
   try {
-    await timelineService.batchCreateTasks(props.selectedTimeline.id, tasksToCreate);
+    await timelineService.batchCreateTasks(timelineId, tasksToCreate);
     showAiGenerateModal.value = false;
     aiGeneratedTasks.value = []; selectedAiTasks.value = [];
     emit('refresh-all');
-  } catch (err) { toast.error(err.response?.data?.error || '批量新增失敗'); }
+  } catch (err: unknown) { toast.error(getApiErrorMessage(err, '批量新增失敗')); }
 };
 
-const downloadFile = async (url, originalFilename) => {
+const downloadFile = async (url: string, originalFilename: string) => {
   try {
     const res = await fetch(url);
     if (!res.ok) throw new Error('下載失敗');
@@ -777,15 +830,15 @@ const downloadFile = async (url, originalFilename) => {
   }
 };
 
-const getPriorityLabel = (priority) => ({ 1: '🔴 高', 2: '🟡 中', 3: '🟢 低' }[priority] || '🟡 中');
+const getPriorityLabel = (priority: number) => ({ 1: '🔴 高', 2: '🟡 中', 3: '🟢 低' }[priority] || '🟡 中');
 
-const getPriorityBadgeClass = (priority) => ({
+const getPriorityBadgeClass = (priority: number) => ({
   1: 'bg-gradient-to-r from-red-100 to-rose-100 text-red-700 border border-red-200',
   2: 'bg-gradient-to-r from-yellow-100 to-amber-100 text-yellow-700 border border-yellow-200',
   3: 'bg-gradient-to-r from-green-100 to-emerald-100 text-green-700 border border-green-200'
 }[priority] || 'bg-gray-100 text-gray-700 border border-gray-200');
 
-const getAiPriorityClass = (priority) => ({
+const getAiPriorityClass = (priority: number) => ({
   1: 'bg-red-100 text-red-700', 2: 'bg-yellow-100 text-yellow-700', 3: 'bg-green-100 text-green-700'
 }[priority] || 'bg-gray-100 text-gray-700');
 </script>

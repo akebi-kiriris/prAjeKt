@@ -91,18 +91,21 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, onMounted } from 'vue';
+import type { AxiosError } from 'axios';
 import { toast } from 'vue-sonner';
 import { trashService } from '../services/trashService';
+import type { TrashTask, TrashTimeline } from '../types';
 import { formatDateTimeCompact as formatDate, formatDateShort } from '../utils/formatters';
 import { useConfirm } from '../composables/useConfirm';
+import type { TrashErrorPayload } from '../types';
 
 const { confirm } = useConfirm();
 
 const loading = ref(true);
-const tasks = ref([]);
-const timelines = ref([]);
+const tasks = ref<TrashTask[]>([]);
+const timelines = ref<TrashTimeline[]>([]);
 
 const loadTrash = async () => {
   loading.value = true;
@@ -110,23 +113,24 @@ const loadTrash = async () => {
     const res = await trashService.getAll();
     tasks.value = res.data.tasks || [];
     timelines.value = res.data.timelines || [];
-  } catch (err) {
+  } catch {
     toast.error('無法載入垃圾桶內容');
   } finally {
     loading.value = false;
   }
 };
 
-const restoreTask = async (task) => {
+const restoreTask = async (task: TrashTask) => {
   try {
     await trashService.restoreTask(task.task_id);
     tasks.value = tasks.value.filter(t => t.task_id !== task.task_id);
   } catch (err) {
-    toast.error(err.response?.data?.error || '還原失敗');
+    const message = (err as AxiosError<TrashErrorPayload>).response?.data?.error;
+    toast.error(message || '還原失敗');
   }
 };
 
-const permanentDeleteTask = async (task) => {
+const permanentDeleteTask = async (task: TrashTask) => {
   if (!await confirm({
     title: `確定要永久刪除「${task.name}」？`,
     message: '此操作無法復原，所有附件也會一並刪除。',
@@ -136,20 +140,22 @@ const permanentDeleteTask = async (task) => {
     await trashService.permanentDeleteTask(task.task_id);
     tasks.value = tasks.value.filter(t => t.task_id !== task.task_id);
   } catch (err) {
-    toast.error(err.response?.data?.error || '永久刪除失敗');
+    const message = (err as AxiosError<TrashErrorPayload>).response?.data?.error;
+    toast.error(message || '永久刪除失敗');
   }
 };
 
-const restoreTimeline = async (tl) => {
+const restoreTimeline = async (tl: TrashTimeline) => {
   try {
     await trashService.restoreTimeline(tl.id);
     timelines.value = timelines.value.filter(t => t.id !== tl.id);
   } catch (err) {
-    toast.error(err.response?.data?.error || '還原失敗');
+    const message = (err as AxiosError<TrashErrorPayload>).response?.data?.error;
+    toast.error(message || '還原失敗');
   }
 };
 
-const permanentDeleteTimeline = async (tl) => {
+const permanentDeleteTimeline = async (tl: TrashTimeline) => {
   if (!await confirm({
     title: `確定要永久刪除專案「${tl.name}」？`,
     message: '此操作無法復原，專案內所有任務與附件也會一並刪除。',
@@ -160,16 +166,19 @@ const permanentDeleteTimeline = async (tl) => {
     // 重新 call API：cascade 同時刪除了底下所有任務，前端無法自行推算哪些要移除
     await loadTrash();
   } catch (err) {
-    toast.error(err.response?.data?.error || '永久刪除失敗');
+    const message = (err as AxiosError<TrashErrorPayload>).response?.data?.error;
+    toast.error(message || '永久刪除失敗');
   }
 };
 
-const priorityLabel = (p) => ({ 1: '🔴 高', 2: '🟡 中', 3: '🟢 低' }[p] || '🟡 中');
-const priorityBadge = (p) => ({
+const priorityLabel = (p: number) => ({ 1: '🔴 高', 2: '🟡 中', 3: '🟢 低' }[p] || '🟡 中');
+const priorityBadge = (p: number) => ({
   1: 'bg-red-100 text-red-700',
   2: 'bg-yellow-100 text-yellow-700',
   3: 'bg-green-100 text-green-700',
 }[p] || 'bg-gray-100 text-gray-600');
 
-onMounted(loadTrash);
+onMounted(() => {
+  void loadTrash();
+});
 </script>

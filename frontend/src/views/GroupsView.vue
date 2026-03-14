@@ -195,20 +195,31 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, onMounted } from 'vue';
+import type { AxiosError } from 'axios';
+import type { Ref } from 'vue';
 import { toast } from 'vue-sonner';
 import { storeToRefs } from 'pinia';
 import { useGroupStore } from '../stores/groups';
 import { formatDate, formatDateTime } from '../utils/formatters';
 import { useConfirm } from '../composables/useConfirm';
+import type { Group, Message, GroupCreateResponse, GroupErrorPayload } from '../types';
 
 const { confirm } = useConfirm();
 
 const groupStore = useGroupStore();
 
 // ────────────── Store 狀態（響應式解構）──────────────
-const { groups, currentGroup, messages } = storeToRefs(groupStore);
+const {
+  groups: storeGroups,
+  currentGroup: storeCurrentGroup,
+  messages: storeMessages,
+} = storeToRefs(groupStore);
+
+const groups = storeGroups as unknown as Ref<Group[]>;
+const currentGroup = storeCurrentGroup as unknown as Ref<Group | null>;
+const messages = storeMessages as unknown as Ref<Message[]>;
 
 // ────────────── View-local UI 狀態 ──────────────
 const newMessage = ref('');
@@ -216,7 +227,7 @@ const newGroupName = ref('');
 const inviteCode = ref('');
 const showCreateGroup = ref(false);
 const showJoinGroup = ref(false);
-const messagesContainer = ref(null);
+const messagesContainer = ref<HTMLDivElement | null>(null);
 
 const scrollToBottom = () => {
   if (messagesContainer.value) {
@@ -230,12 +241,13 @@ const handleCreateGroup = async () => {
     return;
   }
   try {
-    const data = await groupStore.createGroup(newGroupName.value);
+    const data = await groupStore.createGroup(newGroupName.value) as unknown as GroupCreateResponse;
     toast.success(`群組建立成功！邀請碼: ${data.invite_code}`);
     showCreateGroup.value = false;
     newGroupName.value = '';
   } catch (error) {
-    toast.error(error.response?.data?.error || '建立群組失敗');
+    const message = (error as AxiosError<GroupErrorPayload>).response?.data?.error;
+    toast.error(message || '建立群組失敗');
   }
 };
 
@@ -250,12 +262,14 @@ const handleJoinGroup = async () => {
     showJoinGroup.value = false;
     inviteCode.value = '';
   } catch (error) {
-    toast.error(error.response?.data?.error || '加入群組失敗');
+    const message = (error as AxiosError<GroupErrorPayload>).response?.data?.error;
+    toast.error(message || '加入群組失敗');
   }
 };
 
-const openChat = async (group) => {
-  await groupStore.openChat(group, scrollToBottom);
+const openChat = async (group: Group) => {
+  const storeGroup = group as unknown as Parameters<typeof groupStore.openChat>[0];
+  await groupStore.openChat(storeGroup, scrollToBottom);
 };
 
 const sendMessage = async () => {
@@ -264,21 +278,23 @@ const sendMessage = async () => {
     await groupStore.sendMessage(newMessage.value, scrollToBottom);
     newMessage.value = '';
   } catch (error) {
-    toast.error(error.response?.data?.error || '發送訊息失敗');
+    const message = (error as AxiosError<GroupErrorPayload>).response?.data?.error;
+    toast.error(message || '發送訊息失敗');
   }
 };
 
-const leaveGroup = async (groupId) => {
+const leaveGroup = async (groupId: number) => {
   if (!await confirm({ title: '確定要離開此群組？', danger: true })) return;
   try {
     await groupStore.leaveGroup(groupId);
     toast.success('已離開群組');
   } catch (error) {
-    toast.error(error.response?.data?.error || '離開群組失敗');
+    const message = (error as AxiosError<GroupErrorPayload>).response?.data?.error;
+    toast.error(message || '離開群組失敗');
   }
 };
 
 onMounted(() => {
-  groupStore.fetchGroups();
+  void groupStore.fetchGroups();
 });
 </script>

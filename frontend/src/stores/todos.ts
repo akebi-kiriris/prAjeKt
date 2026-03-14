@@ -1,7 +1,8 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
-import type { Todo, CreateTodoPayload } from '../types';
+import type { Todo, CreateTodoPayload, UpdateTodoPayload } from '../types';
 import { todoService } from '../services/todoService';
+import { mapToCreateTodoPayload, mapToUpdateTodoPayload } from '../utils/payloadMappers';
 
 export const useTodoStore = defineStore('todos', () => {
   const todos = ref<Todo[]>([]);
@@ -23,12 +24,17 @@ export const useTodoStore = defineStore('todos', () => {
   }
 
   async function addTodo(data: CreateTodoPayload): Promise<void> {
-    await todoService.create(data);
+    const payload = mapToCreateTodoPayload(data);
+    await todoService.create(payload);
     await fetchTodos();
   }
 
-  async function updateTodo(id: number, data: Partial<Todo>): Promise<void> {
-    await todoService.update(id, data);
+  async function updateTodo(id: number, data: UpdateTodoPayload): Promise<void> {
+    const payload = mapToUpdateTodoPayload(data);
+    if (Object.keys(payload).length === 0) {
+      return;
+    }
+    await todoService.update(id, payload);
     await fetchTodos();
   }
 

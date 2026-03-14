@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
-import type { Timeline, Task, DaysRemainingResult, CreateTimelinePayload } from '../types';
+import type { Timeline, Task, DaysRemainingResult, CreateTimelinePayload, UpdateTimelinePayload } from '../types';
 import { timelineService } from '../services/timelineService';
 import { taskService } from '../services/taskService';
 
@@ -98,13 +98,29 @@ export const useTimelineStore = defineStore('timelines', () => {
     await fetchTimelines();
   }
 
-  async function updateTimeline(id: number, data: CreateTimelinePayload): Promise<void> {
-    const formData = {
-      name: data.name.trim(),
-      start_date: data.start_date ? new Date(data.start_date).toISOString().split('T')[0] : '',
-      end_date: data.end_date ? new Date(data.end_date).toISOString().split('T')[0] : '',
-      remark: data.remark || '',
-    };
+  async function updateTimeline(id: number, data: UpdateTimelinePayload): Promise<void> {
+    const formData: UpdateTimelinePayload = {};
+
+    if (Object.prototype.hasOwnProperty.call(data, 'name')) {
+      formData.name = data.name?.trim();
+    }
+
+    if (Object.prototype.hasOwnProperty.call(data, 'start_date')) {
+      formData.start_date = data.start_date ? new Date(data.start_date).toISOString().split('T')[0] : '';
+    }
+
+    if (Object.prototype.hasOwnProperty.call(data, 'end_date')) {
+      formData.end_date = data.end_date ? new Date(data.end_date).toISOString().split('T')[0] : '';
+    }
+
+    if (Object.prototype.hasOwnProperty.call(data, 'remark')) {
+      formData.remark = data.remark ?? '';
+    }
+
+    if (Object.keys(formData).length === 0) {
+      return;
+    }
+
     await timelineService.update(id, formData);
     await fetchTimelines();
   }

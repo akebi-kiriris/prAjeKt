@@ -37,11 +37,18 @@
   </div>
 </template>
 
-<script setup>
-defineProps({ open: Boolean });
-defineEmits(['close']);
+<script setup lang="ts">
+import type { SidebarNavItem } from '../types';
 
-const navItems = [
+defineProps<{
+  open: boolean;
+}>();
+
+defineEmits<{
+  (e: 'close'): void;
+}>();
+
+const navItems: SidebarNavItem[] = [
   { path: '/', icon: '🏠', text: '主頁' },
   { path: '/timelines', icon: '📊', text: '專案管理' },
   { path: '/tasks', icon: '✅', text: '任務管理' },

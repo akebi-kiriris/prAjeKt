@@ -15,6 +15,8 @@ import google.generativeai as genai
 
 timelines_bp = Blueprint('timelines', __name__)
 
+TIMELINE_UPDATE_ALLOWED_FIELDS = {'name', 'start_date', 'end_date', 'remark'}
+
 
 def get_user_timeline_role(user_id, timeline_id):
     """查詢使用者在某專案的角色，回傳 0（負責人）、1（協作者）或 None（非成員）"""
@@ -154,7 +156,14 @@ def update_timeline(timeline_id):
     if not timeline:
         return jsonify({'error': '找不到該專案'}), 404
     
-    data = request.get_json()
+    data = request.get_json() or {}
+
+    if not isinstance(data, dict):
+        return jsonify({'error': '請提供正確的 JSON 物件'}), 400
+
+    unknown_fields = sorted(set(data.keys()) - TIMELINE_UPDATE_ALLOWED_FIELDS)
+    if unknown_fields:
+        return jsonify({'error': f'不允許的欄位: {", ".join(unknown_fields)}'}), 400
     
     if 'name' in data:
         if not data['name'] or not data['name'].strip():

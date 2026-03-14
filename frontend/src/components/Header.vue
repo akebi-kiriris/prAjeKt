@@ -1,8 +1,8 @@
 <template>
   <header class="fixed top-0 left-0 right-0 h-16 bg-white shadow-md flex justify-between items-center z-50 px-3 md:px-8">
-    <div class="flex items-center ml-3">
+    <div class="flex items-center ml">
       <!-- 漢堡選單按鈕（僅桌面版顯示，手機版使用底部導航列） -->
-      <button @click="$emit('toggle-sidebar')" class="hidden md:block mr-4 focus:outline-none">
+      <button @click="$emit('toggle-sidebar')" class="hidden md:block mr-4 focus:outline-none hover:bg-gray-200 rounded-full p-1 transition-shadow hover:cursor-pointer">
         <svg class="w-8 h-8 text-gray-700" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" />
         </svg>
@@ -53,7 +53,9 @@
       </div>
 
       <div class="flex items-center gap-2 md:gap-8">
-        <span class="hidden md:block text-gray-600 text-lg">{{ userName }}</span>
+        <span 
+          class="hidden md:block text-gray-600 text-lg hover:cursor-pointer hover:text-primary transition-colors"
+          @click="router.push('/profile')">{{ userName }}</span>
         <button 
           @click="$emit('logout')" 
           class="px-3 md:px-8 py-2 bg-red-500 text-white rounded-lg font-medium cursor-pointer hover:bg-red-600 transition-colors active:scale-95" 
@@ -65,12 +67,13 @@
   </header>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed, ref, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
 import { useNotificationStore } from '../stores/notifications';
 import { storeToRefs } from 'pinia';
+import type { Notification, NotificationType } from '../types';
 
 const authStore = useAuthStore();
 const store = useNotificationStore();
@@ -79,9 +82,12 @@ const { notifications, hasUnread } = storeToRefs(store);
 
 const userName = computed(() => authStore.currentUser?.name || '使用者');
 const showNotifPanel = ref(false);
-const notifRef = ref(null);
+const notifRef = ref<HTMLElement | null>(null);
 
-defineEmits(['logout', 'toggle-sidebar']);
+defineEmits<{
+  (e: 'logout'): void;
+  (e: 'toggle-sidebar'): void;
+}>();
 
 const toggleNotifPanel = async () => {
   showNotifPanel.value = !showNotifPanel.value;
@@ -90,13 +96,13 @@ const toggleNotifPanel = async () => {
   }
 };
 
-const handleNotifClick = async (n) => {
+const handleNotifClick = async (n: Notification) => {
   if (!n.is_read) await store.markAsRead(n.id);
   if (n.link) router.push(n.link);
   showNotifPanel.value = false;
 };
 
-const notifIcon = (type) => ({
+const notifIcon = (type: NotificationType | string) => ({
   task_assigned: '📋',
   comment: '💬',
   deadline: '⏰',
@@ -104,9 +110,9 @@ const notifIcon = (type) => ({
   timeline_invited: '👥',
 }[type] || '🔔');
 
-const formatTimeAgo = (isoStr) => {
+const formatTimeAgo = (isoStr?: string | null) => {
   if (!isoStr) return '';
-  const diff = Math.floor((Date.now() - new Date(isoStr)) / 1000);
+  const diff = Math.floor((Date.now() - new Date(isoStr).getTime()) / 1000);
   if (diff < 60) return '剛剛';
   if (diff < 3600) return `${Math.floor(diff / 60)} 分鐘前`;
   if (diff < 86400) return `${Math.floor(diff / 3600)} 小時前`;
@@ -114,8 +120,8 @@ const formatTimeAgo = (isoStr) => {
 };
 
 // 點擊面板外關閉
-const onClickOutside = (e) => {
-  if (notifRef.value && !notifRef.value.contains(e.target)) {
+const onClickOutside = (e: MouseEvent) => {
+  if (notifRef.value && !notifRef.value.contains(e.target as Node)) {
     showNotifPanel.value = false;
   }
 };

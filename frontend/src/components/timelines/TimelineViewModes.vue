@@ -90,7 +90,7 @@
             drag-class="kanban-drag"
             @start="isDragging = true"
             @end="isDragging = false"
-            @change="(evt) => onTaskMoved(evt, 'pending')"
+            @change="onPendingChange"
             class="space-y-3 min-h-50"
           >
             <template #item="{ element: task }">
@@ -113,7 +113,7 @@
                     <div class="flex-1 h-1.5 bg-gray-200 rounded-full overflow-hidden">
                       <div class="h-full bg-linear-to-r from-primary to-blue-400 rounded-full transition-all duration-300" :style="{ width: getSubtaskProgress(task) + '%' }"></div>
                     </div>
-                    <span class="font-medium">{{ task.subtasks.filter(s => s.completed).length }}/{{ task.subtasks.length }}</span>
+                    <span class="font-medium">{{ getCompletedSubtaskCount(task) }}/{{ task.subtasks.length }}</span>
                   </div>
                 </div>
                 <div class="flex items-center justify-between text-xs text-gray-500 pt-2 border-t border-gray-100">
@@ -147,7 +147,7 @@
             drag-class="kanban-drag"
             @start="isDragging = true"
             @end="isDragging = false"
-            @change="(evt) => onTaskMoved(evt, 'in_progress')"
+            @change="onInProgressChange"
             class="space-y-3 min-h-50"
           >
             <template #item="{ element: task }">
@@ -170,7 +170,7 @@
                     <div class="flex-1 h-1.5 bg-gray-200 rounded-full overflow-hidden">
                       <div class="h-full bg-linear-to-r from-primary to-blue-400 rounded-full transition-all duration-300" :style="{ width: getSubtaskProgress(task) + '%' }"></div>
                     </div>
-                    <span class="font-medium">{{ task.subtasks.filter(s => s.completed).length }}/{{ task.subtasks.length }}</span>
+                    <span class="font-medium">{{ getCompletedSubtaskCount(task) }}/{{ task.subtasks.length }}</span>
                   </div>
                 </div>
                 <div class="flex items-center justify-between text-xs text-gray-500 pt-2 border-t border-gray-100">
@@ -204,7 +204,7 @@
             drag-class="kanban-drag"
             @start="isDragging = true"
             @end="isDragging = false"
-            @change="(evt) => onTaskMoved(evt, 'completed')"
+            @change="onCompletedChange"
             class="space-y-3 min-h-50"
           >
             <template #item="{ element: task }">
@@ -447,7 +447,7 @@
             </div>
             <div class="flex items-center gap-2">
               <span class="text-sm text-gray-500">優先級：</span>
-              <select :value="selectedKanbanTask.priority" @change="updateTaskPriority(Number($event.target.value))" class="px-3 py-1 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none">
+              <select :value="selectedKanbanTask.priority" @change="onPrioritySelect" class="px-3 py-1 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none">
                 <option :value="1">🔴 高優先</option>
                 <option :value="2">🟡 中優先</option>
                 <option :value="3">🟢 低優先</option>
@@ -477,7 +477,7 @@
           <div>
             <h4 class="font-semibold text-gray-700 mb-3 flex items-center gap-2">
               <span>📋</span> 子任務
-              <span class="text-sm font-normal text-gray-500">({{ selectedKanbanTask.subtasks?.filter(s => s.completed).length || 0 }}/{{ selectedKanbanTask.subtasks?.length || 0 }})</span>
+              <span class="text-sm font-normal text-gray-500">({{ getCompletedSubtaskCount(selectedKanbanTask) }}/{{ selectedKanbanTask.subtasks?.length || 0 }})</span>
             </h4>
             <div v-if="selectedKanbanTask.subtasks && selectedKanbanTask.subtasks.length > 0" class="mb-4">
               <div class="h-2 bg-gray-200 rounded-full overflow-hidden">
@@ -507,7 +507,7 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, computed } from 'vue';
 import { toast } from 'vue-sonner';
 import { formatDate } from '../../utils/formatters';
@@ -516,30 +516,41 @@ import FullCalendar from '@fullcalendar/vue3';
 import dayGridPlugin from '@fullcalendar/daygrid';
 import interactionPlugin from '@fullcalendar/interaction';
 import multiMonthPlugin from '@fullcalendar/multimonth';
+import type { CalendarOptions, EventClickArg, EventMountArg, DayCellMountArg } from '@fullcalendar/core';
 import { taskService } from '../../services/taskService';
+import type { Task, Timeline, Subtask, TaskUpdatePayload, TimelineViewModesProps, DaysRemainingResult } from '../../types';
 
-const props = defineProps({
-  viewMode: String,
-  timelines: Array,
-  sortedTimelines: Array,
-  allTasks: Array,
-});
+const props = defineProps<TimelineViewModesProps>();
 
-const emit = defineEmits(['view-timeline', 'edit-timeline', 'delete-timeline', 'create-timeline', 'refresh-all']);
+interface DraggableChangeEvent {
+  added?: {
+    element: Task;
+  };
+}
+
+const emit = defineEmits<{
+  (e: 'view-timeline', timeline: Timeline): void;
+  (e: 'edit-timeline', timeline: Timeline): void;
+  (e: 'delete-timeline', timelineId: number): void;
+  (e: 'create-timeline'): void;
+  (e: 'refresh-all'): void;
+}>();
 
 // 看板本地狀態
-const selectedKanbanTimeline = ref(null);
+const selectedKanbanTimeline = ref<number | null>(null);
 const searchQuery = ref('');
 const showFilterPanel = ref(false);
-const filterPriority = ref(null);
+const filterPriority = ref<number | null>(null);
 const filterTag = ref('');
 const isDragging = ref(false);
 const showKanbanTaskModal = ref(false);
-const selectedKanbanTask = ref(null);
+const selectedKanbanTask = ref<Task | null>(null);
 const newSubtaskName = ref('');
 
+type TaskStatus = Task['status'];
+
 // 月曆 ref
-const calendarRef = ref(null);
+const calendarRef = ref<InstanceType<typeof FullCalendar> | null>(null);
 
 // ────────────── 篩選 computed ──────────────
 const filteredTasks = computed(() => {
@@ -571,17 +582,17 @@ const activeFilterCount = computed(() => (filterPriority.value ? 1 : 0) + (filte
 const clearFilters = () => { filterPriority.value = null; filterTag.value = ''; };
 
 // ────────────── 月曆相關 ──────────────
-const thisWeekTimelines = computed(() => props.timelines.filter(t => {
+const thisWeekTimelines = computed(() => props.timelines.filter((t: Timeline) => {
   const days = getDaysRemaining(t.endDate).days;
   return days !== null && days >= 0 && days <= 7;
 }));
-const overdueTimelines = computed(() => props.timelines.filter(t => {
+const overdueTimelines = computed(() => props.timelines.filter((t: Timeline) => {
   const days = getDaysRemaining(t.endDate).days;
   return days !== null && days < 0;
 }));
-const completedTimelines = computed(() => props.timelines.filter(t => getTaskProgress(t) === 100));
+const completedTimelines = computed(() => props.timelines.filter((t: Timeline) => getTaskProgress(t) === 100));
 
-const calendarEvents = computed(() => props.timelines.map(timeline => {
+const calendarEvents = computed(() => props.timelines.map((timeline: Timeline) => {
   const status = getTimelineStatus(timeline);
   const progress = getTaskProgress(timeline);
   let backgroundColor, borderColor, textColor;
@@ -591,16 +602,16 @@ const calendarEvents = computed(() => props.timelines.map(timeline => {
   else if (status.label === '即將到期') { backgroundColor = '#fbbf24'; borderColor = '#d97706'; textColor = '#78350f'; }
   else { backgroundColor = '#3b82f6'; borderColor = '#1d4ed8'; textColor = '#ffffff'; }
   return {
-    id: timeline.id,
+    id: String(timeline.id),
     title: `${status.icon} ${timeline.name} (${progress}%)`,
-    start: timeline.startDate || timeline.endDate,
-    end: timeline.endDate ? addDays(timeline.endDate, 1) : null,
+    start: timeline.startDate || timeline.endDate || undefined,
+    end: timeline.endDate ? addDays(timeline.endDate, 1) ?? undefined : undefined,
     backgroundColor, borderColor, textColor,
     extendedProps: { timeline, status: status.label, progress }
   };
 }));
 
-const calendarOptions = computed(() => ({
+const calendarOptions = computed<CalendarOptions>(() => ({
   plugins: [dayGridPlugin, interactionPlugin, multiMonthPlugin],
   initialView: 'dayGridMonth',
   locale: 'zh-tw',
@@ -608,8 +619,8 @@ const calendarOptions = computed(() => ({
   buttonText: { today: '今天', month: '月', year: '年度' },
   height: 'auto',
   events: calendarEvents.value,
-  eventClick: (info) => emit('view-timeline', info.event.extendedProps.timeline),
-  eventDidMount: (info) => {
+  eventClick: (info: EventClickArg) => emit('view-timeline', info.event.extendedProps.timeline as Timeline),
+  eventDidMount: (info: EventMountArg) => {
     const el = info.el;
     el.title = `${info.event.title}\n狀態：${info.event.extendedProps.status}\n進度：${info.event.extendedProps.progress}% 完成`;
     el.style.borderRadius = '8px'; el.style.padding = '4px 8px'; el.style.margin = '2px 4px';
@@ -618,7 +629,7 @@ const calendarOptions = computed(() => ({
     el.addEventListener('mouseenter', () => { el.style.transform = 'translateY(-2px)'; el.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)'; });
     el.addEventListener('mouseleave', () => { el.style.transform = 'translateY(0)'; el.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)'; });
   },
-  dayCellDidMount: (info) => {
+  dayCellDidMount: (info: DayCellMountArg) => {
     const today = new Date();
     if (info.date.toDateString() === today.toDateString()) { info.el.style.backgroundColor = 'rgba(59, 130, 246, 0.08)'; info.el.style.borderRadius = '8px'; }
     const day = info.date.getDay();
@@ -629,18 +640,18 @@ const calendarOptions = computed(() => ({
   dayMaxEvents: 3, moreLinkClick: 'popover'
 }));
 
-const addDays = (dateStr, days) => {
+const addDays = (dateStr: string | null, days: number) => {
   if (!dateStr) return null;
   const date = new Date(dateStr);
   date.setDate(date.getDate() + days);
   return date.toISOString().split('T')[0];
 };
 
-const getDaysRemaining = (endDate) => {
+const getDaysRemaining = (endDate: string | null | undefined): DaysRemainingResult => {
   if (!endDate) return { days: null, text: '未設定', display: '未設定', colorClass: 'text-gray-400' };
   const today = new Date(); today.setHours(0, 0, 0, 0);
   const end = new Date(endDate); end.setHours(0, 0, 0, 0);
-  const diffDays = Math.ceil((end - today) / (1000 * 60 * 60 * 24));
+  const diffDays = Math.ceil((end.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
   if (diffDays < 0) return { days: diffDays, text: `已過期 ${Math.abs(diffDays)} 天`, display: `過期 ${Math.abs(diffDays)} 天`, colorClass: 'text-red-500' };
   if (diffDays === 0) return { days: 0, text: '今天到期', display: '今天到期', colorClass: 'text-red-500' };
   if (diffDays === 1) return { days: 1, text: '明天到期', display: '剩 1 天', colorClass: 'text-orange-500' };
@@ -650,20 +661,20 @@ const getDaysRemaining = (endDate) => {
   return { days: diffDays, text: `剩 ${diffDays} 天`, display: `剩 ${diffDays} 天`, colorClass: 'text-green-500' };
 };
 
-const getTaskProgress = (timeline) => {
+const getTaskProgress = (timeline: Timeline): number => {
   if (!timeline.totalTasks || timeline.totalTasks === 0) return 0;
   return Math.round((timeline.completedTasks || 0) / timeline.totalTasks * 100);
 };
 
-const getTimeProgress = (timeline) => {
+const getTimeProgress = (timeline: Timeline): number => {
   if (!timeline.startDate || !timeline.endDate) return 0;
   const today = new Date(), start = new Date(timeline.startDate), end = new Date(timeline.endDate);
   if (today < start) return 0;
   if (today > end) return 100;
-  return Math.round(((today - start) / (end - start)) * 100);
+  return Math.round(((today.getTime() - start.getTime()) / (end.getTime() - start.getTime())) * 100);
 };
 
-const getTimelineStatus = (timeline) => {
+const getTimelineStatus = (timeline: Timeline) => {
   const { days } = getDaysRemaining(timeline.endDate);
   const progress = getTaskProgress(timeline);
   if (progress === 100) return { label: '已完成', icon: '✅', bgClass: 'bg-green-100', textClass: 'text-green-600', badgeClass: 'bg-green-100 text-green-700', borderClass: 'border-green-200', barClass: 'bg-gradient-to-r from-green-400 to-green-500' };
@@ -674,7 +685,7 @@ const getTimelineStatus = (timeline) => {
   return { label: '進行中', icon: '📋', bgClass: 'bg-blue-100', textClass: 'text-blue-600', badgeClass: 'bg-blue-100 text-blue-700', borderClass: 'border-blue-200', barClass: 'bg-gradient-to-r from-blue-400 to-blue-500' };
 };
 
-const getProgressBarColor = (timeline) => {
+const getProgressBarColor = (timeline: Timeline) => {
   const progress = getTaskProgress(timeline), status = getTimelineStatus(timeline);
   if (progress === 100) return 'bg-gradient-to-r from-green-400 to-green-500';
   if (status.label === '已過期') return 'bg-gradient-to-r from-red-400 to-red-500';
@@ -682,39 +693,44 @@ const getProgressBarColor = (timeline) => {
   return 'bg-gradient-to-r from-primary to-primary-light';
 };
 
-const getProgressTextColor = (timeline) => {
+const getProgressTextColor = (timeline: Timeline) => {
   const progress = getTaskProgress(timeline);
   if (progress === 100) return 'text-green-600';
   if (progress >= 50) return 'text-blue-600';
   return 'text-gray-600';
 };
 
-const getPriorityLabel = (priority) => ({ 1: '🔴 高', 2: '🟡 中', 3: '🟢 低' }[priority] || '🟡 中');
+const getPriorityLabel = (priority: number) => ({ 1: '🔴 高', 2: '🟡 中', 3: '🟢 低' }[priority] || '🟡 中');
 
-const getPriorityBadgeClass = (priority) => ({
+const getPriorityBadgeClass = (priority: number) => ({
   1: 'bg-gradient-to-r from-red-100 to-rose-100 text-red-700 border border-red-200',
   2: 'bg-gradient-to-r from-yellow-100 to-amber-100 text-yellow-700 border border-yellow-200',
   3: 'bg-gradient-to-r from-green-100 to-emerald-100 text-green-700 border border-green-200'
 }[priority] || 'bg-gray-100 text-gray-700 border border-gray-200');
 
-const getSubtaskProgress = (task) => {
+const getSubtaskProgress = (task: Task): number => {
   if (!task.subtasks || task.subtasks.length === 0) return 0;
-  return Math.round((task.subtasks.filter(s => s.completed).length / task.subtasks.length) * 100);
+  return Math.round((task.subtasks.filter((s: Subtask) => s.completed).length / task.subtasks.length) * 100);
 };
 
-const getTaskTimelineName = (task) => {
+const getCompletedSubtaskCount = (task: Task): number => {
+  if (!task?.subtasks?.length) return 0;
+  return task.subtasks.filter((s: Subtask) => s.completed).length;
+};
+
+const getTaskTimelineName = (task: Task): string => {
   if (!task.timeline_id) return '';
-  const tl = props.timelines.find(t => t.id === task.timeline_id);
+  const tl = props.timelines.find((t: Timeline) => t.id === task.timeline_id);
   return tl ? tl.name : '';
 };
 
 // ────────────── 看板操作 ──────────────
-const onTaskMoved = async (evt, newStatus) => {
+const onTaskMoved = async (evt: DraggableChangeEvent, newStatus: TaskStatus) => {
   if (!evt.added) return;
   const task = evt.added.element;
   try {
     await taskService.updateStatus(task.task_id, newStatus);
-    const local = props.allTasks.find(t => t.task_id === task.task_id);
+    const local = props.allTasks.find((t: Task) => t.task_id === task.task_id);
     if (local) { local.status = newStatus; local.completed = newStatus === 'completed'; }
   } catch {
     toast.error('更新狀態失敗');
@@ -722,7 +738,19 @@ const onTaskMoved = async (evt, newStatus) => {
   }
 };
 
-const viewKanbanTaskDetail = async (task) => {
+const onPendingChange = (evt: DraggableChangeEvent) => {
+  void onTaskMoved(evt, 'pending');
+};
+
+const onInProgressChange = (evt: DraggableChangeEvent) => {
+  void onTaskMoved(evt, 'in_progress');
+};
+
+const onCompletedChange = (evt: DraggableChangeEvent) => {
+  void onTaskMoved(evt, 'completed');
+};
+
+const viewKanbanTaskDetail = async (task: Task) => {
   selectedKanbanTask.value = { ...task };
   try {
     const res = await taskService.getSubtasks(task.task_id);
@@ -737,13 +765,14 @@ const addSubtask = async () => {
   if (!newSubtaskName.value.trim() || !selectedKanbanTask.value) return;
   try {
     const res = await taskService.createSubtask(selectedKanbanTask.value.task_id, { name: newSubtaskName.value.trim() });
-    selectedKanbanTask.value.subtasks.push(res.data.subtask);
+    selectedKanbanTask.value.subtasks.push(res.data);
     newSubtaskName.value = '';
     emit('refresh-all');
   } catch { toast.error('新增子任務失敗'); }
 };
 
-const toggleSubtask = async (subtask) => {
+const toggleSubtask = async (subtask: Subtask) => {
+  if (!selectedKanbanTask.value) return;
   try {
     await taskService.toggleSubtask(selectedKanbanTask.value.task_id, subtask.id);
     subtask.completed = !subtask.completed;
@@ -751,18 +780,26 @@ const toggleSubtask = async (subtask) => {
   } catch { toast.error('更新子任務失敗'); }
 };
 
-const deleteSubtask = async (subtask) => {
+const deleteSubtask = async (subtask: Subtask) => {
+  if (!selectedKanbanTask.value) return;
   try {
     await taskService.deleteSubtask(selectedKanbanTask.value.task_id, subtask.id);
-    selectedKanbanTask.value.subtasks = selectedKanbanTask.value.subtasks.filter(s => s.id !== subtask.id);
+    selectedKanbanTask.value.subtasks = selectedKanbanTask.value.subtasks.filter((s: Subtask) => s.id !== subtask.id);
     emit('refresh-all');
   } catch { toast.error('刪除子任務失敗'); }
 };
 
-const updateTaskPriority = async (priority) => {
+const onPrioritySelect = (event: Event) => {
+  const target = event.target as HTMLSelectElement | null;
+  const priority = Number(target?.value);
+  void updateTaskPriority(priority);
+};
+
+const updateTaskPriority = async (priority: number) => {
   if (!selectedKanbanTask.value) return;
   try {
-    await taskService.update(selectedKanbanTask.value.task_id, { ...selectedKanbanTask.value, priority });
+    const payload: TaskUpdatePayload = { priority };
+    await taskService.update(selectedKanbanTask.value.task_id, payload);
     selectedKanbanTask.value.priority = priority;
     emit('refresh-all');
   } catch { toast.error('更新優先級失敗'); }
@@ -771,7 +808,8 @@ const updateTaskPriority = async (priority) => {
 const updateTaskTags = async () => {
   if (!selectedKanbanTask.value) return;
   try {
-    await taskService.update(selectedKanbanTask.value.task_id, { ...selectedKanbanTask.value, tags: selectedKanbanTask.value.tags });
+    const payload: TaskUpdatePayload = { tags: selectedKanbanTask.value.tags };
+    await taskService.update(selectedKanbanTask.value.task_id, payload);
     emit('refresh-all');
   } catch { toast.error('更新標籤失敗'); }
 };

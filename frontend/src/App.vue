@@ -14,8 +14,9 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { computed, watch, ref, onMounted, onUnmounted } from 'vue';
+import type { CSSProperties } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useAuthStore } from './stores/auth';
 import Header from './components/Header.vue';
@@ -24,15 +25,16 @@ import { Toaster } from 'vue-sonner';
 import ConfirmDialog from './components/ConfirmDialog.vue';
 
 // 手機/桌面偵測（以 768px 為分界，對應 Tailwind md:）
-const isMobile = ref(window.innerWidth < 768)
-const sidebarOpen = ref(!isMobile.value)
+const isMobile = ref<boolean>(window.innerWidth < 768);
+const sidebarOpen = ref<boolean>(!isMobile.value);
 
-const handleResize = () => {
-  isMobile.value = window.innerWidth < 768
-  if (isMobile.value) sidebarOpen.value = false
-}
-onMounted(() => window.addEventListener('resize', handleResize))
-onUnmounted(() => window.removeEventListener('resize', handleResize))
+const handleResize = (): void => {
+  isMobile.value = window.innerWidth < 768;
+  if (isMobile.value) sidebarOpen.value = false;
+};
+
+onMounted(() => window.addEventListener('resize', handleResize));
+onUnmounted(() => window.removeEventListener('resize', handleResize));
 
 const router = useRouter();
 const route = useRoute();
@@ -41,22 +43,22 @@ const authStore = useAuthStore();
 const isAuthenticated = computed(() => authStore.isAuthenticated);
 
 // Grid 欄寬：手機單欄 / 桌面雙欄（含側邊欄開關）
-const gridTemplateColumns = computed(() => {
-  if (isMobile.value) return { gridTemplateColumns: '1fr' }
+const gridTemplateColumns = computed<CSSProperties>(() => {
+  if (isMobile.value) return { gridTemplateColumns: '1fr' };
   return sidebarOpen.value
     ? { gridTemplateColumns: '16rem 1fr' }
-    : { gridTemplateColumns: '0 1fr' }
-})
+    : { gridTemplateColumns: '0 1fr' };
+});
 
 // main 欄位配置：手機佔滿單欄，桌面放在第 2 欄
 const mainClass = computed(() => {
-  if (!isAuthenticated.value) return 'w-full min-h-screen'
+  if (!isAuthenticated.value) return 'w-full min-h-screen';
   return isMobile.value
     ? 'row-start-2 row-end-3 min-h-0'
-    : 'row-start-2 row-end-3 col-start-2 col-end-3 min-h-0'
-})
+    : 'row-start-2 row-end-3 col-start-2 col-end-3 min-h-0';
+});
 
-const handleLogout = async () => {
+const handleLogout = async (): Promise<void> => {
   await authStore.logout();
   router.push('/login');
 };

@@ -426,8 +426,9 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue';
+import { isAxiosError } from 'axios';
 import { toast } from 'vue-sonner';
 import { storeToRefs } from 'pinia';
 import { useTaskStore } from '../stores/tasks';
@@ -435,8 +436,16 @@ import { taskService } from '../services/taskService';
 import { timelineService } from '../services/timelineService';
 import { formatDate, formatDateTime, formatFileSize, isImageFile, getFileIcon } from '../utils/formatters';
 import { useConfirm } from '../composables/useConfirm';
+import type { Task, TaskComment, TaskFile, Subtask, TaskMember, SearchUserResult, ApiErrorPayload } from '../types';
 
 const { confirm } = useConfirm();
+
+const getApiErrorMessage = (error: unknown, fallback: string) => {
+  if (isAxiosError<ApiErrorPayload>(error)) {
+    return error.response?.data?.error || fallback;
+  }
+  return fallback;
+};
 
 const store = useTaskStore();
 const { tasks } = storeToRefs(store);
@@ -446,7 +455,7 @@ const apiBase = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api'
 
 // ── 新增/編輯任務 ──
 const showForm = ref(false);
-const editingTask = ref(null);
+const editingTask = ref<Task | null>(null);
 const taskForm = ref({
   name: '',
   start_date: '',
@@ -467,7 +476,7 @@ const handleSubmit = async () => {
   }
 };
 
-const editTask = (task) => {
+const editTask = (task: Task) => {
   editingTask.value = task;
   taskForm.value = {
     name: task.name,
@@ -480,7 +489,7 @@ const editTask = (task) => {
 
 const cancelEdit = () => { resetForm(); };
 
-const deleteTask = async (taskId) => {
+const deleteTask = async (taskId: number) => {
   if (!await confirm({ title: '確定要刪除此任務？', danger: true })) return;
   try {
     await store.removeTask(taskId);
@@ -489,7 +498,7 @@ const deleteTask = async (taskId) => {
   }
 };
 
-const toggleTask = async (task) => {
+const toggleTask = async (task: Task) => {
   try {
     await store.toggleTask(task.task_id);
   } catch (error) {
@@ -505,12 +514,12 @@ const resetForm = () => {
 
 // ── 任務詳情 Modal ──
 const showTaskDetail = ref(false);
-const detailTask = ref(null);
-const detailComments = ref([]);
-const detailFiles = ref([]);
+const detailTask = ref<Task | null>(null);
+const detailComments = ref<TaskComment[]>([]);
+const detailFiles = ref<TaskFile[]>([]);
 const detailNewComment = ref('');
-const detailFileInput = ref(null);
-const detailSubtasks = ref([]);
+const detailFileInput = ref<HTMLInputElement | null>(null);
+const detailSubtasks = ref<Subtask[]>([]);
 const detailNewSubtask = ref('');
 
 const detailSubtaskProgress = computed(() => {
@@ -518,7 +527,7 @@ const detailSubtaskProgress = computed(() => {
   return Math.round(detailSubtasks.value.filter(s => s.completed).length / detailSubtasks.value.length * 100);
 });
 
-const openTaskDetail = async (task) => {
+const openTaskDetail = async (task: Task) => {
   detailTask.value = { ...task };
   detailComments.value = [];
   detailFiles.value = [];
@@ -548,7 +557,8 @@ const addDetailSubtask = async () => {
   } catch { toast.error('新增子任務失敗'); }
 };
 
-const toggleDetailSubtask = async (subtask) => {
+const toggleDetailSubtask = async (subtask: Subtask) => {
+  if (!detailTask.value) return;
   try {
     await taskService.toggleSubtask(detailTask.value.task_id, subtask.id);
     const res = await taskService.getSubtasks(detailTask.value.task_id);
@@ -556,7 +566,8 @@ const toggleDetailSubtask = async (subtask) => {
   } catch { toast.error('更新子任務狀態失敗'); }
 };
 
-const deleteDetailSubtask = async (subtask) => {
+const deleteDetailSubtask = async (subtask: Subtask) => {
+  if (!detailTask.value) return;
   if (!await confirm({ title: '確定要刪除此子任務？', danger: true })) return;
   try {
     await taskService.deleteSubtask(detailTask.value.task_id, subtask.id);
@@ -574,7 +585,8 @@ const addDetailComment = async () => {
   } catch { toast.error('新增留言失敗'); }
 };
 
-const deleteDetailComment = async (commentId) => {
+const deleteDetailComment = async (commentId: number) => {
+  if (!detailTask.value) return;
   if (!await confirm({ title: '確定要刪除此留言？', danger: true })) return;
   try {
     await taskService.deleteComment(detailTask.value.task_id, commentId);
@@ -582,8 +594,9 @@ const deleteDetailComment = async (commentId) => {
   } catch { toast.error('刪除留言失敗'); }
 };
 
-const handleDetailFileUpload = async (event) => {
-  const file = event.target.files?.[0];
+const handleDetailFileUpload = async (event: Event) => {
+  const target = event.target as HTMLInputElement | null;
+  const file = target?.files?.[0];
   if (!file || !detailTask.value) return;
   if (file.size > 10 * 1024 * 1024) { toast.warning('檔案大小不可超過 10MB'); return; }
   const formData = new FormData();
@@ -592,14 +605,15 @@ const handleDetailFileUpload = async (event) => {
     await taskService.uploadFile(detailTask.value.task_id, formData);
     const res = await taskService.getFiles(detailTask.value.task_id);
     detailFiles.value = res.data || [];
-  } catch (err) {
-    toast.error(err.response?.data?.error || '上傳失敗');
+  } catch (err: unknown) {
+    toast.error(getApiErrorMessage(err, '上傳失敗'));
   } finally {
     if (detailFileInput.value) detailFileInput.value.value = '';
   }
 };
 
-const deleteDetailFile = async (fileId) => {
+const deleteDetailFile = async (fileId: number) => {
+  if (!detailTask.value) return;
   if (!await confirm({ title: '確定要刪除此附件？', danger: true })) return;
   try {
     await taskService.deleteFile(detailTask.value.task_id, fileId);
@@ -608,20 +622,20 @@ const deleteDetailFile = async (fileId) => {
 };
 
 // ── 成員管理 ──
-const shareTask = ref(null);
+const shareTask = ref<Task | null>(null);
 const isSharePanelOpen = ref(false);
-const taskMembers = ref([]);
-const timelineMembers = ref([]);
+const taskMembers = ref<TaskMember[]>([]);
+const timelineMembers = ref<TaskMember[]>([]);
 const shareInputEmail = ref('');
-const shareSearchResult = ref(null);
+const shareSearchResult = ref<SearchUserResult | null>(null);
 const shareSearchError = ref('');
 
-const openSharePanel = async (task) => {
+const openSharePanel = async (task: Task) => {
   shareTask.value = task;
   isSharePanelOpen.value = true;
 };
 
-watch(isSharePanelOpen, async (val) => {
+watch(isSharePanelOpen, async (val: boolean) => {
   if (val && shareTask.value) {
     await loadTaskMembers();
     // 若任務屬於某 timeline，也載入該 timeline 的成員供快速指派
@@ -629,7 +643,7 @@ watch(isSharePanelOpen, async (val) => {
       try {
         const res = await timelineService.getMembers(shareTask.value.timeline_id);
         timelineMembers.value = res.data || [];
-      } catch (e) {
+      } catch (e: unknown) {
         console.error('載入專案成員失敗', e);
         timelineMembers.value = [];
       }
@@ -645,10 +659,11 @@ watch(isSharePanelOpen, async (val) => {
 });
 
 const loadTaskMembers = async () => {
+  if (!shareTask.value) return;
   try {
     const res = await taskService.getMembers(shareTask.value.task_id);
     taskMembers.value = res.data;
-  } catch (e) {
+  } catch (e: unknown) {
     console.error('載入成員失敗', e);
   }
 };
@@ -659,17 +674,17 @@ const searchShareUser = async () => {
   if (!shareInputEmail.value.trim()) return;
   try {
     const res = await taskService.searchUser(shareInputEmail.value.trim());
-    const found = res.data.user;
+    const found = res.data;
     const alreadyIn = taskMembers.value.some(m => m.user_id === found.id);
     if (alreadyIn) { shareSearchError.value = '此使用者已是成員'; return; }
     shareSearchResult.value = found;
-  } catch (e) {
-    shareSearchError.value = e.response?.data?.error || '找不到使用者';
+  } catch (e: unknown) {
+    shareSearchError.value = getApiErrorMessage(e, '找不到使用者');
   }
 };
 
 const confirmShare = async () => {
-  if (!shareSearchResult.value) return;
+  if (!shareSearchResult.value || !shareTask.value) return;
   try {
     await taskService.addMember(shareTask.value.task_id, shareSearchResult.value.id);
     shareInputEmail.value = '';
@@ -677,34 +692,36 @@ const confirmShare = async () => {
     await loadTaskMembers();
     await store.fetchTasks();
     toast.success('已成功指派成員');
-  } catch (e) {
-    shareSearchError.value = e.response?.data?.error || '新增失敗';
+  } catch (e: unknown) {
+    shareSearchError.value = getApiErrorMessage(e, '新增失敗');
   }
 };
 
-const quickAssignMember = async (member) => {
+const quickAssignMember = async (member: TaskMember) => {
+  if (!shareTask.value) return;
   try {
     await taskService.addMember(shareTask.value.task_id, member.user_id);
     await loadTaskMembers();
     await store.fetchTasks();
     toast.success(`已指派 ${member.name}`);
-  } catch (e) {
-    toast.error(e.response?.data?.error || '指派失敗');
+  } catch (e: unknown) {
+    toast.error(getApiErrorMessage(e, '指派失敗'));
   }
 };
 
-const kickTaskMember = async (member) => {
+const kickTaskMember = async (member: TaskMember) => {
+  if (!shareTask.value) return;
   if (!await confirm({ title: `確定要移除「${member.name}」？`, danger: true })) return;
   try {
     await taskService.removeMember(shareTask.value.task_id, member.user_id);
     await loadTaskMembers();
     await store.fetchTasks();
-  } catch (e) {
-    toast.error(e.response?.data?.error || '移除失敗');
+  } catch (e: unknown) {
+    toast.error(getApiErrorMessage(e, '移除失敗'));
   }
 };
 
-const downloadFile = async (url, originalFilename) => {
+const downloadFile = async (url: string, originalFilename: string) => {
   try {
     const res = await fetch(url);
     if (!res.ok) throw new Error('下載失敗');
@@ -722,5 +739,5 @@ const downloadFile = async (url, originalFilename) => {
   }
 };
 
-onMounted(() => { store.fetchTasks(); });
+onMounted(() => { void store.fetchTasks(); });
 </script>

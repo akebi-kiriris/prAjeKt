@@ -188,11 +188,12 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, onMounted } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useTodoStore } from '../stores/todos';
 import { useConfirm } from '../composables/useConfirm';
+import type { CreateTodoPayload, UpdateTodoPayload, Todo, TodoForm } from '../types';
 
 const { confirm } = useConfirm();
 
@@ -200,8 +201,8 @@ const store = useTodoStore();
 
 // UI 狀態（留在 View）
 const showAddForm = ref(false);
-const editingTodo = ref(null);
-const todoForm = ref({
+const editingTodo = ref<Todo | null>(null);
+const todoForm = ref<TodoForm>({
   title: '',
   content: '',
   deadline: ''
@@ -212,15 +213,20 @@ const { incompleteTodos, completedTodos } = storeToRefs(store);
 
 const handleSubmit = async () => {
   try {
-    const formData = {
+    const createPayload: CreateTodoPayload = {
       ...todoForm.value,
-      deadline: todoForm.value.deadline ? todoForm.value.deadline + ':00' : null
+      deadline: todoForm.value.deadline ? `${todoForm.value.deadline}:00` : undefined
+    };
+
+    const updatePayload: UpdateTodoPayload = {
+      ...todoForm.value,
+      deadline: todoForm.value.deadline ? `${todoForm.value.deadline}:00` : null
     };
 
     if (editingTodo.value) {
-      await store.updateTodo(editingTodo.value.id, formData);
+      await store.updateTodo(editingTodo.value.id, updatePayload);
     } else {
-      await store.addTodo(formData);
+      await store.addTodo(createPayload);
     }
     cancelForm();
   } catch (error) {
@@ -228,7 +234,7 @@ const handleSubmit = async () => {
   }
 };
 
-const editTodo = (todo) => {
+const editTodo = (todo: Todo) => {
   editingTodo.value = todo;
   todoForm.value = {
     title: todo.title,
@@ -238,9 +244,9 @@ const editTodo = (todo) => {
   showAddForm.value = true;
 };
 
-const toggleTodo = (id) => store.toggleTodo(id);
+const toggleTodo = (id: number) => store.toggleTodo(id);
 
-const deleteTodo = async (id) => {
+const deleteTodo = async (id: number) => {
   if (!await confirm({ title: '確定要刪除此待辦事項？', danger: true })) return;
   await store.removeTodo(id);
 };
@@ -251,7 +257,7 @@ const cancelForm = () => {
   todoForm.value = { title: '', content: '', deadline: '' };
 };
 
-const formatDeadline = (deadline) => {
+const formatDeadline = (deadline: string | null) => {
   if (!deadline) return '';
   return new Date(deadline).toLocaleString('zh-TW', {
     year: 'numeric', month: '2-digit', day: '2-digit',
@@ -259,10 +265,12 @@ const formatDeadline = (deadline) => {
   });
 };
 
-const isOverdue = (deadline) => {
+const isOverdue = (deadline: string | null) => {
   if (!deadline) return false;
   return new Date(deadline) < new Date();
 };
 
-onMounted(() => store.fetchTodos());
+onMounted(() => {
+  void store.fetchTodos();
+});
 </script>

@@ -74,12 +74,13 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, onMounted } from 'vue';
 import { taskService } from '../services/taskService';
 import { timelineService } from '../services/timelineService';
+import type { NavCard, UpcomingItem, UpcomingTaskRaw } from '../types';
 
-const navCards = [
+const navCards: NavCard[] = [
   { path: '/timelines', icon: '📊', title: '專案管理', description: '建立專案、分配任務' },
   { path: '/tasks',     icon: '✅', title: '任務管理', description: '管理您的任務與進度' },
   { path: '/todos',     icon: '📝', title: '待辦事項', description: '記錄日常待辦事項' },
@@ -87,8 +88,8 @@ const navCards = [
   { path: '/profile',   icon: '👤', title: '個人資料', description: '管理個人資料' },
 ];
 
-const upcomingItems = ref([]);
-const loadingUpcoming = ref(true);
+const upcomingItems = ref<UpcomingItem[]>([]);
+const loadingUpcoming = ref<boolean>(true);
 
 onMounted(async () => {
   try {
@@ -96,10 +97,15 @@ onMounted(async () => {
       taskService.upcoming(),
       timelineService.upcoming(),
     ]);
-    const tasks = taskRes.status === 'fulfilled' ? (taskRes.value.data || []) : [];
-    const timelines = timelineRes.status === 'fulfilled' ? (timelineRes.value.data || []) : [];
+    const tasks: UpcomingTaskRaw[] = taskRes.status === 'fulfilled'
+      ? (taskRes.value.data as unknown as UpcomingTaskRaw[]) || []
+      : [];
+    const timelines: UpcomingItem[] = timelineRes.status === 'fulfilled'
+      ? (timelineRes.value.data as unknown as UpcomingItem[]) || []
+      : [];
+
     // 合併、逾期的排最前面，再依截止日升序
-    upcomingItems.value = [...tasks.map(t => ({ ...t, id: t.task_id })), ...timelines]
+    upcomingItems.value = [...tasks.map((t) => ({ ...t, id: t.task_id })), ...timelines]
       .sort((a, b) => {
         if (a.is_overdue !== b.is_overdue) return a.is_overdue ? -1 : 1;
         return a.end_date < b.end_date ? -1 : 1;

@@ -113,15 +113,22 @@
   </div>
 </template>
 
-<script setup>
-defineProps({
-  todayFormatted: String,
-  timelines: Array,
-  urgentCount: Number,
-  totalCompletedTasks: Number,
-  totalTasks: Number,
-  viewMode: String,
-});
+<script setup lang="ts">
+import type { Timeline } from '../../types';
 
-defineEmits(['update:viewMode', 'create-timeline']);
+type ViewMode = 'card' | 'kanban' | 'timeline' | 'calendar';
+
+defineProps<{
+  todayFormatted: string;
+  timelines: Timeline[];
+  urgentCount: number;
+  totalCompletedTasks: number;
+  totalTasks: number;
+  viewMode: ViewMode;
+}>();
+
+defineEmits<{
+  (e: 'update:viewMode', mode: ViewMode): void;
+  (e: 'create-timeline'): void;
+}>();
 </script>

@@ -94,8 +94,9 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
+import type { AxiosError } from 'axios';
 import { toast } from 'vue-sonner';
 import { storeToRefs } from 'pinia';
 import { useTimelineStore } from '../stores/timelines';
@@ -103,6 +104,15 @@ import TimelineHeader from '../components/timelines/TimelineHeader.vue';
 import TimelineViewModes from '../components/timelines/TimelineViewModes.vue';
 import TimelineDetailDialog from '../components/timelines/TimelineDetailDialog.vue';
 import { useConfirm } from '../composables/useConfirm';
+import type {
+  ApiErrorPayload,
+  CreateTimelinePayload,
+  UpdateTimelinePayload,
+  Task,
+  Timeline,
+  TimelineForm,
+  ViewMode,
+} from '../types';
 
 const { confirm } = useConfirm();
 
@@ -113,14 +123,14 @@ const timelineStore = useTimelineStore();
 const { timelines, allTasks, urgentCount, totalCompletedTasks, totalTasks, sortedTimelines } = storeToRefs(timelineStore);
 
 // ────────────── View-local UI 狀態 ──────────────
-const selectedTimeline = ref(null);
-const timelineTasks = ref([]);
-const viewMode = ref('card');
+const selectedTimeline = ref<Timeline | null>(null);
+const timelineTasks = ref<Task[]>([]);
+const viewMode = ref<ViewMode>('card');
 
 // Create/Edit Modal 狀態
 const showCreateModal = ref(false);
-const editingTimeline = ref(null);
-const timelineForm = ref({ name: '', start_date: '', end_date: '', remark: '' });
+const editingTimeline = ref<Timeline | null>(null);
+const timelineForm = ref<TimelineForm>({ name: '', start_date: '', end_date: '', remark: '' });
 
 // ────────────── Computed ──────────────
 const todayFormatted = computed(() => {
@@ -128,8 +138,39 @@ const todayFormatted = computed(() => {
   return today.toLocaleDateString('zh-TW', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' });
 });
 
+const toDateOnly = (value: string): string => new Date(value).toISOString().split('T')[0];
+
+const buildTimelineUpdatePayload = (original: Timeline, form: TimelineForm): UpdateTimelinePayload => {
+  const payload: UpdateTimelinePayload = {};
+
+  const nextName = form.name.trim();
+  if (nextName !== original.name) {
+    payload.name = nextName;
+  }
+
+  const originalStartDate = original.startDate ? original.startDate.split('T')[0] : '';
+  const nextStartDate = form.start_date ? toDateOnly(form.start_date) : '';
+  if (nextStartDate !== originalStartDate) {
+    payload.start_date = nextStartDate;
+  }
+
+  const originalEndDate = original.endDate ? original.endDate.split('T')[0] : '';
+  const nextEndDate = form.end_date ? toDateOnly(form.end_date) : '';
+  if (nextEndDate !== originalEndDate) {
+    payload.end_date = nextEndDate;
+  }
+
+  const originalRemark = original.remark || '';
+  const nextRemark = form.remark || '';
+  if (nextRemark !== originalRemark) {
+    payload.remark = nextRemark;
+  }
+
+  return payload;
+};
+
 // ────────────── 專案 CRUD ──────────────
-const viewTimeline = async (timeline) => {
+const viewTimeline = async (timeline: Timeline) => {
   selectedTimeline.value = timeline;
   try {
     timelineTasks.value = await timelineStore.getTimelineTasks(timeline.id);
@@ -138,7 +179,7 @@ const viewTimeline = async (timeline) => {
   }
 };
 
-const editTimeline = (timeline) => {
+const editTimeline = (timeline: Timeline) => {
   editingTimeline.value = timeline;
   timelineForm.value = {
     name: timeline.name,
@@ -149,35 +190,43 @@ const editTimeline = (timeline) => {
   showCreateModal.value = true;
 };
 
-const deleteTimeline = async (id) => {
+const deleteTimeline = async (id: number) => {
   if (!await confirm({ title: '確定要刪除此專案？', message: '相關任務也會被刪除！', danger: true })) return;
   try {
     await timelineStore.removeTimeline(id);
     toast.success('專案刪除成功');
   } catch (error) {
-    toast.error(error.response?.data?.error || '刪除失敗');
+    const message = (error as AxiosError<ApiErrorPayload>).response?.data?.error;
+    toast.error(message || '刪除失敗');
   }
 };
 
 const handleSubmit = async () => {
   if (!timelineForm.value.name?.trim()) { toast.warning('請輸入專案名稱'); return; }
   try {
-    const formData = {
-      name: timelineForm.value.name.trim(),
-      start_date: timelineForm.value.start_date ? new Date(timelineForm.value.start_date).toISOString().split('T')[0] : '',
-      end_date: timelineForm.value.end_date ? new Date(timelineForm.value.end_date).toISOString().split('T')[0] : '',
-      remark: timelineForm.value.remark || ''
-    };
     if (editingTimeline.value) {
-      await timelineStore.updateTimeline(editingTimeline.value.id, formData);
+      const updatePayload = buildTimelineUpdatePayload(editingTimeline.value, timelineForm.value);
+      if (Object.keys(updatePayload).length === 0) {
+        toast.info('沒有變更內容');
+        closeModal();
+        return;
+      }
+      await timelineStore.updateTimeline(editingTimeline.value.id, updatePayload);
       toast.success('專案更新成功');
     } else {
+      const formData: CreateTimelinePayload = {
+        name: timelineForm.value.name.trim(),
+        start_date: timelineForm.value.start_date ? toDateOnly(timelineForm.value.start_date) : '',
+        end_date: timelineForm.value.end_date ? toDateOnly(timelineForm.value.end_date) : '',
+        remark: timelineForm.value.remark || ''
+      };
       await timelineStore.addTimeline(formData);
       toast.success('專案新增成功');
     }
     closeModal();
   } catch (error) {
-    toast.error(error.response?.data?.error || '操作失敗');
+    const message = (error as AxiosError<ApiErrorPayload>).response?.data?.error;
+    toast.error(message || '操作失敗');
   }
 };
 
@@ -188,23 +237,28 @@ const closeModal = () => {
 };
 
 // ────────────── 任務操作（來自 DetailDialog emit） ──────────────
-const onToggleTask = async (taskId) => {
+const onToggleTask = async (taskId: number) => {
   try {
     await timelineStore.toggleTask(taskId);
-    await viewTimeline(selectedTimeline.value);
+    if (selectedTimeline.value) {
+      await viewTimeline(selectedTimeline.value);
+    }
   } catch {
     toast.error('更新任務狀態失敗');
   }
 };
 
-const onDeleteTask = async (taskId) => {
+const onDeleteTask = async (taskId: number) => {
   if (!await confirm({ title: '確定要刪除此任務？', danger: true })) return;
   try {
     await timelineStore.removeTask(taskId);
     toast.success('任務刪除成功');
-    await viewTimeline(selectedTimeline.value);
+    if (selectedTimeline.value) {
+      await viewTimeline(selectedTimeline.value);
+    }
   } catch (error) {
-    toast.error(error.response?.data?.error || '刪除任務失敗');
+    const message = (error as AxiosError<ApiErrorPayload>).response?.data?.error;
+    toast.error(message || '刪除任務失敗');
   }
 };
 
@@ -215,7 +269,7 @@ const onRefreshAll = async () => {
 };
 
 onMounted(() => {
-  timelineStore.fetchAll();
+  void timelineStore.fetchAll();
 });
 </script>
 

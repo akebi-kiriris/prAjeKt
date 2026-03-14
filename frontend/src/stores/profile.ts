@@ -1,17 +1,12 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
-import type { ChartStats, Task, Timeline } from '../types';
+import type { ChartStats, Task, Timeline, Profile, ProfileUpdatePayload } from '../types';
 import { profileService } from '../services/profileService';
 import { taskService } from '../services/taskService';
 import { timelineService } from '../services/timelineService';
 import { groupService } from '../services/groupService';
 
-interface ProfileForm {
-  name: string;
-  username: string;
-  email: string;
-  phone: string;
-}
+type ProfileForm = Pick<Profile, 'name' | 'username' | 'email' | 'phone'>;
 
 interface ProfileStats {
   totalTasks: number;
@@ -20,21 +15,12 @@ interface ProfileStats {
   totalGroups: number;
 }
 
-interface UpdateProfilePayload {
-  name: string;
-  username: string;
-  email: string;
-  phone: string;
-  current_password?: string;
-  new_password?: string;
-}
-
 export const useProfileStore = defineStore('profile', () => {
   const profile = ref<ProfileForm>({
     name: '',
-    username: '',
+    username: null,
     email: '',
-    phone: '',
+    phone: null,
   });
 
   const stats = ref<ProfileStats>({
@@ -62,9 +48,9 @@ export const useProfileStore = defineStore('profile', () => {
       const response = await profileService.getMe();
       profile.value = {
         name: response.data.name || '',
-        username: response.data.username || '',
+        username: response.data.username || null,
         email: response.data.email || '',
-        phone: response.data.phone || '',
+        phone: response.data.phone || null,
       };
     } catch (error) {
       console.error('取得個人資料失敗:', error);
@@ -74,8 +60,8 @@ export const useProfileStore = defineStore('profile', () => {
     }
   }
 
-  async function updateProfile(data: UpdateProfilePayload): Promise<void> {
-    const updateData: Record<string, string> = {
+  async function updateProfile(data: ProfileUpdatePayload): Promise<void> {
+    const updateData: ProfileUpdatePayload = {
       name: data.name,
       username: data.username,
       email: data.email,
@@ -89,10 +75,10 @@ export const useProfileStore = defineStore('profile', () => {
 
     await profileService.update(updateData);
     profile.value = {
-      name: data.name,
-      username: data.username,
-      email: data.email,
-      phone: data.phone,
+      name: data.name || '',
+      username: data.username || null,
+      email: data.email || '',
+      phone: data.phone || null,
     };
   }
 

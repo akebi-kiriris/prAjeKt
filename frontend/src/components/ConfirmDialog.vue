@@ -60,19 +60,19 @@
   </TransitionRoot>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import {
   TransitionRoot, TransitionChild,
   Dialog, DialogPanel, DialogTitle,
 } from '@headlessui/vue';
 import { dialogState } from '../composables/useConfirm';
 
-function handleConfirm() {
+function handleConfirm(): void {
   dialogState.value?.resolve(true);
   dialogState.value = null;
 }
 
-function handleCancel() {
+function handleCancel(): void {
   dialogState.value?.resolve(false);
   dialogState.value = null;
 }

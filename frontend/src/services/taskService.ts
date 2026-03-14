@@ -1,14 +1,14 @@
 import api from './api';
 import type { AxiosResponse } from 'axios';
-import type { Task, CreateTaskPayload, Subtask, TaskComment, TaskFile, TaskMember } from '../types';
+import type { ApiCompletionResponse, ApiMutationResponse, ApiTaskStatusResponse, Task, CreateTaskPayload, TaskUpdatePayload, Subtask, TaskComment, TaskFile, TaskMember, SearchUserResult } from '../types';
 
 export const taskService = {
   getAll:        (): Promise<AxiosResponse<Task[]>>                                    => api.get('/tasks'),
-  create:        (data: CreateTaskPayload): Promise<AxiosResponse<Task>>               => api.post('/tasks', data),
-  update:        (id: number, data: Partial<Task>): Promise<AxiosResponse<Task>>       => api.put(`/tasks/${id}`, data),
+  create:        (data: CreateTaskPayload): Promise<AxiosResponse<ApiMutationResponse>> => api.post('/tasks', data),
+  update:        (id: number, data: TaskUpdatePayload): Promise<AxiosResponse<ApiMutationResponse>> => api.put(`/tasks/${id}`, data),
   remove:        (id: number): Promise<AxiosResponse<void>>                            => api.delete(`/tasks/${id}`),
-  toggle:        (id: number): Promise<AxiosResponse<Task>>                            => api.patch(`/tasks/${id}/toggle`),
-  updateStatus:  (id: number, status: Task['status']): Promise<AxiosResponse<Task>>    => api.patch(`/tasks/${id}/status`, { status }),
+  toggle:        (id: number): Promise<AxiosResponse<ApiCompletionResponse>>           => api.patch(`/tasks/${id}/toggle`),
+  updateStatus:  (id: number, status: Task['status']): Promise<AxiosResponse<ApiTaskStatusResponse>> => api.patch(`/tasks/${id}/status`, { status }),
 
   // 子任務
   getSubtasks:   (id: number): Promise<AxiosResponse<Subtask[]>>                      => api.get(`/tasks/${id}/subtasks`),
@@ -20,7 +20,7 @@ export const taskService = {
   getMembers:    (id: number): Promise<AxiosResponse<TaskMember[]>>                   => api.get(`/tasks/${id}/members`),
   addMember:     (id: number, userId: number): Promise<AxiosResponse<TaskMember>>     => api.post(`/tasks/${id}/members`, { user_id: userId }),
   removeMember:  (taskId: number, userId: number): Promise<AxiosResponse<void>>       => api.delete(`/tasks/${taskId}/members/${userId}`),
-  searchUser:    (email: string): Promise<AxiosResponse<{ id: number; name: string; email: string }>> => api.post('/timelines/search_user', { email }),
+  searchUser:    (email: string): Promise<AxiosResponse<SearchUserResult>> => api.post('/timelines/search_user', { email }),
 
   // 留言
   getComments:   (id: number): Promise<AxiosResponse<TaskComment[]>>                  => api.get(`/tasks/${id}/comments`),

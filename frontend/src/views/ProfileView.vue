@@ -220,7 +220,7 @@
         </div>
         <div v-if="projectStats" class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div class="bg-white rounded-xl shadow-md p-4">
-            <h4 class="text-sm font-semibold text-gray-600 mb-3">成員任務貢獻</h4>
+            <h4 class="text-sm font-semibold text-gray-600 mb-10">成員任務貢獻</h4>
             <v-chart
               :option="memberBarOption"
               autoresize
@@ -239,8 +239,10 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
+import type { AxiosError } from 'axios';
+import type { Ref } from 'vue';
 import { toast } from 'vue-sonner';
 import { storeToRefs } from 'pinia';
 import { useProfileStore } from '../stores/profile';
@@ -251,18 +253,37 @@ import { CanvasRenderer } from 'echarts/renderers';
 import { LineChart, BarChart, PieChart } from 'echarts/charts';
 import { GridComponent, TooltipComponent, LegendComponent } from 'echarts/components';
 import { timelineService } from '../services/timelineService';
+import type {
+  ApiErrorPayload,
+  ChartStats,
+  ProfileForm,
+  ProfileUpdatePayload,
+  ProjectStats,
+  Timeline,
+} from '../types';
 
 use([CanvasRenderer, LineChart, BarChart, PieChart, GridComponent, TooltipComponent, LegendComponent]);
 
 const profileStore = useProfileStore();
 const authStore = useAuthStore();
 
+type StatusKey = 'pending' | 'in_progress' | 'review' | 'completed' | 'cancelled';
+
 // ────────────── Store 狀態（響應式解構）──────────────
-const { profile, loading, statCards, chartStats, chartLoading, ownedTimelines } = storeToRefs(profileStore);
+const {
+  profile,
+  loading,
+  statCards,
+  chartStats: rawChartStats,
+  chartLoading,
+  ownedTimelines,
+} = storeToRefs(profileStore);
+
+const chartStats = rawChartStats as unknown as Ref<ChartStats | null>;
 
 // ────────────── View-local UI 狀態 ──────────────
 const isEditing = ref(false);
-const profileForm = ref({
+const profileForm = ref<ProfileForm>({
   name: '',
   username: '',
   email: '',
@@ -271,7 +292,7 @@ const profileForm = ref({
   new_password: '',
   confirm_password: ''
 });
-const originalProfile = ref({});
+const originalProfile = ref<ProfileForm>({ ...profileForm.value });
 // ────────────── 初始化表單（從 store profile 同步）──────────────
 const syncFormFromStore = () => {
   profileForm.value = {
@@ -295,7 +316,7 @@ const handleSubmit = async () => {
   }
 
   try {
-    const updateData = {
+    const updateData: ProfileUpdatePayload = {
       name: profileForm.value.name,
       username: profileForm.value.username,
       email: profileForm.value.email,
@@ -314,7 +335,8 @@ const handleSubmit = async () => {
     profileForm.value.confirm_password = '';
     originalProfile.value = { ...profileForm.value };
   } catch (error) {
-    toast.error(error.response?.data?.error || '更新失敗');
+    const message = (error as AxiosError<ApiErrorPayload>).response?.data?.error;
+    toast.error(message || '更新失敗');
   }
 };
 
@@ -330,11 +352,11 @@ const cancelEdit = () => {
 const STATUS_LABELS = {
   pending: '待辦', in_progress: '進行中', review: '審核中',
   completed: '已完成', cancelled: '已取消',
-};
+} as const;
 const STATUS_COLORS = {
   pending: '#6366f1', in_progress: '#f59e0b', review: '#3b82f6',
   completed: '#10b981', cancelled: '#9ca3af',
-};
+} as const;
 
 // ──────────────── Level 1：個人圖表 Options ────────────────
 const trendOption = computed(() => {
@@ -364,7 +386,14 @@ const statusPieOption = computed(() => {
   const dist = chartStats.value.status_distribution;
   const pieData = Object.entries(dist)
     .filter(([, v]) => v > 0)
-    .map(([k, v]) => ({ name: STATUS_LABELS[k] || k, value: v, itemStyle: { color: STATUS_COLORS[k] } }));
+    .map(([k, v]) => {
+      const key = k as StatusKey;
+      return {
+        name: STATUS_LABELS[key] || key,
+        value: v,
+        itemStyle: { color: STATUS_COLORS[key] },
+      };
+    });
   return {
     tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
     legend: { orient: 'vertical', right: 8, top: 'center', textStyle: { fontSize: 11 } },
@@ -394,8 +423,8 @@ const projectBarOption = computed(() => {
 });
 
 // ──────────────── Level 2：專案圖表 ────────────────
-const selectedTimelineId = ref(null);
-const projectStats = ref(null);
+const selectedTimelineId = ref<number | null>(null);
+const projectStats = ref<ProjectStats | null>(null);
 const loadingProjectStats = ref(false);
 
 const loadProjectStats = async () => {
@@ -404,8 +433,8 @@ const loadProjectStats = async () => {
   projectStats.value = null;
   try {
     const res = await timelineService.getMemberStats(selectedTimelineId.value);
-    projectStats.value = res.data;
-  } catch (e) {
+    projectStats.value = res.data as unknown as ProjectStats;
+  } catch {
     toast.error('載入專案統計失敗');
   } finally {
     loadingProjectStats.value = false;
@@ -418,7 +447,7 @@ const memberBarOption = computed(() => {
   return {
     tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
     legend: { data: ['總任務', '已完成'], bottom: 0, textStyle: { fontSize: 10 } },
-    grid: { left: 80, right: 24, top: 12, bottom: 32 },
+    grid: { left: 80, right: 24, top: 12, bottom: 44 },
     xAxis: { type: 'value', minInterval: 1 },
     yAxis: {
       type: 'category',
@@ -437,7 +466,14 @@ const projectStatusOption = computed(() => {
   const dist = projectStats.value.status_distribution;
   const pieData = Object.entries(dist)
     .filter(([, v]) => v > 0)
-    .map(([k, v]) => ({ name: STATUS_LABELS[k] || k, value: v, itemStyle: { color: STATUS_COLORS[k] } }));
+    .map(([k, v]) => {
+      const key = k as StatusKey;
+      return {
+        name: STATUS_LABELS[key] || key,
+        value: v,
+        itemStyle: { color: STATUS_COLORS[key] },
+      };
+    });
   return {
     tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
     legend: { orient: 'vertical', right: 8, top: 'center', textStyle: { fontSize: 11 } },
@@ -449,9 +485,9 @@ onMounted(async () => {
   await profileStore.fetchProfile();
   await profileStore.fetchStats();
   syncFormFromStore();
-  profileStore.fetchChartStats();
+  await profileStore.fetchChartStats();
   if (ownedTimelines.value.length > 0) {
-    selectedTimelineId.value = ownedTimelines.value[0].id;
+    selectedTimelineId.value = (ownedTimelines.value[0] as Timeline).id;
     await loadProjectStats();
   }
 });

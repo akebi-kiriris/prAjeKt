@@ -154,14 +154,16 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
+import axios from 'axios';
 import { ref } from 'vue';
 import { useRouter } from 'vue-router';
 import api from '../services/api';
+import type { RegisterForm } from '../types';
 
 const router = useRouter();
 
-const formData = ref({
+const formData = ref<RegisterForm>({
   name: '',
   username: '',
   email: '',
@@ -169,14 +171,14 @@ const formData = ref({
   password: ''
 });
 
-const confirmPassword = ref('');
-const showPassword = ref(false);
-const showConfirmPassword = ref(false);
-const loading = ref(false);
-const errorMessage = ref('');
-const successMessage = ref('');
+const confirmPassword = ref<string>('');
+const showPassword = ref<boolean>(false);
+const showConfirmPassword = ref<boolean>(false);
+const loading = ref<boolean>(false);
+const errorMessage = ref<string>('');
+const successMessage = ref<string>('');
 
-const handleRegister = async () => {
+const handleRegister = async (): Promise<void> => {
   errorMessage.value = '';
   successMessage.value = '';
   
@@ -198,8 +200,12 @@ const handleRegister = async () => {
     setTimeout(() => {
       router.push('/login');
     }, 2000);
-  } catch (error) {
-    errorMessage.value = error.response?.data?.error || '註冊失敗，請稍後再試';
+  } catch (error: unknown) {
+    if (axios.isAxiosError(error)) {
+      errorMessage.value = (error.response?.data as { error?: string } | undefined)?.error || '註冊失敗，請稍後再試';
+    } else {
+      errorMessage.value = '註冊失敗，請稍後再試';
+    }
   } finally {
     loading.value = false;
   }

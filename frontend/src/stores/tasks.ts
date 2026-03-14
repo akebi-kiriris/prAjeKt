@@ -1,9 +1,8 @@
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
-import type { Task, CreateTaskPayload, Subtask } from '../types';
+import type { Task, CreateTaskPayload, TaskUpdatePayload, Subtask } from '../types';
 import { taskService } from '../services/taskService';
-
-type TaskFormPayload = CreateTaskPayload & Partial<Task>;
+import { mapToCreateTaskPayload, mapToUpdateTaskPayload } from '../utils/payloadMappers';
 
 export const useTaskStore = defineStore('tasks', () => {
   const tasks = ref<Task[]>([]);
@@ -16,23 +15,18 @@ export const useTaskStore = defineStore('tasks', () => {
     loading.value = false;
   }
 
-  async function addTask(data: TaskFormPayload): Promise<void> {
-    const formData: TaskFormPayload = {
-      ...data,
-      start_date: data.start_date || null,
-      end_date: data.end_date || null,
-    };
-
+  async function addTask(data: CreateTaskPayload): Promise<void> {
+    const formData = mapToCreateTaskPayload(data);
     await taskService.create(formData);
     await fetchTasks();
   }
 
-  async function updateTask(id: number, data: TaskFormPayload): Promise<void> {
-    const formData: TaskFormPayload = {
-      ...data,
-      start_date: data.start_date || null,
-      end_date: data.end_date || null,
-    };
+  async function updateTask(id: number, data: TaskUpdatePayload): Promise<void> {
+    const formData = mapToUpdateTaskPayload(data);
+
+    if (Object.keys(formData).length === 0) {
+      return;
+    }
 
     await taskService.update(id, formData);
     await fetchTasks();

@@ -6,6 +6,17 @@ from models.user import User
 
 profile_bp = Blueprint('profile', __name__)
 
+PROFILE_UPDATE_ALLOWED_FIELDS = {
+    'name',
+    'username',
+    'phone',
+    'email',
+    'avatar',
+    'bio',
+    'current_password',
+    'new_password',
+}
+
 @profile_bp.route('/me', methods=['GET'])
 @jwt_required()
 def get_profile():
@@ -22,6 +33,8 @@ def get_profile():
         'username': user.username,
         'email': user.email,
         'phone': user.phone,
+        'avatar': user.avatar,
+        'bio': user.bio,
         'created_at': user.created_at.isoformat() + 'Z' if user.created_at else None
     }), 200
 
@@ -35,7 +48,14 @@ def update_profile():
     if not user:
         return jsonify({'error': '使用者不存在'}), 404
     
-    data = request.get_json()
+    data = request.get_json() or {}
+
+    if not isinstance(data, dict):
+        return jsonify({'error': '請提供正確的 JSON 物件'}), 400
+
+    unknown_fields = sorted(set(data.keys()) - PROFILE_UPDATE_ALLOWED_FIELDS)
+    if unknown_fields:
+        return jsonify({'error': f'不允許的欄位: {", ".join(unknown_fields)}'}), 400
     
     # 更新允許的欄位
     if 'name' in data:
@@ -49,6 +69,10 @@ def update_profile():
         user.phone = data['phone']
     if 'email' in data:
         user.email = data['email']
+    if 'avatar' in data:
+        user.avatar = data['avatar']
+    if 'bio' in data:
+        user.bio = data['bio']
     
     # 處理密碼變更
     if data.get('new_password'):

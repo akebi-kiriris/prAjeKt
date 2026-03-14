@@ -81,24 +81,25 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
+import type { LoginForm } from '../types';
 
 const router = useRouter();
 const authStore = useAuthStore();
 
-const formData = ref({
+const formData = ref<LoginForm>({
   email: '',
   password: '',
 });
 
-const errorMessage = ref('');
-const loading = ref(false);
-const showPassword = ref(false);
+const errorMessage = ref<string>('');
+const loading = ref<boolean>(false);
+const showPassword = ref<boolean>(false);
 
-const handleLogin = async () => {
+const handleLogin = async (): Promise<void> => {
   loading.value = true;
   errorMessage.value = '';
   
@@ -107,7 +108,7 @@ const handleLogin = async () => {
   if (result.success) {
     router.push('/');
   } else {
-    errorMessage.value = result.error;
+    errorMessage.value = result.error || '登入失敗';
   }
   
   loading.value = false;
