@@ -93,7 +93,7 @@ PrAjeKt/
 │       │   └── TrashView.vue       # 垃圾桶（已刪任務 / 專案）
 │       └── router/index.js       # 路由設定（含導航守衛）
 │
-└── docs/                         # 開發筆記（不納入版控）
+└── docs/                         # 開發筆記與流程文件（納入版控）
 ```
 
 ## 快速啟動
@@ -126,9 +126,14 @@ python app.py
 cd frontend
 npm install
 npm run dev
+npm run guardrails:payload
 ```
 
 前端運行於 `http://localhost:5173`
+
+`npm run guardrails:payload` 會檢查兩個規則：
+- 禁止在 mutation payload 使用 `Partial<Entity>`
+- 禁止 `service.update(..., { ...entity })` 的 over-posting 寫法
 
 ### 一鍵啟動
 
@@ -225,6 +230,8 @@ start_all.bat
 - **Token 刷新**：access token 過期時，Axios 攔截器會自動使用 refresh token 換新，無需手動處理
 - **開發資料庫**：使用 SQLite（`backend/instance/`），不需要額外安裝資料庫服務
 - **AI 功能**：需要有效的 Google API Key，可於 [Google AI Studio](https://aistudio.google.com/app/apikey) 免費申請
+- **Payload 契約**：請參考 `docs/payload-contracts.md`，前後端 update/create 請遵守 allowlist
+- **文件同步流程**：請參考 `docs/文件更新與發布流程.md`
 
 ## 環境需求
 
