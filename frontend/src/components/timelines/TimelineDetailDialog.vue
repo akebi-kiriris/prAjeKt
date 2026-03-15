@@ -188,6 +188,11 @@
                   <span :class="['px-2 py-0.5 text-xs font-medium rounded-full', member.role === 0 ? 'bg-primary/10 text-primary' : 'bg-gray-100 text-gray-500']">
                     {{ member.role === 0 ? '負責人' : '協作者' }}
                   </span>
+                  <button
+                    v-if="member.role !== 0"
+                    @click="setAssignedTaskOwner(member)"
+                    class="px-2 py-1 text-[11px] font-medium rounded-lg bg-amber-100 text-amber-700 hover:bg-amber-200 transition-colors"
+                  >設為主責</button>
                   <button v-if="member.role !== 0" @click="kickAssignedMember(member)" class="w-7 h-7 flex items-center justify-center text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors text-sm font-bold">✕</button>
                 </div>
               </div>
@@ -259,6 +264,11 @@
               >
                 <span>{{ member.name }}</span>
                 <span class="text-gray-400 text-[10px]">{{ member.role === 0 ? '負責人' : '協作者' }}</span>
+                <button
+                  v-if="member.role !== 0"
+                  @click="setAssignedTaskOwner(member)"
+                  class="ml-0.5 px-1.5 py-0.5 text-[10px] rounded-md bg-amber-100 text-amber-700 hover:bg-amber-200 transition-colors"
+                >主責</button>
                 <button
                   v-if="member.role !== 0"
                   @click="kickAssignedMember(member)"
@@ -710,6 +720,20 @@ const kickAssignedMember = async (member: TaskMember) => {
     await loadTaskMembersForAssign();
   } catch (err: unknown) {
     toast.error(getApiErrorMessage(err, '移除失敗'));
+  }
+};
+
+const setAssignedTaskOwner = async (member: TaskMember) => {
+  if (!assignTask.value) return;
+  if (!await confirm({ title: `將「${member.name}」設為主責人？`, message: '原主責人會自動改為協作者。' })) return;
+
+  try {
+    await taskService.updateMemberRole(assignTask.value.task_id, member.user_id, 0);
+    await loadTaskMembersForAssign();
+    emit('refresh-all');
+    toast.success(`已將 ${member.name} 設為主責人`);
+  } catch (err: unknown) {
+    toast.error(getApiErrorMessage(err, '設定主責人失敗'));
   }
 };
 

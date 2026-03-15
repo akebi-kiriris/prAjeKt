@@ -139,6 +139,12 @@
                 </span>
                 <button
                   v-if="member.role !== 0"
+                  @click="setTaskOwner(member)"
+                  class="px-2 py-1 text-[11px] rounded-md bg-amber-100 text-amber-700 hover:bg-amber-200 transition-colors"
+                  title="設為主責人"
+                >主責</button>
+                <button
+                  v-if="member.role !== 0"
                   @click="kickTaskMember(member)"
                   class="text-gray-300 hover:text-red-500 text-lg leading-none transition-colors"
                   title="移除成員"
@@ -718,6 +724,20 @@ const kickTaskMember = async (member: TaskMember) => {
     await store.fetchTasks();
   } catch (e: unknown) {
     toast.error(getApiErrorMessage(e, '移除失敗'));
+  }
+};
+
+const setTaskOwner = async (member: TaskMember) => {
+  if (!shareTask.value) return;
+  if (!await confirm({ title: `將「${member.name}」設為主責人？`, message: '原主責人會自動改為協作者。' })) return;
+
+  try {
+    await taskService.updateMemberRole(shareTask.value.task_id, member.user_id, 0);
+    await loadTaskMembers();
+    await store.fetchTasks();
+    toast.success(`已將 ${member.name} 設為主責人`);
+  } catch (e: unknown) {
+    toast.error(getApiErrorMessage(e, '設定主責人失敗'));
   }
 };
 

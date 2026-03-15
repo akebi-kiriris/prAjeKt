@@ -19,6 +19,7 @@ export const taskService = {
   // 成員管理
   getMembers:    (id: number): Promise<AxiosResponse<TaskMember[]>>                   => api.get(`/tasks/${id}/members`),
   addMember:     (id: number, userId: number): Promise<AxiosResponse<TaskMember>>     => api.post(`/tasks/${id}/members`, { user_id: userId }),
+  updateMemberRole: (taskId: number, userId: number, role: 0 | 1): Promise<AxiosResponse<ApiMutationResponse>> => api.patch(`/tasks/${taskId}/members/${userId}`, { role }),
   removeMember:  (taskId: number, userId: number): Promise<AxiosResponse<void>>       => api.delete(`/tasks/${taskId}/members/${userId}`),
   searchUser:    (email: string): Promise<AxiosResponse<SearchUserResult>> => api.post('/timelines/search_user', { email }),
 

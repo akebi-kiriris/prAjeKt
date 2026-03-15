@@ -3,19 +3,14 @@ from flask_jwt_extended import jwt_required, get_jwt_identity
 from werkzeug.security import check_password_hash, generate_password_hash
 from app import db
 from models.user import User
+from services.profile_service import (
+    PROFILE_UPDATE_ALLOWED_FIELDS,
+    find_unknown_fields,
+    profile_to_dict,
+    search_user_to_dict,
+)
 
 profile_bp = Blueprint('profile', __name__)
-
-PROFILE_UPDATE_ALLOWED_FIELDS = {
-    'name',
-    'username',
-    'phone',
-    'email',
-    'avatar',
-    'bio',
-    'current_password',
-    'new_password',
-}
 
 @profile_bp.route('/me', methods=['GET'])
 @jwt_required()
@@ -27,16 +22,7 @@ def get_profile():
     if not user:
         return jsonify({'error': '使用者不存在'}), 404
     
-    return jsonify({
-        'id': user.id,
-        'name': user.name,
-        'username': user.username,
-        'email': user.email,
-        'phone': user.phone,
-        'avatar': user.avatar,
-        'bio': user.bio,
-        'created_at': user.created_at.isoformat() + 'Z' if user.created_at else None
-    }), 200
+    return jsonify(profile_to_dict(user)), 200
 
 @profile_bp.route('/me', methods=['PUT'])
 @jwt_required()
@@ -53,7 +39,7 @@ def update_profile():
     if not isinstance(data, dict):
         return jsonify({'error': '請提供正確的 JSON 物件'}), 400
 
-    unknown_fields = sorted(set(data.keys()) - PROFILE_UPDATE_ALLOWED_FIELDS)
+    unknown_fields = find_unknown_fields(data, PROFILE_UPDATE_ALLOWED_FIELDS)
     if unknown_fields:
         return jsonify({'error': f'不允許的欄位: {", ".join(unknown_fields)}'}), 400
     
@@ -109,12 +95,7 @@ def search_user():
     if not user:
         return jsonify({'error': '找不到使用者'}), 404
     
-    return jsonify({
-        'id': user.id,
-        'name': user.name,
-        'username': user.username,
-        'email': user.email
-    }), 200
+    return jsonify(search_user_to_dict(user)), 200
 
 
 @profile_bp.route('/chart-stats', methods=['GET'])

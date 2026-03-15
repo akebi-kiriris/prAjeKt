@@ -3,25 +3,14 @@ from flask_jwt_extended import jwt_required, get_jwt_identity
 from app import db
 from models.todo import Todo
 from datetime import datetime
+from services.todo_service import (
+    TODO_CREATE_ALLOWED_FIELDS,
+    TODO_UPDATE_ALLOWED_FIELDS,
+    find_unknown_fields,
+    todo_to_dict,
+)
 
 todos_bp = Blueprint('todos', __name__)
-
-TODO_CREATE_ALLOWED_FIELDS = {'title', 'content', 'type', 'deadline', 'priority'}
-TODO_UPDATE_ALLOWED_FIELDS = {'title', 'content', 'type', 'deadline', 'priority', 'completed'}
-
-
-def _todo_to_dict(todo):
-    return {
-        'id': todo.id,
-        'title': todo.title,
-        'content': todo.content,
-        'type': todo.type,
-        'deadline': todo.deadline.isoformat() + 'Z' if todo.deadline else None,
-        'completed': todo.completed,
-        'priority': todo.priority,
-        'created_at': todo.created_at.isoformat() + 'Z' if todo.created_at else None,
-        'updated_at': todo.updated_at.isoformat() + 'Z' if todo.updated_at else None,
-    }
 
 @todos_bp.route('', methods=['GET'])
 @jwt_required()
@@ -35,12 +24,12 @@ def get_todos():
         todo = Todo.query.filter_by(id=todo_id, user_id=user_id).filter(Todo.deleted_at.is_(None)).first()
         if not todo:
             return jsonify({'error': '找不到該待辦事項'}), 404
-        return jsonify([_todo_to_dict(todo)]), 200
+        return jsonify([todo_to_dict(todo)]), 200
     
     # 取得所有待辦事項（排除軟刪除）
     todos = Todo.query.filter_by(user_id=user_id).filter(Todo.deleted_at.is_(None)).order_by(Todo.completed, Todo.deadline).all()
     
-    return jsonify([_todo_to_dict(t) for t in todos]), 200
+    return jsonify([todo_to_dict(t) for t in todos]), 200
 
 @todos_bp.route('', methods=['POST'])
 @jwt_required()
@@ -52,7 +41,7 @@ def create_todo():
     if not isinstance(data, dict):
         return jsonify({'error': '請提供正確的 JSON 物件'}), 400
 
-    unknown_fields = sorted(set(data.keys()) - TODO_CREATE_ALLOWED_FIELDS)
+    unknown_fields = find_unknown_fields(data, TODO_CREATE_ALLOWED_FIELDS)
     if unknown_fields:
         return jsonify({'error': f'不允許的欄位: {", ".join(unknown_fields)}'}), 400
     
@@ -109,7 +98,7 @@ def update_todo(todo_id):
     if not isinstance(data, dict):
         return jsonify({'error': '請提供正確的 JSON 物件'}), 400
 
-    unknown_fields = sorted(set(data.keys()) - TODO_UPDATE_ALLOWED_FIELDS)
+    unknown_fields = find_unknown_fields(data, TODO_UPDATE_ALLOWED_FIELDS)
     if unknown_fields:
         return jsonify({'error': f'不允許的欄位: {", ".join(unknown_fields)}'}), 400
 

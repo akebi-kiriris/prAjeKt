@@ -1,6 +1,5 @@
 ﻿from flask import Blueprint, request, jsonify, send_from_directory
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from functools import wraps
 from app import db
 from models.task import Task
 from models.task_user import TaskUser
@@ -8,100 +7,23 @@ from models.task_comment import TaskComment
 from models.timeline_user import TimelineUser
 from models.subtask import Subtask
 from models.user import User
-from models.notification import Notification
 from datetime import datetime
 import os
-
-
-def create_notification(user_id, ntype, title, content=None, link=None):
-    """建立通知的工具函式，失敗時靜默不影響主流程"""
-    try:
-        notif = Notification(
-            user_id=user_id,
-            type=ntype,
-            title=title,
-            content=content,
-            link=link
-        )
-        db.session.add(notif)
-        # 不在此 commit，由呼叫者的 commit 一起提交
-    except Exception:
-        pass
+from services.task_service import (
+    TASK_CREATE_ALLOWED_FIELDS,
+    TASK_UPDATE_ALLOWED_FIELDS,
+    TASK_STATUS_VALUES,
+    build_task_member_list,
+    can_manage_task_members,
+    create_notification,
+    find_unknown_fields,
+    get_user_task_role,
+    require_task_role,
+    task_comment_to_dict,
+    task_list_item_to_dict,
+)
 
 tasks_bp = Blueprint('tasks', __name__)
-
-TASK_CREATE_ALLOWED_FIELDS = {
-    'name',
-    'timeline_id',
-    'priority',
-    'status',
-    'tags',
-    'estimated_hours',
-    'start_date',
-    'end_date',
-    'task_remark',
-    'isWork',
-}
-
-TASK_UPDATE_ALLOWED_FIELDS = {
-    'name',
-    'timeline_id',
-    'priority',
-    'status',
-    'tags',
-    'estimated_hours',
-    'actual_hours',
-    'start_date',
-    'end_date',
-    'task_remark',
-    'isWork',
-}
-
-TASK_STATUS_VALUES = {'pending', 'in_progress', 'review', 'completed', 'cancelled'}
-
-
-def _find_unknown_fields(payload, allowed_fields):
-    return sorted(set(payload.keys()) - allowed_fields)
-
-
-def get_user_task_role(user_id, task_id):
-    """查詢使用者在某任務的角色。
-    先找 task_user 直接記錄；若任務屬於 timeline 且未在 task_user 中，
-    繼承 timeline_user 的角色（0=負責人, 1=協作者）。
-    回傳 None 代表無任何權限。"""
-    member = TaskUser.query.filter_by(task_id=task_id, user_id=user_id).first()
-    if member:
-        return member.role
-    # 若任務屬於 timeline，依使用者在該 timeline 的角色判斷
-    task = Task.query.filter_by(task_id=task_id).first()
-    if task and task.timeline_id:
-        tl_member = TimelineUser.query.filter_by(
-            timeline_id=task.timeline_id, user_id=user_id
-        ).first()
-        if tl_member is not None:
-            return tl_member.role  # 繼承 timeline role
-    return None
-
-
-def require_task_role(required_role='member'):
-    """
-    Decorator：檢查當前使用者在任務中的角色。
-    required_role='member'  → owner(0) 或 collaborator(1) 均可
-    required_role='owner'   → 只有 owner(0) 才行
-    """
-    def decorator(f):
-        @wraps(f)
-        def wrapper(*args, **kwargs):
-            user_id = int(get_jwt_identity())
-            task_id = kwargs.get('task_id')
-            role = get_user_task_role(user_id, task_id)
-            if role is None:
-                return jsonify({'error': '你不是此任務成員'}), 403
-            if required_role == 'owner' and role != 0:
-                return jsonify({'error': '只有負責人可執行此操作'}), 403
-            return f(*args, **kwargs)
-        return wrapper
-    return decorator
 
 @tasks_bp.route('', methods=['GET'])
 @jwt_required()
@@ -121,20 +43,7 @@ def get_tasks():
     
     result = []
     for t in tasks:
-        # 取得任務成員
-        members = TaskUser.query.filter_by(task_id=t.task_id).all()
-        member_list = []
-        current_user_role = None
-        for m in members:
-            if m.user_id == user_id:
-                current_user_role = m.role
-            user = User.query.get(m.user_id)
-            if user:
-                member_list.append({
-                    'user_id': user.id,
-                    'name': user.name,
-                    'role': m.role  # 0: 負責人, 1: 協作者
-                })
+        member_list, current_user_role = build_task_member_list(t.task_id, viewer_user_id=user_id)
 
         # 若在 task_users 找不到，試從 timeline_users 取得角色
         if current_user_role is None and t.timeline_id:
@@ -148,27 +57,8 @@ def get_tasks():
         # 取得子任務
         subtasks = Subtask.query.filter_by(task_id=t.task_id).order_by(Subtask.sort_order).all()
         subtask_list = [s.to_dict() for s in subtasks]
-        
-        result.append({
-            'task_id': t.task_id,
-            'name': t.name,
-            'completed': t.completed,
-            'timeline_id': t.timeline_id,
-            'priority': t.priority,
-            'status': t.status,
-            'tags': t.tags,
-            'estimated_hours': t.estimated_hours,
-            'actual_hours': t.actual_hours,
-            'members': member_list,
-            'subtasks': subtask_list,
-            'created_at': t.created_at.isoformat() + 'Z' if t.created_at else None,
-            'start_date': t.start_date.isoformat() + 'Z' if t.start_date else None,
-            'end_date': t.end_date.isoformat() + 'Z' if t.end_date else None,
-            'updated_at': t.updated_at.isoformat() + 'Z' if t.updated_at else None,
-            'task_remark': t.task_remark,
-            'isWork': t.isWork,
-            'is_owner': is_owner
-        })
+
+        result.append(task_list_item_to_dict(t, member_list, subtask_list, is_owner))
     
     return jsonify(result), 200
 
@@ -182,7 +72,7 @@ def create_task():
     if not isinstance(data, dict):
         return jsonify({'error': '請提供正確的 JSON 物件'}), 400
 
-    unknown_fields = _find_unknown_fields(data, TASK_CREATE_ALLOWED_FIELDS)
+    unknown_fields = find_unknown_fields(data, TASK_CREATE_ALLOWED_FIELDS)
     if unknown_fields:
         return jsonify({'error': f'不允許的欄位: {", ".join(unknown_fields)}'}), 400
     
@@ -258,7 +148,7 @@ def update_task(task_id):
     if not isinstance(data, dict):
         return jsonify({'error': '請提供正確的 JSON 物件'}), 400
 
-    unknown_fields = _find_unknown_fields(data, TASK_UPDATE_ALLOWED_FIELDS)
+    unknown_fields = find_unknown_fields(data, TASK_UPDATE_ALLOWED_FIELDS)
     if unknown_fields:
         return jsonify({'error': f'不允許的欄位: {", ".join(unknown_fields)}'}), 400
 
@@ -370,19 +260,7 @@ def toggle_task(task_id):
 @require_task_role('member')
 def get_task_members(task_id):
     """取得任務成員列表"""
-    members = TaskUser.query.filter_by(task_id=task_id).all()
-    result = []
-    for m in members:
-        user = User.query.get(m.user_id)
-        if user:
-            result.append({
-                'user_id': user.id,
-                'name': user.name,
-                'email': user.email,
-                'avatar': user.avatar,
-                'role': m.role,
-                'assigned_at': m.assigned_at.isoformat() + 'Z' if m.assigned_at else None
-            })
+    result, _ = build_task_member_list(task_id, include_contact=True)
     return jsonify(result), 200
 
 @tasks_bp.route('/<int:task_id>/members', methods=['POST'])
@@ -394,14 +272,7 @@ def add_task_member(task_id):
     if not task:
         return jsonify({'error': '找不到該任務'}), 404
 
-    # 檢查權限：task owner、任務建立者、或 timeline owner
-    task_role = get_user_task_role(user_id, task_id)
-    is_task_owner = (task_role == 0) or (task.user_id == user_id)
-    is_timeline_owner = False
-    if task.timeline_id:
-        tl_role = TimelineUser.query.filter_by(timeline_id=task.timeline_id, user_id=user_id).first()
-        is_timeline_owner = tl_role is not None and tl_role.role == 0
-    if not (is_task_owner or is_timeline_owner):
+    if not can_manage_task_members(user_id, task):
         return jsonify({'error': '只有負責人可新增成員'}), 403
 
     data = request.get_json()
@@ -457,6 +328,66 @@ def remove_task_member(task_id, member_id):
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
 
+
+@tasks_bp.route('/<int:task_id>/members/<int:member_id>', methods=['PATCH'])
+@jwt_required()
+def update_task_member_role(task_id, member_id):
+    """更新任務成員角色。
+    當 role=0 時，會把該任務其餘成員降為協作者，形成單一主責人。"""
+    payload = request.get_json() or {}
+    if not isinstance(payload, dict):
+        return jsonify({'error': '請提供正確的 JSON 物件'}), 400
+
+    if 'role' not in payload:
+        return jsonify({'error': '請提供 role 欄位'}), 400
+
+    try:
+        new_role = int(payload.get('role'))
+    except (TypeError, ValueError):
+        return jsonify({'error': 'role 必須是數字'}), 400
+
+    if new_role not in (0, 1):
+        return jsonify({'error': 'role 只允許 0(負責人) 或 1(協作者)'}), 400
+
+    task = Task.query.filter_by(task_id=task_id).first()
+    if not task:
+        return jsonify({'error': '找不到該任務'}), 404
+
+    current_user_id = int(get_jwt_identity())
+    if not can_manage_task_members(current_user_id, task):
+        return jsonify({'error': '只有任務負責人、任務建立者或專案負責人可執行此操作'}), 403
+
+    target = TaskUser.query.filter_by(task_id=task_id, user_id=member_id).first()
+    if not target:
+        # 允許專案成員直接被提升為任務主責人（會自動補 task_user）。
+        if task.timeline_id:
+            timeline_member = TimelineUser.query.filter_by(
+                timeline_id=task.timeline_id,
+                user_id=member_id
+            ).first()
+            if timeline_member is None:
+                return jsonify({'error': '該使用者不是此專案成員，無法設為主責人'}), 400
+        else:
+            return jsonify({'error': '該使用者尚未加入任務，請先指派為成員'}), 400
+
+        target = TaskUser(task_id=task_id, user_id=member_id, role=1)
+        db.session.add(target)
+
+    # 避免任務沒有主責人。
+    if target.role == 0 and new_role == 1:
+        return jsonify({'error': '無法直接降級現任負責人，請先指定新負責人'}), 400
+
+    try:
+        if new_role == 0:
+            TaskUser.query.filter_by(task_id=task_id).update({'role': 1})
+            target.role = 0
+
+        db.session.commit()
+        return jsonify({'message': '成員角色更新成功'}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
 # ===== 任務留言 API =====
 
 @tasks_bp.route('/<int:task_id>/comments', methods=['GET'])
@@ -468,14 +399,7 @@ def get_task_comments(task_id):
     result = []
     for c in comments:
         user = User.query.get(c.user_id)
-        result.append({
-            'comment_id': c.comment_id,
-            'user_id': c.user_id,
-            'user_name': user.name if user else '未知使用者',
-            'user_avatar': user.avatar if user else None,
-            'task_message': c.task_message,
-            'created_at': c.created_at.isoformat() + 'Z' if c.created_at else None
-        })
+        result.append(task_comment_to_dict(c, user))
     return jsonify(result), 200
 
 @tasks_bp.route('/<int:task_id>/comments', methods=['POST'])

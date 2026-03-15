@@ -2,7 +2,7 @@
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from app import db
 from models.notification import Notification
-from datetime import datetime
+from services.notification_service import notification_to_dict
 
 notifications_bp = Blueprint('notifications', __name__)
 
@@ -19,15 +19,7 @@ def get_notifications():
         .limit(50)
         .all()
     )
-    return jsonify([{
-        'id': n.id,
-        'type': n.type,
-        'title': n.title,
-        'content': n.content,
-        'link': n.link,
-        'is_read': n.is_read,
-        'created_at': n.created_at.isoformat() + 'Z' if n.created_at else None,
-    } for n in notifications]), 200
+    return jsonify([notification_to_dict(n) for n in notifications]), 200
 
 
 @notifications_bp.route('/unread-count', methods=['GET'])

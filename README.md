@@ -2,7 +2,7 @@
 
 基於 Vue 3 + Flask 的專案管理與協作平台，整合 Google Gemini AI 實現智能任務生成。
 
-> **開發狀態**：Phase 1 & 2 全部完成 ✅（03/11 提前結束），Phase 3 TypeScript 遷移進行中 🔄（已完成基礎層 + Service + Store + Composables，元件層待做）。已完成 JWT token 自動刷新、AI 任務生成、任務留言／附件上傳、垃圾桶回收機制、多人協作專案管理、子任務 UI、通知系統（指派 / 邀請 / 到期提醒輪詢）、ConfirmDialog 取代原生 confirm()、數據分析儀表板（個人 + 專案雙層圖表）、行動版 RWD（底部導航 / 單欄佈局 / Header 收縮）等功能。
+> **開發狀態**：Phase 1~3 已完成 ✅；Phase 4 已完成 Payload/Gantt/後端 Service Layer，WebSocket 待排程 🔄。PostgreSQL 已決議延後至 Phase 5，將與部署整合一起執行。
 
 ## 功能模組
 
@@ -29,7 +29,7 @@
 | 圖表 | vue-echarts + ECharts 6 |
 | 後端 | Flask 3 + SQLAlchemy + Flask-Migrate |
 | 認證 | Flask-JWT-Extended（access + refresh token）|
-| 資料庫 | SQLite（開發）|
+| 資料庫 | SQLite（開發） / PostgreSQL（Phase 5 規劃）|
 | AI | Google Gemini 2.0 Flash（LangChain）|
 
 ## 專案結構
@@ -232,6 +232,18 @@ start_all.bat
 - **AI 功能**：需要有效的 Google API Key，可於 [Google AI Studio](https://aistudio.google.com/app/apikey) 免費申請
 - **Payload 契約**：請參考 `docs/payload-contracts.md`，前後端 update/create 請遵守 allowlist
 - **文件同步流程**：請參考 `docs/文件更新與發布流程.md`
+
+## Roadmap（近程）
+
+- **Phase 4 收尾**：WebSocket 即時通訊（群組訊息 / 通知即時化）
+- **Phase 5 上線與部署整合（待規劃）**：
+	- 部署目標與環境分層（dev/staging/prod）
+	- PostgreSQL 遷移（與部署一起）
+	- 監控告警與回滾 Runbook
+- **Phase 5 AI 主線（已定案）**：
+	- A：n8n + MCP 工作流整合
+	- B：Prompt + CoT（模板化與評測）
+	- C+ 題目（微調/安全/多模態/GUI Agent）改走 Labs 支線驗證，不直接塞主線
 
 ## 環境需求
 

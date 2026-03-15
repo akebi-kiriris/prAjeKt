@@ -99,6 +99,15 @@
         >
           <span class="mr-1">📅</span> 月曆
         </button>
+        <button 
+          @click="$emit('update:viewMode', 'gantt')"
+          :class="[
+            'px-4 py-2 rounded-lg text-sm font-medium transition-all',
+            viewMode === 'gantt' ? 'bg-primary text-white shadow-sm' : 'text-gray-600 hover:bg-gray-100'
+          ]"
+        >
+          <span class="mr-1">📈</span> 甘特圖
+        </button>
       </div>
       
       <!-- Add Button -->
@@ -114,9 +123,7 @@
 </template>
 
 <script setup lang="ts">
-import type { Timeline } from '../../types';
-
-type ViewMode = 'card' | 'kanban' | 'timeline' | 'calendar';
+import type { Timeline, ViewMode } from '../../types';
 
 defineProps<{
   todayFormatted: string;

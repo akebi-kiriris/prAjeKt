@@ -1,6 +1,5 @@
 ﻿from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from functools import wraps
 from app import db
 from models.timeline import Timeline
 from models.timeline_user import TimelineUser
@@ -12,53 +11,18 @@ from datetime import datetime
 import os
 import json
 import google.generativeai as genai
+from services.timeline_service import (
+    TIMELINE_UPDATE_ALLOWED_FIELDS,
+    find_unknown_fields,
+    get_task_access,
+    get_user_timeline_role,
+    require_timeline_role,
+    timeline_list_item_to_dict,
+    timeline_member_item_to_dict,
+    timeline_task_item_to_dict,
+)
 
 timelines_bp = Blueprint('timelines', __name__)
-
-TIMELINE_UPDATE_ALLOWED_FIELDS = {'name', 'start_date', 'end_date', 'remark'}
-
-
-def get_user_timeline_role(user_id, timeline_id):
-    """查詢使用者在某專案的角色，回傳 0（負責人）、1（協作者）或 None（非成員）"""
-    member = TimelineUser.query.filter_by(timeline_id=timeline_id, user_id=user_id).first()
-    return member.role if member is not None else None
-
-
-def get_task_access(user_id, task):
-    """查詢使用者對某任務的存取權限（支援 timeline 任務與獨立任務）。
-    優先檢查 timeline 成員資格，後退到 task_user 直接成員，再退到任務建立者。
-    回傳 role (0/1) 或 None（無權限）。"""
-    if task.timeline_id:
-        role = get_user_timeline_role(user_id, task.timeline_id)
-        if role is not None:
-            return role
-    member = TaskUser.query.filter_by(task_id=task.task_id, user_id=user_id).first()
-    if member:
-        return member.role
-    if task.user_id == user_id:
-        return 0
-    return None
-
-
-def require_timeline_role(required_role='member'):
-    """
-    Decorator：檢查當前使用者在專案中的角色。
-    required_role='member'  → owner(0) 或 collaborator(1) 均可
-    required_role='owner'   → 只有 owner(0) 才行
-    """
-    def decorator(f):
-        @wraps(f)
-        def wrapper(*args, **kwargs):
-            user_id = int(get_jwt_identity())
-            timeline_id = kwargs.get('timeline_id')
-            role = get_user_timeline_role(user_id, timeline_id)
-            if role is None:
-                return jsonify({'error': '你不是此專案成員'}), 403
-            if required_role == 'owner' and role != 0:
-                return jsonify({'error': '只有負責人可執行此操作'}), 403
-            return f(*args, **kwargs)
-        return wrapper
-    return decorator
 
 @timelines_bp.route('', methods=['GET'])
 @jwt_required()
@@ -79,16 +43,7 @@ def get_timelines():
         total_tasks = len(tasks)
         completed_tasks = len([t for t in tasks if t.completed])
 
-        result.append({
-            'id': timeline.id,
-            'name': timeline.name,
-            'startDate': timeline.start_date.isoformat() + 'Z' if timeline.start_date else None,
-            'endDate': timeline.end_date.isoformat() + 'Z' if timeline.end_date else None,
-            'remark': timeline.remark,
-            'role': role,  # 0=負責人, 1=協作者（前端用來判斷顯示哪些按鈕）
-            'totalTasks': total_tasks,
-            'completedTasks': completed_tasks
-        })
+        result.append(timeline_list_item_to_dict(timeline, role, total_tasks, completed_tasks))
 
     return jsonify(result), 200
 
@@ -161,7 +116,7 @@ def update_timeline(timeline_id):
     if not isinstance(data, dict):
         return jsonify({'error': '請提供正確的 JSON 物件'}), 400
 
-    unknown_fields = sorted(set(data.keys()) - TIMELINE_UPDATE_ALLOWED_FIELDS)
+    unknown_fields = find_unknown_fields(data, TIMELINE_UPDATE_ALLOWED_FIELDS)
     if unknown_fields:
         return jsonify({'error': f'不允許的欄位: {", ".join(unknown_fields)}'}), 400
     
@@ -237,22 +192,8 @@ def get_timeline_tasks(timeline_id):
         # 從 task_users 取得助理（role=1）
         assistants = TaskUser.query.filter_by(task_id=task.task_id, role=1).all()
         assistant_list = [a.user.name for a in assistants]
-        
-        tasks_response.append({
-            'task_id': task.task_id,
-            'name': task.name,
-            'assignee': assignee_name,
-            'assistant': assistant_list,
-            'start_date': task.start_date.isoformat() + 'Z' if task.start_date else None,
-            'end_date': task.end_date.isoformat() + 'Z' if task.end_date else None,
-            'completed': task.completed,
-            'timeline_id': task.timeline_id,
-            'remark': task.task_remark,
-            'isWork': task.isWork,
-            'priority': task.priority,
-            'status': task.status,
-            'tags': task.tags,
-        })
+
+        tasks_response.append(timeline_task_item_to_dict(task, assignee_name, assistant_list))
     
     return jsonify(tasks_response), 200
 
@@ -311,13 +252,7 @@ def get_timeline_members(timeline_id):
     for m in members:
         user = User.query.get(m.user_id)
         if user:
-            result.append({
-                'user_id': user.id,
-                'name': user.name,
-                'username': user.username,
-                'email': user.email,
-                'role': m.role
-            })
+            result.append(timeline_member_item_to_dict(m, user))
     return jsonify(result), 200
 
 

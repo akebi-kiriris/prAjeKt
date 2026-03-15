@@ -3,6 +3,7 @@ from flask_jwt_extended import jwt_required, get_jwt_identity
 from app import db
 from models.message import Message, MessageRead
 from datetime import datetime
+from services.message_service import get_unread_messages_query
 
 messages_bp = Blueprint('messages', __name__)
 
@@ -13,13 +14,7 @@ def get_unread_count():
     user_id = int(get_jwt_identity())
     
     # 計算未讀訊息
-    unread_count = db.session.query(Message).outerjoin(
-        MessageRead,
-        db.and_(
-            Message.message_id == MessageRead.message_id,
-            MessageRead.user_id == user_id
-        )
-    ).filter(MessageRead.message_id.is_(None)).count()
+    unread_count = get_unread_messages_query(user_id).count()
     
     return jsonify({'unread_count': unread_count}), 200
 
@@ -30,13 +25,7 @@ def mark_all_as_read():
     user_id = int(get_jwt_identity())
     
     # 找出所有未讀訊息
-    unread_messages = db.session.query(Message).outerjoin(
-        MessageRead,
-        db.and_(
-            Message.message_id == MessageRead.message_id,
-            MessageRead.user_id == user_id
-        )
-    ).filter(MessageRead.message_id.is_(None)).all()
+    unread_messages = get_unread_messages_query(user_id).all()
     
     # 標記為已讀
     for msg in unread_messages:

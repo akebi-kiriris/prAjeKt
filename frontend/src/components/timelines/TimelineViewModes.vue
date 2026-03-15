@@ -355,6 +355,67 @@
       </div>
     </div>
 
+    <!-- Gantt View -->
+    <div v-if="viewMode === 'gantt'" class="px-4 pb-8">
+      <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+        <div class="p-4 border-b border-gray-100 bg-linear-to-r from-sky-50 via-white to-cyan-50">
+          <div class="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <h3 class="font-semibold text-gray-800 flex items-center gap-2">
+                <span class="w-8 h-8 bg-white rounded-lg shadow-sm flex items-center justify-center">📈</span>
+                任務甘特圖（frappe-gantt）
+              </h3>
+              <p class="text-xs text-gray-500 mt-1">支援拖曳調整日期；依賴關係為同專案任務自動串接（基礎版）。</p>
+            </div>
+            <div class="flex flex-wrap items-center gap-3 text-xs text-gray-600">
+              <div>
+                <label class="mr-2 text-gray-500">專案篩選</label>
+                <select v-model="selectedGanttTimeline" class="px-3 py-1.5 border border-gray-200 rounded-lg bg-white">
+                  <option value="all">全部專案</option>
+                  <option v-for="timeline in props.timelines" :key="timeline.id" :value="String(timeline.id)">{{ timeline.name }}</option>
+                </select>
+              </div>
+              <div>
+                <label class="mr-2 text-gray-500">時間範圍</label>
+                <select v-model="selectedGanttRange" class="px-3 py-1.5 border border-gray-200 rounded-lg bg-white">
+                  <option value="all">全部</option>
+                  <option value="90d">近 90 天</option>
+                  <option value="30d">近 30 天</option>
+                </select>
+              </div>
+              <div>
+                <label class="mr-2 text-gray-500">縮放</label>
+                <select v-model="selectedGanttViewMode" class="px-3 py-1.5 border border-gray-200 rounded-lg bg-white">
+                  <option value="Day">日</option>
+                  <option value="Week">週</option>
+                  <option value="Month">月</option>
+                </select>
+              </div>
+              <span class="px-2 py-1 bg-blue-100 text-blue-700 rounded-full">任務 {{ ganttRenderableTasks.length }}</span>
+              <span class="px-2 py-1 bg-amber-100 text-amber-700 rounded-full">缺日期 {{ missingGanttTaskDates }}</span>
+            </div>
+          </div>
+        </div>
+
+        <div v-if="ganttRenderableTasks.length === 0" class="text-center py-16">
+          <span class="text-5xl block mb-3">🗓️</span>
+          <p class="text-lg text-gray-700">目前沒有可繪製的任務</p>
+          <p class="text-sm text-gray-400 mt-1">任務需同時有開始與結束日期才能顯示在甘特圖上。</p>
+        </div>
+
+        <div v-else class="p-4">
+          <div ref="ganttContainerRef" class="frappe-gantt-container w-full overflow-x-auto"></div>
+          <div class="mt-3 flex flex-wrap items-center gap-2 text-xs text-gray-500">
+            <span class="px-2 py-1 bg-gray-100 rounded-full">提示：拖曳條形可調整任務時程</span>
+            <span class="px-2 py-1 bg-gray-100 rounded-full">點擊任務可開啟所屬專案面板</span>
+            <span class="px-2 py-1 bg-gray-100 rounded-full">滑鼠移入可檢視任務資訊</span>
+            <span class="px-2 py-1 bg-sky-50 text-sky-700 rounded-full">主責人會用固定顏色區分</span>
+            <span class="px-2 py-1 bg-amber-50 text-amber-700 rounded-full">有協作者的任務會顯示虛線外框</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Card View -->
     <div v-if="viewMode === 'card'" class="px-4 pb-24">
       <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
@@ -508,7 +569,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, watch, nextTick, onBeforeUnmount } from 'vue';
 import { toast } from 'vue-sonner';
 import { formatDate } from '../../utils/formatters';
 import draggable from 'vuedraggable';
@@ -516,6 +577,8 @@ import FullCalendar from '@fullcalendar/vue3';
 import dayGridPlugin from '@fullcalendar/daygrid';
 import interactionPlugin from '@fullcalendar/interaction';
 import multiMonthPlugin from '@fullcalendar/multimonth';
+import Gantt from 'frappe-gantt';
+import '../../styles/frappe-gantt.css';
 import type { CalendarOptions, EventClickArg, EventMountArg, DayCellMountArg } from '@fullcalendar/core';
 import { taskService } from '../../services/taskService';
 import type { Task, Timeline, Subtask, TaskUpdatePayload, TimelineViewModesProps, DaysRemainingResult } from '../../types';
@@ -581,6 +644,300 @@ const activeFilterCount = computed(() => (filterPriority.value ? 1 : 0) + (filte
 
 const clearFilters = () => { filterPriority.value = null; filterTag.value = ''; };
 
+// ────────────── 甘特圖相關 ──────────────
+const ganttContainerRef = ref<HTMLElement | null>(null);
+const selectedGanttTimeline = ref<string>('all');
+const selectedGanttRange = ref<'all' | '90d' | '30d'>('90d');
+const selectedGanttViewMode = ref<'Day' | 'Week' | 'Month'>('Week');
+
+type GanttRenderableTask = {
+  task_id: number;
+  name: string;
+  timeline_id: number | null;
+  start_date: string;
+  end_date: string;
+  progress: number;
+};
+
+type FrappeTask = {
+  id: string;
+  name: string;
+  full_name: string;
+  start: string;
+  end: string;
+  progress: number;
+  dependencies: string;
+  custom_class?: string;
+};
+
+let ganttInstance: Gantt | null = null;
+const ganttSavingTaskIds = new Set<number>();
+const ganttSaveTimers = new Map<number, ReturnType<typeof setTimeout>>();
+const ganttClickLockedUntil = new Map<number, number>();
+const SUPPRESS_CLICK_AFTER_DRAG_MS = 800;
+
+const parseDateToDay = (raw: string | null | undefined): Date | null => {
+  if (!raw) return null;
+  const d = new Date(raw);
+  if (Number.isNaN(d.getTime())) return null;
+  d.setHours(0, 0, 0, 0);
+  return d;
+};
+
+const dayToIso = (date: Date): string => {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  return d.toISOString().split('T')[0];
+};
+
+const getDurationDays = (startDate: string, endDate: string): number => {
+  const start = parseDateToDay(startDate);
+  const end = parseDateToDay(endDate);
+  if (!start || !end) return 1;
+  return Math.max(1, Math.round((end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000)) + 1);
+};
+
+const truncateWithEllipsis = (text: string, maxChars: number): string => {
+  if (text.length <= maxChars) return text;
+  if (maxChars <= 3) return `${text.slice(0, 1)}...`;
+  return `${text.slice(0, maxChars - 3)}...`;
+};
+
+const getGanttLabelByView = (name: string, durationDays: number): string => {
+  let maxChars = 12;
+  if (selectedGanttViewMode.value === 'Day') {
+    maxChars = Math.min(34, Math.max(7, Math.floor(durationDays * 1.4)));
+  } else if (selectedGanttViewMode.value === 'Week') {
+    maxChars = Math.min(18, Math.max(5, Math.floor(durationDays * 0.45)));
+  } else {
+    maxChars = Math.min(14, Math.max(4, Math.floor(durationDays * 0.25)));
+  }
+
+  return truncateWithEllipsis(name, maxChars);
+};
+
+const addDaysToDate = (date: Date, days: number): Date => {
+  const d = new Date(date);
+  d.setDate(d.getDate() + days);
+  return d;
+};
+
+const ganttFilteredTasks = computed(() => {
+  let tasks = props.allTasks;
+
+  if (selectedGanttTimeline.value !== 'all') {
+    const timelineId = Number(selectedGanttTimeline.value);
+    tasks = tasks.filter(task => task.timeline_id === timelineId);
+  }
+
+  if (selectedGanttRange.value !== 'all') {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const rangeDays = selectedGanttRange.value === '30d' ? 30 : 90;
+    const rangeStart = addDaysToDate(today, -rangeDays);
+    const rangeEnd = addDaysToDate(today, rangeDays);
+
+    tasks = tasks.filter(task => {
+      const start = parseDateToDay(task.start_date);
+      const end = parseDateToDay(task.end_date);
+      if (!start || !end) return false;
+      return end >= rangeStart && start <= rangeEnd;
+    });
+  }
+
+  return tasks;
+});
+
+const ganttRenderableTasks = computed<GanttRenderableTask[]>(() => {
+  return ganttFilteredTasks.value
+    .map(task => {
+      const start = parseDateToDay(task.start_date);
+      const end = parseDateToDay(task.end_date);
+      if (!start || !end) return null;
+
+      const safeEnd = end < start ? start : end;
+
+      return {
+        task_id: task.task_id,
+        name: task.name,
+        timeline_id: task.timeline_id,
+        start_date: dayToIso(start),
+        end_date: dayToIso(safeEnd),
+        progress: task.completed ? 100 : task.status === 'in_progress' ? 50 : 0
+      };
+    })
+    .filter((task): task is GanttRenderableTask => task !== null)
+    .sort((a, b) => new Date(a.start_date).getTime() - new Date(b.start_date).getTime());
+});
+
+const missingGanttTaskDates = computed(() => ganttFilteredTasks.value.length - ganttRenderableTasks.value.length);
+
+const getTimelineNameById = (timelineId: number | null): string => {
+  if (!timelineId) return '';
+  const timeline = props.timelines.find(t => t.id === timelineId);
+  return timeline?.name ?? '';
+};
+
+const getTaskStatusLabel = (status: Task['status']): string => {
+  if (status === 'completed') return '已完成';
+  if (status === 'in_progress') return '進行中';
+  if (status === 'review') return '審核中';
+  if (status === 'cancelled') return '已取消';
+  return '待辦';
+};
+
+const buildDependencies = (tasks: GanttRenderableTask[]): Map<number, string> => {
+  const grouped = new Map<number, GanttRenderableTask[]>();
+
+  tasks.forEach(task => {
+    if (!task.timeline_id) return;
+    const group = grouped.get(task.timeline_id) ?? [];
+    group.push(task);
+    grouped.set(task.timeline_id, group);
+  });
+
+  const dependencyMap = new Map<number, string>();
+  grouped.forEach(group => {
+    group.sort((a, b) => new Date(a.start_date).getTime() - new Date(b.start_date).getTime());
+    group.forEach((task, index) => {
+      if (index > 0) dependencyMap.set(task.task_id, String(group[index - 1].task_id));
+    });
+  });
+
+  return dependencyMap;
+};
+
+const GANTT_OWNER_COLOR_CLASS_COUNT = 8;
+
+const getGanttOwnerColorClass = (ownerUserId: number | null): string => {
+  if (ownerUserId === null) return 'gantt-owner-unknown';
+  return `gantt-owner-${Math.abs(ownerUserId) % GANTT_OWNER_COLOR_CLASS_COUNT}`;
+};
+
+const getGanttTaskClass = (task: GanttRenderableTask): string => {
+  const source = props.allTasks.find(t => t.task_id === task.task_id);
+  const members = source?.members ?? [];
+  const owner = members.find(m => m.role === 0);
+  const hasCollaborator = members.some(m => m.role === 1);
+
+  const ownerClass = getGanttOwnerColorClass(owner?.user_id ?? null);
+  return hasCollaborator ? `${ownerClass}-collab` : ownerClass;
+};
+
+const frappeTasks = computed<FrappeTask[]>(() => {
+  const dependencyMap = buildDependencies(ganttRenderableTasks.value);
+  return ganttRenderableTasks.value.map(task => ({
+    id: String(task.task_id),
+    name: task.name,
+    full_name: task.name,
+    start: task.start_date,
+    end: task.end_date,
+    progress: task.progress,
+    dependencies: dependencyMap.get(task.task_id) ?? '',
+    custom_class: getGanttTaskClass(task)
+  }));
+});
+
+const renderGantt = async () => {
+  if (props.viewMode !== 'gantt') return;
+  if (ganttSavingTaskIds.size > 0) return;
+  await nextTick();
+
+  if (!ganttContainerRef.value) return;
+  if (!frappeTasks.value.length) {
+    ganttContainerRef.value.innerHTML = '';
+    return;
+  }
+
+  ganttContainerRef.value.innerHTML = '';
+
+  ganttInstance = new Gantt(ganttContainerRef.value, frappeTasks.value, {
+    view_mode: selectedGanttViewMode.value,
+    language: 'zh',
+    today_button: true,
+    popup_on: 'hover',
+    custom_popup_html: (task) => {
+      const hit = props.allTasks.find(t => String(t.task_id) === String(task.id));
+      const timelineName = getTimelineNameById(hit?.timeline_id ?? null) || '未分配專案';
+      const statusLabel = hit ? getTaskStatusLabel(hit.status) : '待辦';
+      const progress = `${Math.round(task.progress ?? 0)}%`;
+      const fullName = (task as FrappeTask).full_name || hit?.name || task.name;
+      return `
+        <div class="details-container">
+          <h5>${fullName}</h5>
+          <p>專案：${timelineName}</p>
+          <p>狀態：${statusLabel}</p>
+          <p>日期：${task.start} ~ ${task.end}</p>
+          <p>進度：${progress}</p>
+        </div>
+      `;
+    },
+    on_click: (task) => {
+      const taskId = Number(task.id);
+      const lockedUntil = ganttClickLockedUntil.get(taskId) ?? 0;
+      if (Date.now() < lockedUntil) return;
+
+      const hit = props.allTasks.find(t => String(t.task_id) === String(task.id));
+      if (!hit) return;
+      const timeline = props.timelines.find(t => t.id === hit.timeline_id);
+      if (timeline) emit('view-timeline', timeline);
+    },
+    on_date_change: async (task, start, end) => {
+      const taskId = Number(task.id);
+      const startDate = dayToIso(start);
+      const endDate = dayToIso(end);
+
+      // Drag release often triggers a synthetic click on the same bar; temporarily ignore it.
+      ganttClickLockedUntil.set(taskId, Date.now() + SUPPRESS_CLICK_AFTER_DRAG_MS);
+
+      const prevTimer = ganttSaveTimers.get(taskId);
+      if (prevTimer) clearTimeout(prevTimer);
+
+      const timer = setTimeout(async () => {
+        ganttSavingTaskIds.add(taskId);
+        try {
+          await taskService.update(taskId, { start_date: startDate, end_date: endDate });
+
+          const local = props.allTasks.find(t => t.task_id === taskId);
+          if (local) {
+            local.start_date = startDate;
+            local.end_date = endDate;
+          }
+
+          emit('refresh-all');
+          toast.success('任務時程已更新');
+        } catch {
+          toast.error('更新任務時程失敗，已重新整理');
+          emit('refresh-all');
+        } finally {
+          ganttSavingTaskIds.delete(taskId);
+          ganttSaveTimers.delete(taskId);
+          void renderGantt();
+        }
+      }, 650);
+
+      ganttSaveTimers.set(taskId, timer);
+    }
+  });
+};
+
+watch(
+  [() => props.viewMode, frappeTasks, selectedGanttTimeline, selectedGanttRange, selectedGanttViewMode],
+  () => {
+    void renderGantt();
+  },
+  { immediate: true }
+);
+
+onBeforeUnmount(() => {
+  ganttSaveTimers.forEach(timer => clearTimeout(timer));
+  ganttSaveTimers.clear();
+  ganttSavingTaskIds.clear();
+  ganttClickLockedUntil.clear();
+  if (ganttContainerRef.value) ganttContainerRef.value.innerHTML = '';
+  ganttInstance = null;
+});
+
 // ────────────── 月曆相關 ──────────────
 const thisWeekTimelines = computed(() => props.timelines.filter((t: Timeline) => {
   const days = getDaysRemaining(t.endDate).days;
@@ -591,6 +948,26 @@ const overdueTimelines = computed(() => props.timelines.filter((t: Timeline) => 
   return days !== null && days < 0;
 }));
 const completedTimelines = computed(() => props.timelines.filter((t: Timeline) => getTaskProgress(t) === 100));
+
+const normalizeDateOnly = (raw: string | null | undefined): string | null => {
+  if (!raw) return null;
+  return raw.length >= 10 ? raw.slice(0, 10) : raw;
+};
+
+const parseDateOnlyLocal = (raw: string | null | undefined): Date | null => {
+  const normalized = normalizeDateOnly(raw);
+  if (!normalized) return null;
+  const [y, m, d] = normalized.split('-').map(Number);
+  if (!y || !m || !d) return null;
+  return new Date(y, m - 1, d);
+};
+
+const toDateOnlyString = (date: Date): string => {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+};
 
 const calendarEvents = computed(() => props.timelines.map((timeline: Timeline) => {
   const status = getTimelineStatus(timeline);
@@ -604,7 +981,7 @@ const calendarEvents = computed(() => props.timelines.map((timeline: Timeline) =
   return {
     id: String(timeline.id),
     title: `${status.icon} ${timeline.name} (${progress}%)`,
-    start: timeline.startDate || timeline.endDate || undefined,
+    start: normalizeDateOnly(timeline.startDate) || normalizeDateOnly(timeline.endDate) || undefined,
     end: timeline.endDate ? addDays(timeline.endDate, 1) ?? undefined : undefined,
     backgroundColor, borderColor, textColor,
     extendedProps: { timeline, status: status.label, progress }
@@ -641,16 +1018,18 @@ const calendarOptions = computed<CalendarOptions>(() => ({
 }));
 
 const addDays = (dateStr: string | null, days: number) => {
-  if (!dateStr) return null;
-  const date = new Date(dateStr);
+  const date = parseDateOnlyLocal(dateStr);
+  if (!date) return null;
   date.setDate(date.getDate() + days);
-  return date.toISOString().split('T')[0];
+  return toDateOnlyString(date);
 };
 
 const getDaysRemaining = (endDate: string | null | undefined): DaysRemainingResult => {
   if (!endDate) return { days: null, text: '未設定', display: '未設定', colorClass: 'text-gray-400' };
   const today = new Date(); today.setHours(0, 0, 0, 0);
-  const end = new Date(endDate); end.setHours(0, 0, 0, 0);
+  const end = parseDateOnlyLocal(endDate);
+  if (!end) return { days: null, text: '未設定', display: '未設定', colorClass: 'text-gray-400' };
+  end.setHours(0, 0, 0, 0);
   const diffDays = Math.ceil((end.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
   if (diffDays < 0) return { days: diffDays, text: `已過期 ${Math.abs(diffDays)} 天`, display: `過期 ${Math.abs(diffDays)} 天`, colorClass: 'text-red-500' };
   if (diffDays === 0) return { days: 0, text: '今天到期', display: '今天到期', colorClass: 'text-red-500' };
@@ -668,7 +1047,10 @@ const getTaskProgress = (timeline: Timeline): number => {
 
 const getTimeProgress = (timeline: Timeline): number => {
   if (!timeline.startDate || !timeline.endDate) return 0;
-  const today = new Date(), start = new Date(timeline.startDate), end = new Date(timeline.endDate);
+  const today = new Date();
+  const start = parseDateOnlyLocal(timeline.startDate);
+  const end = parseDateOnlyLocal(timeline.endDate);
+  if (!start || !end) return 0;
   if (today < start) return 0;
   if (today > end) return 100;
   return Math.round(((today.getTime() - start.getTime()) / (end.getTime() - start.getTime())) * 100);
@@ -814,3 +1196,61 @@ const updateTaskTags = async () => {
   } catch { toast.error('更新標籤失敗'); }
 };
 </script>
+
+<style>
+.frappe-gantt-container .gantt .bar-label.big {
+  display: none;
+}
+
+.frappe-gantt-container .popup-wrapper {
+  max-width: 360px;
+}
+
+.frappe-gantt-container .popup-wrapper .details-container h5 {
+  margin: 0 0 6px;
+  white-space: normal !important;
+  overflow: visible !important;
+  text-overflow: clip !important;
+  word-break: break-word;
+  line-height: 1.3;
+}
+
+.frappe-gantt-container .popup-wrapper .details-container p {
+  margin: 2px 0;
+  white-space: normal;
+  word-break: break-word;
+}
+
+.frappe-gantt-container .bar-wrapper[class*='gantt-owner-unknown'] .bar { fill: #94a3b8; }
+.frappe-gantt-container .bar-wrapper[class*='gantt-owner-unknown'] .bar-progress { fill: #64748b; }
+
+.frappe-gantt-container .bar-wrapper[class*='gantt-owner-0'] .bar { fill: #3b82f6; }
+.frappe-gantt-container .bar-wrapper[class*='gantt-owner-0'] .bar-progress { fill: #1d4ed8; }
+
+.frappe-gantt-container .bar-wrapper[class*='gantt-owner-1'] .bar { fill: #10b981; }
+.frappe-gantt-container .bar-wrapper[class*='gantt-owner-1'] .bar-progress { fill: #047857; }
+
+.frappe-gantt-container .bar-wrapper[class*='gantt-owner-2'] .bar { fill: #f59e0b; }
+.frappe-gantt-container .bar-wrapper[class*='gantt-owner-2'] .bar-progress { fill: #b45309; }
+
+.frappe-gantt-container .bar-wrapper[class*='gantt-owner-3'] .bar { fill: #ef4444; }
+.frappe-gantt-container .bar-wrapper[class*='gantt-owner-3'] .bar-progress { fill: #b91c1c; }
+
+.frappe-gantt-container .bar-wrapper[class*='gantt-owner-4'] .bar { fill: #8b5cf6; }
+.frappe-gantt-container .bar-wrapper[class*='gantt-owner-4'] .bar-progress { fill: #6d28d9; }
+
+.frappe-gantt-container .bar-wrapper[class*='gantt-owner-5'] .bar { fill: #06b6d4; }
+.frappe-gantt-container .bar-wrapper[class*='gantt-owner-5'] .bar-progress { fill: #0e7490; }
+
+.frappe-gantt-container .bar-wrapper[class*='gantt-owner-6'] .bar { fill: #f97316; }
+.frappe-gantt-container .bar-wrapper[class*='gantt-owner-6'] .bar-progress { fill: #c2410c; }
+
+.frappe-gantt-container .bar-wrapper[class*='gantt-owner-7'] .bar { fill: #84cc16; }
+.frappe-gantt-container .bar-wrapper[class*='gantt-owner-7'] .bar-progress { fill: #3f6212; }
+
+.frappe-gantt-container .bar-wrapper[class*='-collab'] .bar {
+  stroke: #0f172a;
+  stroke-width: 1.3;
+  stroke-dasharray: 4 2;
+}
+</style>

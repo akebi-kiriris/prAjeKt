@@ -3,6 +3,7 @@ from flask_jwt_extended import create_access_token, create_refresh_token, jwt_re
 from app import db
 from models.user import User
 from werkzeug.security import check_password_hash, generate_password_hash
+from services.auth_service import auth_user_to_dict, current_user_to_dict
 
 auth_bp = Blueprint('auth', __name__)
 
@@ -69,12 +70,7 @@ def login():
     return jsonify({
         'access_token': access_token,
         'refresh_token': refresh_token,
-        'user': {
-            'id': user.id,
-            'name': user.name,
-            'username': user.username,
-            'email': user.email
-        }
+        'user': auth_user_to_dict(user)
     }), 200
 
 @auth_bp.route('/logout', methods=['POST'])
@@ -94,13 +90,7 @@ def get_current_user():
     if not user:
         return jsonify({'error': '使用者不存在'}), 404
     
-    return jsonify({
-        'id': user.id,
-        'name': user.name,
-        'username': user.username,
-        'email': user.email,
-        'phone': user.phone
-    }), 200
+    return jsonify(current_user_to_dict(user)), 200
     
 @auth_bp.route('/refresh', methods=['POST'])
 @jwt_required(refresh=True)

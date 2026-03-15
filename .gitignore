@@ -52,3 +52,6 @@ backend/**/*.pyd
 # Legacy root entry files (use frontend/ and backend/ versions instead)
 /App.vue
 /app.py
+
+# Root planning prompt drafts
+/plan-taskPayloadDecoupling.prompt.md

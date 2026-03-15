@@ -5,8 +5,7 @@ from models.task import Task
 from models.timeline import Timeline, TaskFile
 from models.task_user import TaskUser
 from models.timeline_user import TimelineUser
-from datetime import datetime
-import os
+from services.trash_service import trash_task_to_dict, trash_timeline_to_dict, remove_task_files
 
 trash_bp = Blueprint('trash', __name__)
 
@@ -29,16 +28,10 @@ def get_trash():
         Task.user_id != user_id  # 排除自己建立的（已在 own_deleted_tasks）
     ).all() if assigned_ids else []
 
-    tasks_result = []
-    for t in own_deleted_tasks + assigned_deleted:
-        tasks_result.append({
-            'task_id': t.task_id,
-            'name': t.name,
-            'deleted_at': t.deleted_at.isoformat() + 'Z' if t.deleted_at else None,
-            'end_date': t.end_date.isoformat() + 'Z' if t.end_date else None,
-            'priority': t.priority,
-            'is_owner': t.user_id == user_id,
-        })
+    tasks_result = [
+        trash_task_to_dict(t, user_id)
+        for t in own_deleted_tasks + assigned_deleted
+    ]
 
     # 已刪除的專案：自己建立的 + 自己是成員的
     own_deleted_timelines = Timeline.query.filter_by(user_id=user_id).filter(Timeline.deleted_at.isnot(None)).all()
@@ -49,16 +42,10 @@ def get_trash():
         Timeline.user_id != user_id
     ).all() if member_timeline_ids else []
 
-    timelines_result = []
-    for tl in own_deleted_timelines + member_deleted_timelines:
-        timelines_result.append({
-            'id': tl.id,
-            'name': tl.name,
-            'deleted_at': tl.deleted_at.isoformat() + 'Z' if tl.deleted_at else None,
-            'start_date': tl.start_date.isoformat() + 'Z' if tl.start_date else None,
-            'end_date': tl.end_date.isoformat() + 'Z' if tl.end_date else None,
-            'is_owner': tl.user_id == user_id,
-        })
+    timelines_result = [
+        trash_timeline_to_dict(tl, user_id)
+        for tl in own_deleted_timelines + member_deleted_timelines
+    ]
 
     return jsonify({'tasks': tasks_result, 'timelines': timelines_result}), 200
 
@@ -92,9 +79,7 @@ def permanently_delete_task(task_id):
         return jsonify({'error': '找不到該任務，或你沒有權限刪除'}), 404
     try:
         # 刪除磁碟上的附件檔案（DB 記錄由 cascade 自動清除）
-        for f in task.files:
-            if f.file_path and os.path.exists(f.file_path):
-                os.remove(f.file_path)
+        remove_task_files(task)
         db.session.delete(task)
         db.session.commit()
         return jsonify({'message': '任務已永久刪除'}), 200
@@ -136,9 +121,7 @@ def permanently_delete_timeline(timeline_id):
         # 取得該 timeline 下所有任務（含未軟刪除的）
         tasks = Task.query.filter_by(timeline_id=timeline_id).all()
         for task in tasks:
-            for f in task.files:
-                if f.file_path and os.path.exists(f.file_path):
-                    os.remove(f.file_path)
+            remove_task_files(task)
             db.session.delete(task)  # cascade 清 comments / task_users / subtasks / task_files
 
         db.session.delete(timeline)  # cascade 清 timeline_users

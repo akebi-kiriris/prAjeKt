@@ -2,7 +2,7 @@
   <div class="h-full w-full bg-gray-50 px-6 pt-6 pb-24 md:pb-6 overflow-y-auto">
     <div class="grid grid-cols-1 gap-6 max-w-6xl mx-auto">
     <!-- Welcome Card -->
-    <div class="mt-4 mb-8 bg-linear-to-r from-primary to-primary-light rounded-2xl shadow-lg animate-slideDown">
+    <div class="mt-4 mb-8 bg-linear-to-r from-primary to-primary-light rounded-2xl shadow-lg animate-slideUp">
       <div class="p-6 md:p-12 text-center text-white">
         <div class="flex items-center justify-center gap-4 mb-4">
           <h1 class="text-2xl md:text-4xl font-bold">PrAjeKt 專案管理</h1>

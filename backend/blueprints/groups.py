@@ -3,7 +3,12 @@ from flask_jwt_extended import jwt_required, get_jwt_identity
 from app import db
 from models.group import Group, GroupMember
 from models.message import Message
-import random
+from services.group_service import (
+    generate_unique_invite_code,
+    group_to_dict,
+    group_member_to_dict,
+    group_message_to_dict,
+)
 
 groups_bp = Blueprint('groups', __name__)
 
@@ -17,13 +22,7 @@ def get_groups():
         GroupMember, Group.group_id == GroupMember.group_id
     ).filter(GroupMember.user_id == user_id).all()
     
-    return jsonify([{
-        'group_id': g.group_id,
-        'group_name': g.group_name,
-        'group_type': g.group_type,
-        'invite_code': g.group_inviteCode,
-        'created_at': g.created_at.isoformat() + 'Z' if g.created_at else None
-    } for g in groups]), 200
+    return jsonify([group_to_dict(g) for g in groups]), 200
 
 @groups_bp.route('', methods=['POST'])
 @jwt_required()
@@ -36,12 +35,7 @@ def create_group():
     if not group_name:
         return jsonify({'error': '請輸入群組名稱'}), 400
     
-    # 生成隨機六位數邀請碼
-    while True:
-        invite_code = f"{random.randint(0, 999999):06d}"
-        existing = Group.query.filter_by(group_inviteCode=invite_code).first()
-        if not existing:
-            break
+    invite_code = generate_unique_invite_code()
     
     new_group = Group(
         group_name=group_name,
@@ -125,11 +119,7 @@ def get_group_members(group_id):
         GroupMember, User.id == GroupMember.user_id
     ).filter(GroupMember.group_id == group_id).all()
     
-    return jsonify([{
-        'user_id': m.id,
-        'name': m.name,
-        'email': m.email
-    } for m in members]), 200
+    return jsonify([group_member_to_dict(m) for m in members]), 200
 
 @groups_bp.route('/<int:group_id>/messages', methods=['GET'])
 @jwt_required()
@@ -146,12 +136,7 @@ def get_group_messages(group_id):
         Message.group_id == group_id
     ).order_by(Message.created_at).all()
     
-    return jsonify([{
-        'message_id': m.message_id,
-        'content': m.content,
-        'sender_name': m.sender_name,
-        'created_at': m.created_at.isoformat() + 'Z' if m.created_at else None
-    } for m in messages]), 200
+    return jsonify([group_message_to_dict(m) for m in messages]), 200
 
 @groups_bp.route('/<int:group_id>/messages', methods=['POST'])
 @jwt_required()
