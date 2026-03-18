@@ -1,15 +1,15 @@
-# PrAjeKt
+# LearnLink
 
 基於 Vue 3 + Flask 的專案管理與協作平台，整合 Google Gemini AI 實現智能任務生成。
 
-> **開發狀態**：Phase 1~3 已完成 ✅；Phase 4 已完成 Payload/Gantt/後端 Service Layer，WebSocket 待排程 🔄。PostgreSQL 已決議延後至 Phase 5，將與部署整合一起執行。
+> **開發狀態**：Phase 1~4 已完成 ✅（含 WebSocket Slice A/B/C）；PostgreSQL 已決議併入 Phase 5，與部署整合一起執行。
 
 ## 功能模組
 
 - **專案管理**：卡片 / 看板 / 日曆 / 列表 四種視圖，專案進度追蹤、成員邀請
 - **任務管理**：任務 CRUD、子任務、優先級、標籤、狀態拖曳切換、留言討論、附件上傳 / 下載、任務成員指派
 - **待辦事項**：個人 Todo 列表，完成狀態管理
-- **群組協作**：群組建立 / 邀請碼加入 / 即時訊息
+- **群組協作**：群組建立 / 邀請碼加入 / 即時聊天（Socket.IO，含 REST fallback）
 - **個人資料**：個人資訊編輯、密碼變更、使用統計
 - **數據分析儀表板**：整合於個人資料頁，Level 1 個人圖表（30 天完成趨勢、任務狀態分布、各專案任務量）+ Level 2 專案圖表（成員貢獻、任務狀態，負責人限定）
 - **AI 任務生成**：Gemini 根據專案名稱自動生成任務建議，支援批次創建
@@ -27,7 +27,8 @@
 | 樣式 | Tailwind CSS |
 | UI 元件 | Headless UI（ConfirmDialog）、vue-sonner（Toast）|
 | 圖表 | vue-echarts + ECharts 6 |
-| 後端 | Flask 3 + SQLAlchemy + Flask-Migrate |
+| 後端 | Flask 3 + SQLAlchemy + Flask-Migrate + Flask-SocketIO |
+| 即時通訊 | Socket.IO（flask-socketio / socket.io-client） |
 | 認證 | Flask-JWT-Extended（access + refresh token）|
 | 資料庫 | SQLite（開發） / PostgreSQL（Phase 5 規劃）|
 | AI | Google Gemini 2.0 Flash（LangChain）|
@@ -35,9 +36,11 @@
 ## 專案結構
 
 ```
-PrAjeKt/
+LearnLink/
 ├── backend/
 │   ├── app.py                    # Flask 應用入口，註冊 blueprints、JWT、CORS
+│   ├── realtime/
+│   │   └── socket_events.py      # Socket 事件（connect/join/leave/send-message）
 │   ├── blueprints/               # 路由層（每個模組一個 blueprint）
 │   │   ├── auth.py               # 登入 / 註冊 / token 刷新
 │   │   ├── tasks.py              # 任務 CRUD、子任務、狀態切換、留言、附件
@@ -67,6 +70,7 @@ PrAjeKt/
 │       │   └── timelines/        # TimelineHeader / TimelineViewModes / TimelineDetailDialog
 │       ├── services/             # API 封裝層（所有 HTTP 呼叫集中於此）
 │       │   ├── api.ts            # Axios 實例 + JWT 自動刷新攔截器
+│       │   ├── socketService.ts  # Socket 連線與事件綁定
 │       │   ├── todoService.ts    # 待辦 API（5 個方法）
 │       │   ├── taskService.ts    # 任務 API（含子任務、留言、附件）
 │       │   ├── trashService.ts   # 垃圾桶 API（5 個方法）
@@ -162,8 +166,8 @@ start_all.bat
 | GET | `/api/timelines/:id/tasks` | 取得專案下的任務 |
 | POST | `/api/timelines/:id/generate-tasks` | AI 生成任務建議 |
 | POST | `/api/timelines/:id/batch-create-tasks` | 批次建立任務 |
-| GET | `/api/timelines/:id/members` | 搜尋可加入成員 |
-| POST | `/api/timelines/:id/add-member` | 加入成員（同時發送邀請通知）|
+| GET | `/api/timelines/:id/members` | 取得專案成員列表 |
+| POST | `/api/timelines/:id/members` | 加入成員（同時發送邀請通知）|
 | DELETE | `/api/timelines/:id/members/:uid` | 移除成員 |
 | GET | `/api/timelines/upcoming` | 即將到期 / 進度落後的專案（3 天內 or ≥80%）|
 | GET | `/api/timelines/:id/member-stats` | 成員任務貢獻統計（負責人限定）|
@@ -177,7 +181,8 @@ start_all.bat
 | POST | `/api/tasks` | 建立任務 |
 | PUT | `/api/tasks/:id` | 更新任務 |
 | DELETE | `/api/tasks/:id` | 刪除任務（軟刪除）|
-| PATCH | `/api/tasks/:id/status` | 切換任務狀態 |
+| PATCH | `/api/tasks/:id/status` | 更新任務狀態（看板拖曳） |
+| PATCH | `/api/tasks/:id/toggle` | 快速切換完成狀態 |
 | GET | `/api/tasks/:id/subtasks` | 取得子任務 |
 | POST | `/api/tasks/:id/subtasks` | 建立子任務 |
 | PATCH | `/api/tasks/:id/subtasks/:sid/toggle` | 子任務完成狀態切換 |
@@ -185,8 +190,8 @@ start_all.bat
 | POST | `/api/tasks/:id/comments` | 新增留言 |
 | DELETE | `/api/tasks/:id/comments/:cid` | 刪除留言 |
 | GET | `/api/tasks/:id/files` | 取得附件列表 |
-| POST | `/api/tasks/:id/files` | 上傳附件 |
-| GET | `/api/tasks/:id/files/:fid/download` | 下載附件 |
+| POST | `/api/tasks/:id/upload` | 上傳附件 |
+| GET | `/api/tasks/files/:filename` | 下載/預覽附件 |
 | DELETE | `/api/tasks/:id/files/:fid` | 刪除附件 |
 
 ### 垃圾桶（Trash）
@@ -222,7 +227,17 @@ start_all.bat
 | 資源 | 路徑 |
 |------|------|
 | 待辦 | `CRUD /api/todos` + `PATCH /api/todos/:id/toggle` |
-| 群組 | `CRUD /api/groups` + `POST /api/groups/join` + `GET/POST /api/groups/:id/messages` |
+| 群組 | `GET/POST /api/groups` + `POST /api/groups/join` + `POST /api/groups/:id/leave` + `GET /api/groups/:id/members` + `GET/POST /api/groups/:id/messages` |
+
+### WebSocket 事件（群組聊天室）
+
+| 事件 | 方向 | 說明 |
+|------|------|------|
+| `join-group` | Client → Server | 加入指定群組房間（成員驗證） |
+| `leave-group` | Client → Server | 離開指定群組房間 |
+| `send-message` | Client → Server | 送出訊息（寫入 DB 後廣播） |
+| `new-message` | Server → Client | 同房間推播新訊息 |
+| `error` | Server → Client | 授權失敗/參數錯誤等錯誤事件 |
 
 ## 注意事項
 
@@ -235,7 +250,7 @@ start_all.bat
 
 ## Roadmap（近程）
 
-- **Phase 4 收尾**：WebSocket 即時通訊（群組訊息 / 通知即時化）
+
 - **Phase 5 上線與部署整合（待規劃）**：
 	- 部署目標與環境分層（dev/staging/prod）
 	- PostgreSQL 遷移（與部署一起）

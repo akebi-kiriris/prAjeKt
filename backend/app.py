@@ -1,17 +1,19 @@
 from flask import Flask
 from flask_cors import CORS
-from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
 from flask_jwt_extended import JWTManager
+from flask_socketio import SocketIO
 import os
 from datetime import timedelta
 
 from models import db
 migrate = None
 jwt = JWTManager()
+socketio = SocketIO(async_mode='threading')
 
 def create_app():
     app = Flask(__name__)
+    cors_origins = ['http://localhost:5173', 'http://127.0.0.1:5173']
     
     # 設定
     app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev-secret-key-change-in-production')
@@ -30,7 +32,7 @@ def create_app():
     
     # CORS 設定
     CORS(app, 
-         origins=['http://localhost:5173', 'http://127.0.0.1:5173'],
+            origins=cors_origins,
          supports_credentials=True,
          allow_headers=['Content-Type', 'Authorization'])
     
@@ -39,6 +41,10 @@ def create_app():
     global migrate
     migrate = Migrate(app, db)
     jwt.init_app(app)
+    socketio.init_app(
+        app,
+        cors_allowed_origins=cors_origins,
+    )
     
     # 導入所有模型（確保 Flask-Migrate 能偵測到）
     with app.app_context():
@@ -67,6 +73,9 @@ def create_app():
     app.register_blueprint(timelines_bp, url_prefix='/api/timelines')
     app.register_blueprint(trash_bp, url_prefix='/api/trash')
     app.register_blueprint(notifications_bp, url_prefix='/api/notifications')
+
+    from realtime import register_socket_events
+    register_socket_events(socketio)
     
     # 健康檢查
     @app.route('/api/health')
@@ -77,4 +86,4 @@ def create_app():
 
 if __name__ == '__main__':
     app = create_app()
-    app.run(debug=True, port=5000)
+    socketio.run(app, debug=True, port=5000)

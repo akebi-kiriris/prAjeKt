@@ -5,7 +5,7 @@ REM 啟動 PrAjeKt 專案前後端
 REM 啟動後端 (進入虛擬環境)
 cd backend
 call venv\Scripts\activate.bat
-start cmd /k "flask run"
+start cmd /k "python app.py"
 cd ..
 
 REM 啟動前端

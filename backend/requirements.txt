@@ -7,3 +7,5 @@ pymysql
 python-dotenv
 werkzeug
 google-generativeai
+flask-socketio
+simple-websocket

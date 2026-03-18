@@ -8,6 +8,7 @@ from services.group_service import (
     group_to_dict,
     group_member_to_dict,
     group_message_to_dict,
+    is_group_member,
 )
 
 groups_bp = Blueprint('groups', __name__)
@@ -126,6 +127,10 @@ def get_group_members(group_id):
 def get_group_messages(group_id):
     """取得群組訊息"""
     from models.user import User
+    user_id = int(get_jwt_identity())
+
+    if not is_group_member(group_id, user_id):
+        return jsonify({'error': '您不是該群組成員'}), 403
     
     messages = db.session.query(
         Message.message_id,
@@ -150,8 +155,7 @@ def send_message(group_id):
         return jsonify({'error': '訊息內容不可為空'}), 400
     
     # 檢查是否為群組成員
-    member = GroupMember.query.filter_by(group_id=group_id, user_id=user_id).first()
-    if not member:
+    if not is_group_member(group_id, user_id):
         return jsonify({'error': '您不是該群組成員'}), 403
     
     new_message = Message(

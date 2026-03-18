@@ -146,11 +146,15 @@
     </div>
     
     <!-- Chat Modal -->
-    <div v-if="currentGroup" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" @click.self="currentGroup = null">
+    <div v-if="currentGroup" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" @click.self="closeChat">
       <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl h-[80vh] flex flex-col animate-slideUp">
         <div class="p-4 border-b flex justify-between items-center">
           <h3 class="text-xl font-semibold text-primary">{{ currentGroup?.group_name }}</h3>
-          <button @click="currentGroup = null" class="text-gray-400 hover:text-gray-600 text-2xl">✕</button>
+          <button @click="closeChat" class="text-gray-400 hover:text-gray-600 text-2xl">✕</button>
+        </div>
+
+        <div v-if="lastSocketError" class="mx-4 mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          即時連線異常：{{ lastSocketError }}，將自動回退至 REST。
         </div>
         
         <div class="flex-1 overflow-y-auto p-4 bg-gray-50" ref="messagesContainer">
@@ -196,7 +200,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, onUnmounted } from 'vue';
 import type { AxiosError } from 'axios';
 import type { Ref } from 'vue';
 import { toast } from 'vue-sonner';
@@ -215,11 +219,13 @@ const {
   groups: storeGroups,
   currentGroup: storeCurrentGroup,
   messages: storeMessages,
+  lastSocketError: storeLastSocketError,
 } = storeToRefs(groupStore);
 
 const groups = storeGroups as unknown as Ref<Group[]>;
 const currentGroup = storeCurrentGroup as unknown as Ref<Group | null>;
 const messages = storeMessages as unknown as Ref<Message[]>;
+const lastSocketError = storeLastSocketError as unknown as Ref<string | null>;
 
 // ────────────── View-local UI 狀態 ──────────────
 const newMessage = ref('');
@@ -272,6 +278,10 @@ const openChat = async (group: Group) => {
   await groupStore.openChat(storeGroup, scrollToBottom);
 };
 
+const closeChat = () => {
+  groupStore.closeChat();
+};
+
 const sendMessage = async () => {
   if (!newMessage.value.trim()) return;
   try {
@@ -296,5 +306,9 @@ const leaveGroup = async (groupId: number) => {
 
 onMounted(() => {
   void groupStore.fetchGroups();
+});
+
+onUnmounted(() => {
+  groupStore.destroySocket();
 });
 </script>

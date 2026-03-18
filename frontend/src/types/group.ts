@@ -22,6 +22,25 @@ export interface Message {
   created_at: string;
 }
 
+export interface SocketReadyPayload {
+  user_id: number;
+  name: string;
+}
+
+export interface SocketGroupErrorPayload {
+  code: 'AUTH_FAILED' | 'NOT_MEMBER' | 'INVALID_PAYLOAD' | 'SERVER_ERROR' | string;
+  message: string;
+}
+
+export interface SocketGroupMessagePayload {
+  message_id: number;
+  group_id: number;
+  sender_id: number;
+  sender_name: string;
+  content: string;
+  created_at: string;
+}
+
 export interface GroupCreateResponse {
   invite_code?: string;
 }
