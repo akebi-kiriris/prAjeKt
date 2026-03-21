@@ -1,4 +1,4 @@
-from app import db
+from models import db
 from models.message import Message, MessageRead
 from models.user import User
 
