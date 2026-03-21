@@ -1,6 +1,6 @@
 ﻿from flask import Blueprint, request, jsonify, send_from_directory
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from app import db
+from models import db
 from models.task import Task
 from models.task_user import TaskUser
 from models.task_comment import TaskComment
