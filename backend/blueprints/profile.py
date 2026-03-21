@@ -1,7 +1,7 @@
 ﻿from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from werkzeug.security import check_password_hash, generate_password_hash
-from app import db
+from models import db
 from models.user import User
 from services.profile_service import (
     PROFILE_UPDATE_ALLOWED_FIELDS,

@@ -1,6 +1,6 @@
 ﻿from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from app import db
+from models import db
 from models.timeline import Timeline
 from models.timeline_user import TimelineUser
 from models.task import Task

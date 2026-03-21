@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from app import db
+from models import db
 from models.message import Message, MessageRead
 from datetime import datetime
 from services.message_service import get_unread_messages_query

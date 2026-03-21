@@ -88,7 +88,8 @@ def create_app():
     
     return app
 
-# 模組級應用實例 (供 gunicorn 導入)
+# WSGI 應用程序實例 (供 gunicorn 導入) | Instance for gunicorn
+# 注意: 在 gunicorn 導入此模塊時不會執行 if __name__ == '__main__' 區塊
 app = create_app()
 
 if __name__ == '__main__':
