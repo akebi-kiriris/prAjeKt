@@ -23,4 +23,12 @@ echo "✅ 後端準備就緒"
 
 # 啟動 Flask + Socket.IO 應用
 echo "🎯 啟動 Flask + Socket.IO 後端..."
-exec python app.py
+
+# 生產環境使用 gunicorn + eventlet，開發環境直接運行
+if [ "$FLASK_ENV" = "production" ]; then
+  echo "📡 生產模式: 使用 gunicorn + eventlet..."
+  exec gunicorn --worker-class eventlet -w 1 --bind 0.0.0.0:$PORT --access-logfile - app:app
+else
+  echo "🔧 開發模式: 使用 Werkzeug..."
+  exec python app.py
+fi

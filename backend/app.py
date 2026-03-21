@@ -88,9 +88,19 @@ def create_app():
     
     return app
 
+# 模組級應用實例 (供 gunicorn 導入)
+app = create_app()
+
 if __name__ == '__main__':
-    app = create_app()
     # Railway 會通過 PORT 環變動態分配端口，本地開發預設 5000
     port = int(os.getenv('PORT', 5000))
     is_production = os.getenv('FLASK_ENV') == 'production'
-    socketio.run(app, host='0.0.0.0', port=port, debug=not is_production)
+    # 生產環境: gunicorn 啟動 (見 start.sh)
+    # 開發環境: 直接使用 socketio.run，但需要 allow_unsafe_werkzeug=True
+    socketio.run(
+        app,
+        host='0.0.0.0',
+        port=port,
+        debug=not is_production,
+        allow_unsafe_werkzeug=True  # 必要: 允許 Werkzeug 在 Flask-SocketIO 中運行
+    )
