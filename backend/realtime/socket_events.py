@@ -3,7 +3,7 @@ from flask_socketio import emit, join_room, leave_room, disconnect
 from flask_jwt_extended import decode_token
 
 from models.user import User
-from app import db
+from models import db
 from services.group_service import is_group_member, group_room_name
 from services.message_service import create_group_message
 
