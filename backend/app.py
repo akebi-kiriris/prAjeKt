@@ -5,6 +5,10 @@ from flask_jwt_extended import JWTManager
 from flask_socketio import SocketIO
 import os
 from datetime import timedelta
+from dotenv import load_dotenv
+
+# 載入 .env 文件中的環境變量
+load_dotenv()
 
 from models import db
 migrate = None
@@ -86,4 +90,7 @@ def create_app():
 
 if __name__ == '__main__':
     app = create_app()
-    socketio.run(app, debug=True, port=5000)
+    # Railway 會通過 PORT 環變動態分配端口，本地開發預設 5000
+    port = int(os.getenv('PORT', 5000))
+    is_production = os.getenv('FLASK_ENV') == 'production'
+    socketio.run(app, host='0.0.0.0', port=port, debug=not is_production)
