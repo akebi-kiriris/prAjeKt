@@ -13,7 +13,7 @@ load_dotenv()
 from models import db
 migrate = None
 jwt = JWTManager()
-socketio = SocketIO(async_mode='threading')
+socketio = SocketIO(async_mode='eventlet')
 
 def create_app():
     app = Flask(__name__)

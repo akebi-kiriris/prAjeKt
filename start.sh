@@ -21,6 +21,6 @@ fi
 
 echo "✅ 後端準備就緒"
 
-# 啟動 Flask + Socket.IO 應用
-echo "🎯 啟動 Flask + Socket.IO 後端..."
-exec python app.py
+# 啟動 Flask + Socket.IO 應用（使用 Gunicorn + eventlet 作為生產伺服器）
+echo "🎯 啟動 Flask + Socket.IO 後端（Gunicorn + eventlet）..."
+exec gunicorn --worker-class eventlet -w 1 --bind "0.0.0.0:${PORT:-5000}" "app:create_app()"

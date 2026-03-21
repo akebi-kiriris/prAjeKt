@@ -8,3 +8,5 @@ python-dotenv
 werkzeug
 google-generativeai
 flask-socketio
+eventlet
+gunicorn
