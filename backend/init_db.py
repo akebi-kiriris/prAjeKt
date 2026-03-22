@@ -4,8 +4,8 @@
 import os
 import sys
 
-# 設定 PostgreSQL 連接字串
-os.environ['DATABASE_URL'] = 'postgresql://postgres:,U7a3A%NxfH7+-3@db.ojtdiktwjscfmagqepcg.supabase.co:5432/postgres'
+# 本地初始化預設使用 SQLite，若外部已指定 DATABASE_URL 則沿用
+os.environ.setdefault('DATABASE_URL', 'sqlite:///instance/prajekt.db')
 
 from app import create_app
 from models import db

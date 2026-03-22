@@ -2,7 +2,7 @@
 
 基於 Vue 3 + Flask 的專案管理與協作平台，整合 Google Gemini AI 實現智能任務生成。
 
-> **開發狀態**：Phase 1~4 已完成 ✅，Phase 5.1~5.4A（單人核心流程）已收斂；本輪上線驗收不包含 AI 任務生成功能。
+> **開發狀態**：Phase 1~4 已完成 ✅，Phase 5.1~5.4A（單人核心流程）已收斂；Phase 6 採本地主線驗證（n8n + MCP + AI），不新增雲端部署目標。
 
 ## 功能模組
 
@@ -30,7 +30,7 @@
 | 後端 | Flask 3 + SQLAlchemy + Flask-Migrate + Flask-SocketIO |
 | 即時通訊 | Socket.IO（flask-socketio / socket.io-client） |
 | 認證 | Flask-JWT-Extended（access + refresh token）|
-| 資料庫 | SQLite（開發） / PostgreSQL（Phase 5 規劃）|
+| 資料庫 | SQLite（本地） / Supabase PostgreSQL（既有上線環境）|
 | AI | Google Gemini 2.0 Flash（LangChain）|
 
 ## 專案結構
@@ -251,14 +251,15 @@ start_all.bat
 ## Roadmap（近程）
 
 
-- **Phase 5 上線與部署整合（待規劃）**：
-	- 部署目標與環境分層（dev/staging/prod）
-	- PostgreSQL 遷移（與部署一起）
-	- 監控告警與回滾 Runbook
-- **Phase 6 AI 主線（規劃中，未納入本輪上線驗收）**：
-	- A：n8n + MCP 工作流整合
-	- B：Prompt + CoT（模板化與評測）
-	- C+ 題目（微調/安全/多模態/GUI Agent）改走 Labs 支線驗證，不直接塞主線
+- **Phase 5 上線與部署整合（已收斂）**：
+	- 5.1~5.3（Supabase + Railway + Firebase）完成
+	- 5.4A（單人核心流程驗收）完成
+	- 5.4B（監控告警與 runbook）延後，按需求再評估
+- **Phase 6 AI 主線（本地執行中，未納入雲端上線）**：
+	- A：n8n + MCP 本地工作流整合
+	- B：Prompt + CoT 本地模板化與評測
+	- C+ 題目（微調/安全/多模態/GUI Agent）走 Labs 本地驗證
+	- 邊界：不建立 staging、不新增雲端擴展部署
 
 ## 環境需求
 

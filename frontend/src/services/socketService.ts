@@ -6,7 +6,9 @@ import type {
 } from '../types';
 
 const apiBase = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
-const socketBase = apiBase.endsWith('/api') ? apiBase.slice(0, -4) : apiBase;
+const socketBase =
+  import.meta.env.VITE_SOCKET_URL ||
+  (apiBase.endsWith('/api') ? apiBase.slice(0, -4) : apiBase);
 
 let socket: Socket | null = null;
 
