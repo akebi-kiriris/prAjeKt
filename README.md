@@ -2,7 +2,7 @@
 
 基於 Vue 3 + Flask 的專案管理與協作平台，整合 Google Gemini AI 實現智能任務生成。
 
-> **開發狀態**：Phase 1~4 已完成 ✅（含 WebSocket Slice A/B/C）；PostgreSQL 已決議併入 Phase 5，與部署整合一起執行。
+> **開發狀態**：Phase 1~4 已完成 ✅，Phase 5.1~5.4A（單人核心流程）已收斂；本輪上線驗收不包含 AI 任務生成功能。
 
 ## 功能模組
 
@@ -12,7 +12,7 @@
 - **群組協作**：群組建立 / 邀請碼加入 / 即時聊天（Socket.IO，含 REST fallback）
 - **個人資料**：個人資訊編輯、密碼變更、使用統計
 - **數據分析儀表板**：整合於個人資料頁，Level 1 個人圖表（30 天完成趨勢、任務狀態分布、各專案任務量）+ Level 2 專案圖表（成員貢獻、任務狀態，負責人限定）
-- **AI 任務生成**：Gemini 根據專案名稱自動生成任務建議，支援批次創建
+- **AI 任務生成**：Gemini 根據專案名稱自動生成任務建議，支援批次創建（本功能不在本輪上線驗收範圍）
 - **垃圾桶回收機制**：已刪任務 / 專案暫存，支援還原或永久刪除；非建立者唯讀
 - **通知系統**：任務指派 / 專案邀請通知、鈴鐺 30 秒輪詢更新、主頁即將到期提醒區塊（3 天內截止或進度 ≥80%）
 
@@ -244,7 +244,7 @@ start_all.bat
 - **API Base URL**：前端透過 `VITE_API_BASE_URL` 環境變數配置，預設為 `http://localhost:5000/api`
 - **Token 刷新**：access token 過期時，Axios 攔截器會自動使用 refresh token 換新，無需手動處理
 - **開發資料庫**：使用 SQLite（`backend/instance/`），不需要額外安裝資料庫服務
-- **AI 功能**：需要有效的 Google API Key，可於 [Google AI Studio](https://aistudio.google.com/app/apikey) 免費申請
+- **AI 功能**：需要有效的 Google API Key，可於 [Google AI Studio](https://aistudio.google.com/app/apikey) 免費申請；目前生產驗收不包含 AI 任務生成
 - **Payload 契約**：請參考 `docs/payload-contracts.md`，前後端 update/create 請遵守 allowlist
 - **文件同步流程**：請參考 `docs/文件更新與發布流程.md`
 
@@ -255,7 +255,7 @@ start_all.bat
 	- 部署目標與環境分層（dev/staging/prod）
 	- PostgreSQL 遷移（與部署一起）
 	- 監控告警與回滾 Runbook
-- **Phase 5 AI 主線（已定案）**：
+- **Phase 6 AI 主線（規劃中，未納入本輪上線驗收）**：
 	- A：n8n + MCP 工作流整合
 	- B：Prompt + CoT（模板化與評測）
 	- C+ 題目（微調/安全/多模態/GUI Agent）改走 Labs 支線驗證，不直接塞主線
