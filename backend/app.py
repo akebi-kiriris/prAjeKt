@@ -17,7 +17,7 @@ socketio = SocketIO(async_mode='threading')
 
 def create_app():
     app = Flask(__name__)
-    cors_origins = ['http://localhost:5173', 'http://127.0.0.1:5173']
+    cors_origins = ['http://localhost:5173', 'http://127.0.0.1:5173', 'https://prajekt-kiriris.web.app']
     
     # 設定
     app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev-secret-key-change-in-production')
