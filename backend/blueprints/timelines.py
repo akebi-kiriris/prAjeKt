@@ -37,12 +37,26 @@ def get_timelines():
         .order_by(Timeline.id.desc())\
         .all()
 
+    if not memberships:
+        return jsonify([]), 200
+
+    timeline_ids = [timeline.id for timeline, _ in memberships]
+
+    # 單一批次查詢：取得每個 timeline 的總任務數與已完成任務數
+    task_counts = db.session.query(
+        Task.timeline_id,
+        db.func.count(Task.task_id).label('total'),
+        db.func.sum(db.cast(Task.completed, db.Integer)).label('completed')
+    ).filter(
+        Task.timeline_id.in_(timeline_ids),
+        Task.deleted_at.is_(None)
+    ).group_by(Task.timeline_id).all()
+
+    counts_map = {row.timeline_id: (row.total, row.completed or 0) for row in task_counts}
+
     result = []
     for timeline, role in memberships:
-        tasks = Task.query.filter(Task.timeline_id == timeline.id, Task.deleted_at.is_(None)).all()
-        total_tasks = len(tasks)
-        completed_tasks = len([t for t in tasks if t.completed])
-
+        total_tasks, completed_tasks = counts_map.get(timeline.id, (0, 0))
         result.append(timeline_list_item_to_dict(timeline, role, total_tasks, completed_tasks))
 
     return jsonify(result), 200
@@ -182,19 +196,33 @@ def delete_timeline(timeline_id):
 def get_timeline_tasks(timeline_id):
     """取得專案的所有任務（含負責人、助理資訊）"""
     tasks = Task.query.filter_by(timeline_id=timeline_id).filter(Task.deleted_at.is_(None)).order_by(Task.end_date).all()
-    
+
+    if not tasks:
+        return jsonify([]), 200
+
+    task_ids = [t.task_id for t in tasks]
+
+    # 批次查詢所有相關的 TaskUser 與 User，避免 N+1
+    task_users = db.session.query(TaskUser, User)\
+        .join(User, TaskUser.user_id == User.id)\
+        .filter(TaskUser.task_id.in_(task_ids))\
+        .all()
+
+    # 建立 task_id -> assignee_name 與 task_id -> assistant_names 的映射
+    assignee_map = {}   # task_id -> str
+    assistant_map = {}  # task_id -> list[str]
+    for tu, user in task_users:
+        if tu.role == 0:
+            assignee_map[tu.task_id] = user.name
+        elif tu.role == 1:
+            assistant_map.setdefault(tu.task_id, []).append(user.name)
+
     tasks_response = []
     for task in tasks:
-        # 從 task_users 取得負責人（role=0）
-        assignee = TaskUser.query.filter_by(task_id=task.task_id, role=0).first()
-        assignee_name = assignee.user.name if assignee else None
-
-        # 從 task_users 取得助理（role=1）
-        assistants = TaskUser.query.filter_by(task_id=task.task_id, role=1).all()
-        assistant_list = [a.user.name for a in assistants]
-
+        assignee_name = assignee_map.get(task.task_id)
+        assistant_list = assistant_map.get(task.task_id, [])
         tasks_response.append(timeline_task_item_to_dict(task, assignee_name, assistant_list))
-    
+
     return jsonify(tasks_response), 200
 
 @timelines_bp.route('/<int:timeline_id>/remark', methods=['PUT'])
@@ -248,9 +276,16 @@ def search_user_by_email():
 def get_timeline_members(timeline_id):
     """取得專案成員列表（成員皆可查）"""
     members = TimelineUser.query.filter_by(timeline_id=timeline_id).all()
+    if not members:
+        return jsonify([]), 200
+
+    # 批次查詢所有成員的 User 資料，避免 N+1
+    member_ids = [m.user_id for m in members]
+    users_map = {u.id: u for u in User.query.filter(User.id.in_(member_ids)).all()}
+
     result = []
     for m in members:
-        user = User.query.get(m.user_id)
+        user = users_map.get(m.user_id)
         if user:
             result.append(timeline_member_item_to_dict(m, user))
     return jsonify(result), 200
