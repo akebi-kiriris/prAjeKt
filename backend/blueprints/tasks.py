@@ -14,6 +14,7 @@ from services.task_service import (
     TASK_UPDATE_ALLOWED_FIELDS,
     TASK_STATUS_VALUES,
     build_task_member_list,
+    build_task_member_list_from_map,
     can_manage_task_members,
     create_notification,
     find_unknown_fields,
@@ -30,36 +31,76 @@ tasks_bp = Blueprint('tasks', __name__)
 def get_tasks():
     """取得使用者的所有任務（包含被指派的）"""
     user_id = int(get_jwt_identity())
-    
+
     # 取得自己建立的任務
     own_tasks = Task.query.filter_by(user_id=user_id).filter(Task.deleted_at.is_(None)).all()
-    # 取得明確被指派的任務（在 task_users 表中）
-    assigned_task_ids = [tu.task_id for tu in TaskUser.query.filter_by(user_id=user_id).all()]
-    assigned_tasks = Task.query.filter(Task.task_id.in_(assigned_task_ids), Task.deleted_at.is_(None)).all() if assigned_task_ids else []
+
+    # 取得明確被指派的任務（在 task_users 表中）— 單一查詢取得所有指派記錄
+    assigned_task_ids = db.session.query(TaskUser.task_id).filter_by(user_id=user_id).all()
+    assigned_task_ids = [row.task_id for row in assigned_task_ids]
+    assigned_tasks = Task.query.filter(
+        Task.task_id.in_(assigned_task_ids), Task.deleted_at.is_(None)
+    ).all() if assigned_task_ids else []
 
     # 合併並去重
     all_tasks = {t.task_id: t for t in own_tasks + assigned_tasks}
     tasks = sorted(all_tasks.values(), key=lambda t: (t.completed, t.end_date or datetime.max))
-    
+
+    if not tasks:
+        return jsonify([]), 200
+
+    task_ids = [t.task_id for t in tasks]
+
+    # 批次查詢所有任務的 TaskUser 記錄
+    all_task_users = TaskUser.query.filter(TaskUser.task_id.in_(task_ids)).all()
+
+    # 批次查詢所有相關 User 記錄（任務成員）
+    member_user_ids = list({tu.user_id for tu in all_task_users})
+    users_map = {u.id: u for u in User.query.filter(User.id.in_(member_user_ids)).all()} if member_user_ids else {}
+
+    # 建立 task_id -> list[TaskUser] 映射
+    task_users_map = {}
+    for tu in all_task_users:
+        task_users_map.setdefault(tu.task_id, []).append(tu)
+
+    # 批次查詢所有子任務
+    all_subtasks = Subtask.query.filter(
+        Subtask.task_id.in_(task_ids)
+    ).order_by(Subtask.sort_order).all()
+    subtasks_map = {}
+    for s in all_subtasks:
+        subtasks_map.setdefault(s.task_id, []).append(s)
+
+    # 批次查詢 timeline 成員角色（僅針對在 task_users 中找不到當前使用者的任務）
+    timeline_ids_needed = list({
+        t.timeline_id for t in tasks
+        if t.timeline_id and user_id not in {tu.user_id for tu in task_users_map.get(t.task_id, [])}
+    })
+    tl_role_map = {}  # timeline_id -> role
+    if timeline_ids_needed:
+        tl_members = TimelineUser.query.filter(
+            TimelineUser.timeline_id.in_(timeline_ids_needed),
+            TimelineUser.user_id == user_id
+        ).all()
+        tl_role_map = {tm.timeline_id: tm.role for tm in tl_members}
+
     result = []
     for t in tasks:
-        member_list, current_user_role = build_task_member_list(t.task_id, viewer_user_id=user_id)
+        member_list, current_user_role = build_task_member_list_from_map(
+            t.task_id, task_users_map, users_map, viewer_user_id=user_id
+        )
 
         # 若在 task_users 找不到，試從 timeline_users 取得角色
         if current_user_role is None and t.timeline_id:
-            tl_member = TimelineUser.query.filter_by(timeline_id=t.timeline_id, user_id=user_id).first()
-            if tl_member:
-                current_user_role = tl_member.role
+            current_user_role = tl_role_map.get(t.timeline_id)
 
         # is_owner： task_users 或 timeline_users 中 role=0，或者是任務的建立者
         is_owner = (current_user_role == 0) or (t.user_id == user_id)
-        
-        # 取得子任務
-        subtasks = Subtask.query.filter_by(task_id=t.task_id).order_by(Subtask.sort_order).all()
-        subtask_list = [s.to_dict() for s in subtasks]
+
+        subtask_list = [s.to_dict() for s in subtasks_map.get(t.task_id, [])]
 
         result.append(task_list_item_to_dict(t, member_list, subtask_list, is_owner))
-    
+
     return jsonify(result), 200
 
 @tasks_bp.route('', methods=['POST'])

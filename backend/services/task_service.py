@@ -144,6 +144,34 @@ def build_task_member_list(task_id, viewer_user_id=None, include_contact=False):
     return result, viewer_role
 
 
+def build_task_member_list_from_map(task_id, task_users_map, users_map, viewer_user_id=None, include_contact=False):
+    """N+1 回避版：從預先批次載入的映射中建立任務成員清單。
+
+    Args:
+        task_id: 目標任務 ID。
+        task_users_map: dict[task_id -> list[TaskUser]]，由呼叫端批次查詢後傳入。
+        users_map: dict[user_id -> User]，由呼叫端批次查詢後傳入。
+        viewer_user_id: 當前檢視者的 user_id（用於判斷其角色）。
+        include_contact: 是否包含聯絡資訊欄位。
+
+    Returns:
+        (member_list, viewer_role) — 與 build_task_member_list 相同的回傳格式。
+    """
+    members = task_users_map.get(task_id, [])
+    result = []
+    viewer_role = None
+
+    for member in members:
+        if viewer_user_id is not None and member.user_id == viewer_user_id:
+            viewer_role = member.role
+
+        user = users_map.get(member.user_id)
+        if user:
+            result.append(task_member_to_dict(member, user, include_contact=include_contact))
+
+    return result, viewer_role
+
+
 def task_list_item_to_dict(task, member_list, subtask_list, is_owner):
     return {
         'task_id': task.task_id,
