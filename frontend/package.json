@@ -7,15 +7,29 @@
     "dev": "vite",
     "build": "vite build --mode production",
     "preview": "vite preview",
-    "guardrails:payload": "node scripts/check-payload-guardrails.mjs"
+    "guardrails:payload": "node scripts/check-payload-guardrails.mjs",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "test:ui": "vitest --ui",
+    "test:coverage": "vitest run --coverage",
+    "test:mutate": "stryker run",
+    "test:mutate:watch": "stryker run --watch"
   },
   "devDependencies": {
+    "@stryker-mutator/core": "^9.6.0",
+    "@stryker-mutator/typescript-checker": "^9.6.0",
+    "@stryker-mutator/vitest-runner": "^9.6.0",
     "@vitejs/plugin-vue": "^6.0.3",
+    "@vitest/coverage-v8": "^4.1.1",
+    "@vitest/ui": "^4.1.1",
+    "@vue/test-utils": "^2.4.6",
     "autoprefixer": "^10.4.23",
+    "jsdom": "^29.0.1",
     "postcss": "^8.5.6",
     "tailwindcss": "^4.1.18",
     "typescript": "^5.9.3",
-    "vite": "^7.2.4"
+    "vite": "^7.2.4",
+    "vitest": "^4.1.1"
   },
   "dependencies": {
     "@fullcalendar/core": "^6.1.20",

@@ -2,8 +2,11 @@
 # Node
 node_modules/
 dist/
+dist-ssr/
 .env
 .env.*
+!.env.development
+!.env.production
 
 # Python
 __pycache__/
@@ -13,6 +16,8 @@ __pycache__/
 *.db
 *.sqlite3
 instance/
+venv/
+.venv/
 
 # VSCode
 .vscode/
@@ -23,15 +28,46 @@ Thumbs.db
 
 # Log
 *.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
 
 # IDE
 .idea/
+*.swp
+*.swo
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
 
 # SQL
 *.sql
 
 # 上傳檔案
 backend/uploads/task_files/
+
+# 測試與構建產物
+frontend/coverage/
+frontend/.stryker-tmp/
+stryker-report.txt
+stryker-error.txt
+frontend/*.local
+stryker.html/
+
+# 臨時日誌與進程檔案
+*.tmp
+*.pid
+.temp/
+
+# Firebase
+.firebase/
+
+# 環境檔案（生產敏感資訊）
+# 注意：.env.development 和 .env.production 可提交（非敏感）
+# 若需隱藏，改為 .env.example 模板檔
 
 # Docs / 筆記目錄（不追蹤）
 docs/
@@ -40,8 +76,6 @@ docs/
 
 # 其他
 *.bak
-*.swp
-*.swo
 
 # Python bytecode（backend 所有子目錄）
 backend/**/__pycache__/

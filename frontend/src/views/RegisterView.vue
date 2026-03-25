@@ -14,7 +14,7 @@
             <span class="text-5xl animate-pulse-custom inline-block">🚀</span>
           </div>
           <h2 class="text-3xl font-bold gradient-text mb-2">創建帳號</h2>
-          <p class="text-gray-500">加入 ProjectHub 開始專案管理</p>
+          <p class="text-gray-500">加入 PrAjeKt 開始專案管理</p>
         </div>
         
         <form @submit.prevent="handleRegister" class="space-y-5">
