@@ -1,0 +1,29 @@
+[run]
+omit =
+    */tests/*
+    */venv/*
+    setup.py
+    test_ai.py
+    test_db.py
+    check_tables.py
+    create_missing_tables.py
+    init_db.py
+branch = true
+
+[report]
+exclude_lines =
+    pragma: no cover
+    def __repr__
+    raise AssertionError
+    raise NotImplementedError
+    if __name__ == .__main__.:
+    if TYPE_CHECKING:
+    @abstractmethod
+    @abc.abstractmethod
+    class .*\(.*Protocol.*\):
+    @overload
+    if sys.version_info
+precision = 2
+
+[html]
+directory = htmlcov

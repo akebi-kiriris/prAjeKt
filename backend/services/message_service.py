@@ -25,7 +25,7 @@ def serialize_group_message(message, sender_name):
 
 
 def create_group_message(group_id, sender_id, content):
-    sender = User.query.get(sender_id)
+    sender = db.session.get(User, sender_id)
     if not sender:
         raise ValueError('使用者不存在')
 

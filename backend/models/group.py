@@ -1,5 +1,6 @@
 from models import db
 from datetime import datetime
+from models.time_utils import utcnow_naive
 
 class Group(db.Model):
     __tablename__ = 'groups'
@@ -13,8 +14,8 @@ class Group(db.Model):
     avatar = db.Column(db.String(500))  # 群組頭像
     is_active = db.Column(db.Boolean, default=True)  # 是否啟用
     max_members = db.Column(db.Integer, default=50)  # 成員上限
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=utcnow_naive)
+    updated_at = db.Column(db.DateTime, default=utcnow_naive, onupdate=utcnow_naive)
     
     def __repr__(self):
         return f'<Group {self.group_name}>'
@@ -25,7 +26,7 @@ class GroupMember(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     group_id = db.Column(db.Integer, db.ForeignKey('groups.group_id'))
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'))
-    joined_at = db.Column(db.DateTime, default=datetime.utcnow)
+    joined_at = db.Column(db.DateTime, default=utcnow_naive)
     
     def __repr__(self):
         return f'<GroupMember {self.id}>'

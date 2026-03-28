@@ -1,5 +1,6 @@
 from models import db
 from datetime import datetime
+from models.time_utils import utcnow_naive
 
 class TaskComment(db.Model):
     __tablename__ = 'task_comments'
@@ -8,7 +9,7 @@ class TaskComment(db.Model):
     task_id = db.Column(db.Integer, db.ForeignKey('tasks.task_id'), nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     task_message = db.Column(db.String(255), nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=utcnow_naive)
     deleted_at = db.Column(db.DateTime, nullable=True)  # None=正常, 有值=軟刪除時間
     
     # 關聯

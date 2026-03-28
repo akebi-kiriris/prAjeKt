@@ -1,5 +1,6 @@
 from models import db
 from datetime import datetime
+from models.time_utils import utcnow_naive
 
 class TaskUser(db.Model):
     __tablename__ = 'task_users'
@@ -8,7 +9,7 @@ class TaskUser(db.Model):
     task_id = db.Column(db.Integer, db.ForeignKey('tasks.task_id'), nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     role = db.Column(db.Integer, nullable=True)  # 0: 負責人, 1: 協作者
-    assigned_at = db.Column(db.DateTime, default=datetime.utcnow)
+    assigned_at = db.Column(db.DateTime, default=utcnow_naive)
     
     # 關聯
     task = db.relationship('Task', backref=db.backref('task_members', lazy=True, cascade='all, delete-orphan'))

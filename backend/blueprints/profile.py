@@ -17,7 +17,7 @@ profile_bp = Blueprint('profile', __name__)
 def get_profile():
     """取得使用者個人資料"""
     user_id = int(get_jwt_identity())
-    user = User.query.get(user_id)
+    user = db.session.get(User, user_id)
     
     if not user:
         return jsonify({'error': '使用者不存在'}), 404
@@ -29,7 +29,7 @@ def get_profile():
 def update_profile():
     """更新使用者個人資料"""
     user_id = int(get_jwt_identity())
-    user = User.query.get(user_id)
+    user = db.session.get(User, user_id)
     
     if not user:
         return jsonify({'error': '使用者不存在'}), 404
@@ -102,7 +102,7 @@ def search_user():
 @jwt_required()
 def get_chart_stats():
     """取得個人數據分析圖表資料"""
-    from datetime import datetime, timedelta
+    from datetime import datetime, timedelta, timezone
     from sqlalchemy import or_
     from models.task import Task
     from models.task_user import TaskUser
@@ -110,7 +110,7 @@ def get_chart_stats():
     from models.timeline import Timeline
 
     user_id = int(get_jwt_identity())
-    today = datetime.utcnow().date()
+    today = datetime.now(timezone.utc).date()
 
     # 取得使用者所在的 timeline IDs
     timeline_ids = [tu.timeline_id for tu

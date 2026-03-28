@@ -8,3 +8,6 @@ python-dotenv
 werkzeug
 google-generativeai
 flask-socketio
+pytest
+pytest-cov
+pytest-flask

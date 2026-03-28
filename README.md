@@ -2,7 +2,7 @@
 
 基於 Vue 3 + Flask 的專案管理與協作平台，整合 Google Gemini AI 實現智能任務生成。
 
-> **開發狀態**：Phase 1~4 已完成 ✅，Phase 5.1~5.4A（單人核心流程）已收斂；Phase 6 採本地主線驗證（n8n + MCP + AI），不新增雲端部署目標。
+> **開發狀態**：Phase 1~5.6 已完成 ✅（前端 `85/85`、後端 `108 passed`）；Backend CI 已啟用 pytest + coverage 報告，Phase 6 採本地主線驗證（n8n + MCP + AI），不新增雲端部署目標。
 
 ## 功能模組
 
@@ -145,6 +145,35 @@ npm run guardrails:payload
 start_all.bat
 ```
 
+## 測試與 CI/CD 現況
+
+### 前端測試（Vitest）
+
+- 結果：`85/85` tests 通過，平均 statements coverage `88.85%`
+- 主要涵蓋：`services`、`stores`、`utils`、`composables`
+- 指令：
+
+```bash
+cd frontend
+npm run test:run
+```
+
+### 後端測試（pytest + coverage）
+
+- 結果：`108 passed`，coverage `80.59%`
+- 覆蓋範圍：`blueprints`、`services`、`models`
+- 指令：
+
+```bash
+cd backend
+pytest --cov=blueprints --cov=services --cov=models --cov-report=term-missing --cov-report=xml --cov-report=html
+```
+
+### GitHub Actions
+
+- 已啟用：`backend-tests.yml`（PR/Push 自動執行 pytest + coverage 報告）
+- 已建立：`frontend-tests.yml`（後續可接 branch protection）
+
 ## API 端點
 
 ### 認證
@@ -250,11 +279,14 @@ start_all.bat
 
 ## Roadmap（近程）
 
-
-- **Phase 5 上線與部署整合（已收斂）**：
+- **Phase 5（已完成）**：
 	- 5.1~5.3（Supabase + Railway + Firebase）完成
 	- 5.4A（單人核心流程驗收）完成
-	- 5.4B（監控告警與 runbook）延後，按需求再評估
+	- 5.5（前端測試基線）完成
+	- 5.6（後端測試 + CI coverage 報告）完成
+- **CI/CD（輕量版，進行中）**：
+	- 已完成：Backend PR checks + coverage 報告
+	- 待完成：Frontend PR checks、branch protection、`docs/CI_CD_最小流程.md`
 - **Phase 6 AI 主線（本地執行中，未納入雲端上線）**：
 	- A：n8n + MCP 本地工作流整合
 	- B：Prompt + CoT 本地模板化與評測

@@ -1,5 +1,6 @@
 from models import db
 from datetime import datetime
+from models.time_utils import utcnow_naive
 
 class Notification(db.Model):
     __tablename__ = 'notifications'
@@ -11,7 +12,7 @@ class Notification(db.Model):
     content = db.Column(db.Text)
     link = db.Column(db.String(500))  # 點擊後導向的連結
     is_read = db.Column(db.Boolean, default=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=utcnow_naive)
     
     # 關聯
     user = db.relationship('User', backref=db.backref('notifications', lazy=True))

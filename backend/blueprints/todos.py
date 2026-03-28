@@ -2,7 +2,7 @@
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from models import db
 from models.todo import Todo
-from datetime import datetime
+from datetime import datetime, timezone
 from services.todo_service import (
     TODO_CREATE_ALLOWED_FIELDS,
     TODO_UPDATE_ALLOWED_FIELDS,
@@ -11,6 +11,10 @@ from services.todo_service import (
 )
 
 todos_bp = Blueprint('todos', __name__)
+
+
+def _utcnow_naive():
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 @todos_bp.route('', methods=['GET'])
 @jwt_required()
@@ -136,7 +140,7 @@ def update_todo(todo_id):
         if not isinstance(data['completed'], bool):
             return jsonify({'error': 'completed 必須是布林值'}), 400
         todo.completed = data['completed']
-        todo.completed_at = datetime.utcnow() if data['completed'] else None
+        todo.completed_at = _utcnow_naive() if data['completed'] else None
     
     try:
         db.session.commit()
@@ -156,7 +160,7 @@ def delete_todo(todo_id):
         return jsonify({'error': '找不到該待辦事項'}), 404
     
     try:
-        todo.deleted_at = datetime.utcnow()
+        todo.deleted_at = _utcnow_naive()
         db.session.commit()
         return jsonify({'message': '待辦事項刪除成功'}), 200
     except Exception as e:
@@ -174,7 +178,7 @@ def toggle_todo(todo_id):
         return jsonify({'error': '找不到該待辦事項'}), 404
     
     todo.completed = not todo.completed
-    todo.completed_at = datetime.utcnow() if todo.completed else None
+    todo.completed_at = _utcnow_naive() if todo.completed else None
     
     try:
         db.session.commit()

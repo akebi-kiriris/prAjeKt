@@ -1,5 +1,6 @@
 from models import db
 from datetime import datetime
+from models.time_utils import utcnow_naive
 
 class ActivityLog(db.Model):
     __tablename__ = 'activity_logs'
@@ -11,7 +12,7 @@ class ActivityLog(db.Model):
     entity_id = db.Column(db.Integer, nullable=False)
     description = db.Column(db.Text)  # "更新了任務「XXX」的狀態為已完成"
     ip_address = db.Column(db.String(45))  # IPv4/IPv6
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=utcnow_naive)
     
     # 關聯
     user = db.relationship('User', backref=db.backref('activity_logs', lazy=True))

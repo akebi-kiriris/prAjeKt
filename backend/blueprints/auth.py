@@ -85,7 +85,7 @@ def logout():
 def get_current_user():
     """取得當前使用者資訊"""
     user_id = int(get_jwt_identity())
-    user = User.query.get(user_id)
+    user = db.session.get(User, user_id)
     
     if not user:
         return jsonify({'error': '使用者不存在'}), 404

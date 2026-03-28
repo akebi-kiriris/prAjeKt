@@ -1,5 +1,6 @@
 from models import db
 from datetime import datetime
+from models.time_utils import utcnow_naive
 
 class Timeline(db.Model):
     __tablename__ = 'timelines'
@@ -11,7 +12,7 @@ class Timeline(db.Model):
     end_date = db.Column(db.Date)
     remark = db.Column(db.Text)
     deleted_at = db.Column(db.DateTime, nullable=True)  # None=正常, 有值=軟刪除時間
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=utcnow_naive)
     
     def __repr__(self):
         return f'<Timeline {self.name}>'
@@ -25,7 +26,7 @@ class TaskFile(db.Model):
     original_filename = db.Column(db.String(255))
     file_path = db.Column(db.String(500))
     file_size = db.Column(db.Integer)
-    uploaded_at = db.Column(db.DateTime, default=datetime.utcnow)
+    uploaded_at = db.Column(db.DateTime, default=utcnow_naive)
     uploaded_by = db.Column(db.Integer, db.ForeignKey('users.id'))
 
     # 關聯（cascade 保證 Task 永久刪除時自動清除附件記錄）

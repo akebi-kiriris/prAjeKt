@@ -1,5 +1,6 @@
 ﻿from models import db
 from datetime import datetime
+from models.time_utils import utcnow_naive
 
 class Subtask(db.Model):
     """子任務模型"""
@@ -13,8 +14,8 @@ class Subtask(db.Model):
     task = db.relationship('Task', backref=db.backref('subtasks', lazy=True, cascade='all, delete-orphan'))
     completed = db.Column(db.Boolean, default=False)
     sort_order = db.Column(db.Integer, default=0)  # 排序順序
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=utcnow_naive)
+    updated_at = db.Column(db.DateTime, default=utcnow_naive, onupdate=utcnow_naive)
     
     def __repr__(self):
         return f'<Subtask {self.name}>'

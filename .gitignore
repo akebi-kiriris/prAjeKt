@@ -57,6 +57,18 @@ stryker-error.txt
 frontend/*.local
 stryker.html/
 
+# Python test coverage artifacts
+.coverage
+backend/.coverage
+coverage.xml
+backend/coverage.xml
+htmlcov/
+backend/htmlcov/
+
+# Pytest cache
+.pytest_cache/
+backend/.pytest_cache/
+
 # 臨時日誌與進程檔案
 *.tmp
 *.pid

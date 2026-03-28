@@ -1,5 +1,6 @@
 from models import db
 from datetime import datetime
+from models.time_utils import utcnow_naive
 
 class Task(db.Model):
     __tablename__ = 'tasks'
@@ -20,10 +21,10 @@ class Task(db.Model):
     actual_hours = db.Column(db.Float)  # 實際工時
     
     deleted_at = db.Column(db.DateTime, nullable=True)  # None=正常, 有值=軟刪除時間
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=utcnow_naive)
     start_date = db.Column(db.DateTime)
     end_date = db.Column(db.DateTime)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=utcnow_naive, onupdate=utcnow_naive)
     
     def __repr__(self):
         return f'<Task {self.name}>'

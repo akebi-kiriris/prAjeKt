@@ -137,7 +137,7 @@ def build_task_member_list(task_id, viewer_user_id=None, include_contact=False):
         if viewer_user_id is not None and member.user_id == viewer_user_id:
             viewer_role = member.role
 
-        user = User.query.get(member.user_id)
+        user = db.session.get(User, member.user_id)
         if user:
             result.append(task_member_to_dict(member, user, include_contact=include_contact))
 

@@ -1,5 +1,6 @@
 from models import db
 from datetime import datetime
+from models.time_utils import utcnow_naive
 
 class Todo(db.Model):
     __tablename__ = 'todos'
@@ -18,8 +19,8 @@ class Todo(db.Model):
     completed_at = db.Column(db.DateTime)  # 完成時間
     deleted_at = db.Column(db.DateTime, nullable=True)  # None=正常, 有值=軟刪除時間
     
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=utcnow_naive)
+    updated_at = db.Column(db.DateTime, default=utcnow_naive, onupdate=utcnow_naive)
     
     def __repr__(self):
         return f'<Todo {self.title}>'

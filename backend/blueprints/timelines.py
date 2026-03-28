@@ -7,7 +7,7 @@ from models.task import Task
 from models.task_user import TaskUser
 from models.user import User
 from models.notification import Notification
-from datetime import datetime
+from datetime import datetime, timezone
 import os
 import json
 import google.generativeai as genai
@@ -23,6 +23,10 @@ from services.timeline_service import (
 )
 
 timelines_bp = Blueprint('timelines', __name__)
+
+
+def _utcnow_naive():
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 @timelines_bp.route('', methods=['GET'])
 @jwt_required()
@@ -165,10 +169,10 @@ def delete_timeline(timeline_id):
 
     try:
         # 軟刪除專案
-        timeline.deleted_at = datetime.utcnow()
+        timeline.deleted_at = _utcnow_naive()
 
         # 連帶軟刪除該專案下的所有任務
-        Task.query.filter_by(timeline_id=timeline_id).update({'deleted_at': datetime.utcnow()})
+        Task.query.filter_by(timeline_id=timeline_id).update({'deleted_at': _utcnow_naive()})
         
         db.session.commit()
         return jsonify({'message': '專案刪除成功'}), 200
@@ -467,7 +471,7 @@ def batch_create_tasks(timeline_id):
         # 軟刪除未被選中的舊任務
         tasks_to_delete = set(all_existing_task_ids) - set(selected_existing_task_ids)
         if tasks_to_delete:
-            Task.query.filter(Task.task_id.in_(tasks_to_delete)).update({'deleted_at': datetime.utcnow()}, synchronize_session=False)
+            Task.query.filter(Task.task_id.in_(tasks_to_delete)).update({'deleted_at': _utcnow_naive()}, synchronize_session=False)
         
         # 新增 AI 生成的任務（isExisting=False）
         created_tasks = []
@@ -520,7 +524,7 @@ def get_upcoming_timelines():
     """取得即將到期（3天內）或時間進度超過80%的專案"""
     from datetime import timedelta
     user_id = int(get_jwt_identity())
-    today = datetime.utcnow().date()
+    today = datetime.now(timezone.utc).date()
     threshold = today + timedelta(days=3)
 
     memberships = db.session.query(Timeline, TimelineUser.role)\

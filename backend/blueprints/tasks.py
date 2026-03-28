@@ -7,7 +7,7 @@ from models.task_comment import TaskComment
 from models.timeline_user import TimelineUser
 from models.subtask import Subtask
 from models.user import User
-from datetime import datetime
+from datetime import datetime, timezone
 import os
 from services.task_service import (
     TASK_CREATE_ALLOWED_FIELDS,
@@ -24,6 +24,10 @@ from services.task_service import (
 )
 
 tasks_bp = Blueprint('tasks', __name__)
+
+
+def _utcnow_naive():
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 @tasks_bp.route('', methods=['GET'])
 @jwt_required()
@@ -226,7 +230,7 @@ def delete_task(task_id):
         return jsonify({'error': '找不到該任務'}), 404
     
     try:
-        task.deleted_at = datetime.utcnow()
+        task.deleted_at = _utcnow_naive()
         db.session.commit()
         return jsonify({'message': '任務刪除成功'}), 200
     except Exception as e:
@@ -467,7 +471,7 @@ def delete_task_comment(task_id, comment_id):
         return jsonify({'error': '只能刪除自己的留言'}), 403
     
     try:
-        comment.deleted_at = datetime.utcnow()
+        comment.deleted_at = _utcnow_naive()
         db.session.commit()
         return jsonify({'message': '留言刪除成功'}), 200
     except Exception as e:
@@ -737,7 +741,7 @@ def get_upcoming_tasks():
     from datetime import timedelta
     from sqlalchemy import or_
     user_id = int(get_jwt_identity())
-    today = datetime.utcnow().date()
+    today = datetime.now(timezone.utc).date()
     threshold = today + timedelta(days=3)
 
     user_timeline_ids = [tu.timeline_id for tu in TimelineUser.query.filter_by(user_id=user_id).all()]

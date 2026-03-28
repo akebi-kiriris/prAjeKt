@@ -1,5 +1,6 @@
 from models import db
 from datetime import datetime
+from models.time_utils import utcnow_naive
 
 class Message(db.Model):
     __tablename__ = 'messages'
@@ -12,7 +13,7 @@ class Message(db.Model):
     attachment_url = db.Column(db.String(500))  # 附件路徑
     is_deleted = db.Column(db.Boolean, default=False)  # 軟刪除
     reply_to = db.Column(db.Integer, db.ForeignKey('messages.message_id'))  # 回覆功能
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=utcnow_naive)
     edited_at = db.Column(db.DateTime)  # 編輯時間
     
     def __repr__(self):
@@ -24,7 +25,7 @@ class MessageRead(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     message_id = db.Column(db.Integer, db.ForeignKey('messages.message_id'))
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'))
-    read_at = db.Column(db.DateTime, default=datetime.utcnow)
+    read_at = db.Column(db.DateTime, default=utcnow_naive)
     
     def __repr__(self):
         return f'<MessageRead {self.id}>'

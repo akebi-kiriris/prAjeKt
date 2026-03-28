@@ -1,5 +1,6 @@
 from models import db
 from datetime import datetime
+from models.time_utils import utcnow_naive
 
 class TimelineUser(db.Model):
     __tablename__ = 'timeline_users'
@@ -8,7 +9,7 @@ class TimelineUser(db.Model):
     timeline_id = db.Column(db.Integer, db.ForeignKey('timelines.id'), nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     role = db.Column(db.Integer, nullable=True)  # 0: 負責人, 1: 協作者
-    joined_at = db.Column(db.DateTime, default=datetime.utcnow)
+    joined_at = db.Column(db.DateTime, default=utcnow_naive)
     
     # 關聯
     timeline = db.relationship('Timeline', backref=db.backref('timeline_members', lazy=True, cascade='all, delete-orphan'))

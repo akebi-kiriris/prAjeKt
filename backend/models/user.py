@@ -1,5 +1,6 @@
 from models import db
 from datetime import datetime
+from models.time_utils import utcnow_naive
 
 class User(db.Model):
     __tablename__ = 'users'
@@ -14,8 +15,8 @@ class User(db.Model):
     bio = db.Column(db.Text)  # 個人簡介
     is_active = db.Column(db.Boolean, default=True)  # 帳號狀態
     last_login_at = db.Column(db.DateTime)  # 最後登入時間
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=utcnow_naive)
+    updated_at = db.Column(db.DateTime, default=utcnow_naive, onupdate=utcnow_naive)
     
     def __repr__(self):
         return f'<User {self.email}>'
