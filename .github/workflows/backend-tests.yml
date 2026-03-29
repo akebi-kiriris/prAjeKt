@@ -11,9 +11,6 @@ on:
     paths:
       - 'backend/**'
 
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
-
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -23,10 +20,10 @@ jobs:
         working-directory: backend
 
     steps:
-    - uses: actions/checkout@v4.1.1
+    - uses: actions/checkout@v6
 
     - name: Set up Python
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@v6
       with:
         python-version: '3.11'
 
@@ -40,24 +37,19 @@ jobs:
         FLASK_ENV: testing
         DATABASE_URL: 'sqlite:///:memory:'
       run: |
-        pytest tests \
-          --cov=blueprints \
-          --cov=services \
-          --cov=models \
-          --cov-report=term-missing \
-          --cov-report=xml \
-          --cov-report=html \
-          -q
+        python -m pytest tests --cov=blueprints --cov=services --cov=models --cov-report=term-missing --cov-report=xml --cov-report=html -q
 
     - name: Archive coverage report
       if: always()
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: coverage-report
         path: backend/htmlcov/
         retention-days: 30
+        if-no-files-found: ignore
 
     - name: Upload coverage to Codecov
+      if: always() && hashFiles('backend/coverage.xml') != ''
       uses: codecov/codecov-action@v4
       with:
         files: backend/coverage.xml
