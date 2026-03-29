@@ -20,8 +20,8 @@
     "@stryker-mutator/typescript-checker": "^9.6.0",
     "@stryker-mutator/vitest-runner": "^9.6.0",
     "@vitejs/plugin-vue": "^6.0.3",
-    "@vitest/coverage-v8": "^4.1.1",
-    "@vitest/ui": "^4.1.1",
+    "@vitest/coverage-v8": "^4.1.2",
+    "@vitest/ui": "^4.1.2",
     "@vue/test-utils": "^2.4.6",
     "autoprefixer": "^10.4.23",
     "jsdom": "^29.0.1",
@@ -29,7 +29,7 @@
     "tailwindcss": "^4.1.18",
     "typescript": "^5.9.3",
     "vite": "^7.2.4",
-    "vitest": "^4.1.1"
+    "vitest": "^4.1.2"
   },
   "dependencies": {
     "@fullcalendar/core": "^6.1.20",

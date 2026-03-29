@@ -21,7 +21,7 @@ jobs:
     - name: Setup Node.js
       uses: actions/setup-node@v6
       with:
-        node-version: '18'
+        node-version: '24'
 
     - name: Install dependencies
       run: |
@@ -31,7 +31,7 @@ jobs:
     - name: Run tests with coverage
       run: |
         cd frontend
-        npm run test:run -- --coverage
+        npm run test:coverage
 
     - name: Build
       run: |
@@ -39,9 +39,10 @@ jobs:
         npm run build
 
     - name: Upload coverage to Codecov
+      if: always() && hashFiles('frontend/coverage/lcov.info') != ''
       uses: codecov/codecov-action@v3
       with:
-        files: ./frontend/coverage/coverage-final.json
+        files: ./frontend/coverage/lcov.info
         flags: frontend
         name: frontend-coverage
         fail_ci_if_error: false
