@@ -10,7 +10,12 @@ from models.notification import Notification
 from datetime import datetime, timezone
 import os
 import json
-import google.generativeai as genai
+import warnings
+
+with warnings.catch_warnings():
+    # Keep current SDK behavior but silence upstream deprecation noise in tests/logs.
+    warnings.simplefilter("ignore", FutureWarning)
+    import google.generativeai as genai
 from services.timeline_service import (
     TIMELINE_UPDATE_ALLOWED_FIELDS,
     find_unknown_fields,
@@ -254,7 +259,7 @@ def get_timeline_members(timeline_id):
     members = TimelineUser.query.filter_by(timeline_id=timeline_id).all()
     result = []
     for m in members:
-        user = User.query.get(m.user_id)
+        user = db.session.get(User, m.user_id)
         if user:
             result.append(timeline_member_item_to_dict(m, user))
     return jsonify(result), 200
@@ -276,8 +281,8 @@ def add_timeline_member(timeline_id):
         member = TimelineUser(timeline_id=timeline_id, user_id=invited_user_id, role=role)
         db.session.add(member)
         # 通知被邀請的成員
-        actor = User.query.get(int(get_jwt_identity()))
-        timeline = Timeline.query.get(timeline_id)
+        actor = db.session.get(User, int(get_jwt_identity()))
+        timeline = db.session.get(Timeline, timeline_id)
         actor_name = actor.name if actor else '某人'
         timeline_name = timeline.name if timeline else '專案'
         notif = Notification(

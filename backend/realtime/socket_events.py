@@ -47,7 +47,7 @@ def register_socket_events(socketio):
         except Exception:
             return False
 
-        user = User.query.get(user_id)
+        user = db.session.get(User, user_id)
         if not user:
             return False
 

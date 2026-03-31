@@ -272,7 +272,7 @@ def get_task_members(task_id):
 def add_task_member(task_id):
     """新增任務成員（任務負責人 或 所屬 timeline 的負責人 可操作）"""
     user_id = int(get_jwt_identity())
-    task = Task.query.get(task_id)
+    task = db.session.get(Task, task_id)
     if not task:
         return jsonify({'error': '找不到該任務'}), 404
 
@@ -298,8 +298,8 @@ def add_task_member(task_id):
         )
         db.session.add(task_member)
         # 通知被指派的成員
-        task = Task.query.get(task_id)
-        actor = User.query.get(int(get_jwt_identity()))
+        task = db.session.get(Task, task_id)
+        actor = db.session.get(User, int(get_jwt_identity()))
         actor_name = actor.name if actor else '某人'
         task_name = task.name if task else '任務'
         create_notification(
@@ -402,7 +402,7 @@ def get_task_comments(task_id):
     comments = TaskComment.query.filter_by(task_id=task_id).filter(TaskComment.deleted_at.is_(None)).order_by(TaskComment.created_at.desc()).all()
     result = []
     for c in comments:
-        user = User.query.get(c.user_id)
+        user = db.session.get(User, c.user_id)
         result.append(task_comment_to_dict(c, user))
     return jsonify(result), 200
 
@@ -426,8 +426,8 @@ def add_task_comment(task_id):
         )
         db.session.add(comment)
         # 通知任務所有其他成員有新留言
-        actor = User.query.get(user_id)
-        task = Task.query.get(task_id)
+        actor = db.session.get(User, user_id)
+        task = db.session.get(Task, task_id)
         actor_name = actor.name if actor else '某人'
         task_name = task.name if task else '任務'
         members = TaskUser.query.filter_by(task_id=task_id).all()
@@ -445,7 +445,7 @@ def add_task_comment(task_id):
                 link=f'/tasks'
             )
         db.session.commit()
-        user = User.query.get(user_id)
+        user = db.session.get(User, user_id)
         return jsonify({
             'comment_id': comment.comment_id,
             'user_id': user_id,
@@ -499,7 +499,7 @@ def get_task_files(task_id):
     files = TaskFile.query.filter_by(task_id=task_id).order_by(TaskFile.uploaded_at.desc()).all()
     result = []
     for f in files:
-        uploader = User.query.get(f.uploaded_by)
+        uploader = db.session.get(User, f.uploaded_by)
         result.append({
             'id': f.id,
             'filename': f.filename,
