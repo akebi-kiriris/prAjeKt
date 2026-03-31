@@ -33,6 +33,13 @@ timelines_bp = Blueprint('timelines', __name__)
 def _utcnow_naive():
     return datetime.now(timezone.utc).replace(tzinfo=None)
 
+
+def _get_json_dict_or_400():
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return None, (jsonify({'error': '請提供正確的 JSON 物件'}), 400)
+    return data, None
+
 @timelines_bp.route('', methods=['GET'])
 @jwt_required()
 def get_timelines():
@@ -62,7 +69,9 @@ def get_timelines():
 def create_timeline():
     """新增專案時程"""
     user_id = int(get_jwt_identity())
-    data = request.get_json()
+    data, error = _get_json_dict_or_400()
+    if error:
+        return error
     
     name = data.get('name')
     start_date_raw = data.get('start_date', '')
@@ -108,7 +117,7 @@ def create_timeline():
         return jsonify({'message': '專案新增成功', 'id': new_timeline.id}), 201
     except Exception as e:
         db.session.rollback()
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': '專案新增失敗，請稍後再試'}), 500
 
 @timelines_bp.route('/<int:timeline_id>', methods=['PUT'])
 @jwt_required()
@@ -120,10 +129,9 @@ def update_timeline(timeline_id):
     if not timeline:
         return jsonify({'error': '找不到該專案'}), 404
     
-    data = request.get_json() or {}
-
-    if not isinstance(data, dict):
-        return jsonify({'error': '請提供正確的 JSON 物件'}), 400
+    data, error = _get_json_dict_or_400()
+    if error:
+        return error
 
     unknown_fields = find_unknown_fields(data, TIMELINE_UPDATE_ALLOWED_FIELDS)
     if unknown_fields:
@@ -160,7 +168,7 @@ def update_timeline(timeline_id):
         return jsonify({'message': '專案更新成功'}), 200
     except Exception as e:
         db.session.rollback()
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': '專案更新失敗，請稍後再試'}), 500
 
 @timelines_bp.route('/<int:timeline_id>', methods=['DELETE'])
 @jwt_required()
@@ -183,7 +191,7 @@ def delete_timeline(timeline_id):
         return jsonify({'message': '專案刪除成功'}), 200
     except Exception as e:
         db.session.rollback()
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': '專案刪除失敗，請稍後再試'}), 500
 
 @timelines_bp.route('/<int:timeline_id>/tasks', methods=['GET'])
 @jwt_required()
@@ -216,7 +224,10 @@ def update_timeline_remark(timeline_id):
     if not timeline:
         return jsonify({'error': '找不到該專案'}), 404
     
-    data = request.get_json()
+    data, error = _get_json_dict_or_400()
+    if error:
+        return error
+
     remark = data.get('remark', '')
     
     if not isinstance(remark, str):
@@ -228,13 +239,16 @@ def update_timeline_remark(timeline_id):
         return jsonify({'message': '備註更新成功'}), 200
     except Exception as e:
         db.session.rollback()
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': '備註更新失敗，請稍後再試'}), 500
 
 @timelines_bp.route('/search_user', methods=['POST'])
 @jwt_required()
 def search_user_by_email():
     """根據 Email 搜尋使用者"""
-    data = request.get_json()
+    data, error = _get_json_dict_or_400()
+    if error:
+        return error
+
     email = data.get('email')
     
     if not email:
@@ -270,7 +284,10 @@ def get_timeline_members(timeline_id):
 @require_timeline_role('owner')
 def add_timeline_member(timeline_id):
     """邀請人員加入專案（僅負責人可操作）"""
-    data = request.get_json()
+    data, error = _get_json_dict_or_400()
+    if error:
+        return error
+
     invited_user_id = data.get('user_id')
     role = data.get('role', 1)  # 預設為成員
     
@@ -297,7 +314,7 @@ def add_timeline_member(timeline_id):
         return jsonify({'message': '成員新增成功'}), 201
     except Exception as e:
         db.session.rollback()
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': '成員新增失敗，請稍後再試'}), 500
 
 
 @timelines_bp.route('/<int:timeline_id>/members/<int:member_user_id>', methods=['DELETE'])
@@ -319,7 +336,7 @@ def remove_timeline_member(timeline_id, member_user_id):
         return jsonify({'message': '成員已移除'}), 200
     except Exception as e:
         db.session.rollback()
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': '成員移除失敗，請稍後再試'}), 500
 
 
 # ===== AI 任務生成 API =====
@@ -333,7 +350,10 @@ def generate_tasks_with_ai(timeline_id):
     if not timeline:
         return jsonify({'error': '找不到該專案'}), 404
     
-    data = request.get_json() or {}
+    data, error = _get_json_dict_or_400()
+    if error:
+        return error
+
     project_name = data.get('name', timeline.name)
     description = data.get('description', timeline.remark or '')
     
@@ -440,13 +460,10 @@ def generate_tasks_with_ai(timeline_id):
             'generatedCount': len(ai_generated_tasks)
         }), 200
 
-    except json.JSONDecodeError as e:
-        return jsonify({
-            'error': 'AI 回應解析失敗',
-            'detail': str(e)
-        }), 500
-    except Exception as e:
-        return jsonify({'error': f'AI 生成失敗: {str(e)}'}), 500
+    except json.JSONDecodeError:
+        return jsonify({'error': 'AI 回應解析失敗'}), 500
+    except Exception:
+        return jsonify({'error': 'AI 生成失敗，請稍後再試'}), 500
 
 
 @timelines_bp.route('/<int:timeline_id>/batch-create-tasks', methods=['POST'])
@@ -460,7 +477,10 @@ def batch_create_tasks(timeline_id):
     if not timeline:
         return jsonify({'error': '找不到該專案'}), 404
     
-    data = request.get_json()
+    data, error = _get_json_dict_or_400()
+    if error:
+        return error
+
     tasks = data.get('tasks', [])
     
     if not isinstance(tasks, list) or len(tasks) == 0:
@@ -520,7 +540,7 @@ def batch_create_tasks(timeline_id):
     
     except Exception as e:
         db.session.rollback()
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': '批次建立任務失敗，請稍後再試'}), 500
 
 
 @timelines_bp.route('/upcoming', methods=['GET'])

@@ -108,7 +108,13 @@ onMounted(async () => {
     upcomingItems.value = [...tasks.map((t) => ({ ...t, id: t.task_id })), ...timelines]
       .sort((a, b) => {
         if (a.is_overdue !== b.is_overdue) return a.is_overdue ? -1 : 1;
-        return a.end_date < b.end_date ? -1 : 1;
+        const endA = new Date(a.end_date).getTime();
+        const endB = new Date(b.end_date).getTime();
+        if (Number.isNaN(endA) && Number.isNaN(endB)) return 0;
+        if (Number.isNaN(endA)) return 1;
+        if (Number.isNaN(endB)) return -1;
+        if (endA === endB) return 0;
+        return endA < endB ? -1 : 1;
       });
   } catch {
     // 靜默失敗，不影響主頁其他功能

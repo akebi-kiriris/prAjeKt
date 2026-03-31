@@ -41,4 +41,4 @@ def mark_all_as_read():
         return jsonify({'message': '已標記所有訊息為已讀'}), 200
     except Exception as e:
         db.session.rollback()
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': '標記訊息失敗，請稍後再試'}), 500

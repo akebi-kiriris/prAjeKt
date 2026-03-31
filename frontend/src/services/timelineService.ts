@@ -8,7 +8,7 @@ import type {
   CreateTaskPayload,
   Task,
   TaskMember,
-  MemberStat,
+  ProjectStats,
   SearchUserResult,
   GenerateTasksResponse,
 } from '../types';
@@ -27,5 +27,5 @@ export const timelineService = {
   getMembers:       (id: number): Promise<AxiosResponse<TaskMember[]>>                           => api.get(`/timelines/${id}/members`),
   removeMember:     (id: number, userId: number): Promise<AxiosResponse<void>>                   => api.delete(`/timelines/${id}/members/${userId}`),
   upcoming:         (): Promise<AxiosResponse<Timeline[]>>                                       => api.get('/timelines/upcoming'),
-  getMemberStats:   (id: number): Promise<AxiosResponse<MemberStat[]>>                          => api.get(`/timelines/${id}/member-stats`),
+  getMemberStats:   (id: number): Promise<AxiosResponse<ProjectStats>>                          => api.get(`/timelines/${id}/member-stats`),
 };

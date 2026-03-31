@@ -29,6 +29,13 @@ tasks_bp = Blueprint('tasks', __name__)
 def _utcnow_naive():
     return datetime.now(timezone.utc).replace(tzinfo=None)
 
+
+def _get_json_dict_or_400():
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return None, (jsonify({'error': '請提供正確的 JSON 物件'}), 400)
+    return data, None
+
 @tasks_bp.route('', methods=['GET'])
 @jwt_required()
 def get_tasks():
@@ -71,10 +78,9 @@ def get_tasks():
 def create_task():
     """新增任務"""
     user_id = int(get_jwt_identity())
-    data = request.get_json() or {}
-
-    if not isinstance(data, dict):
-        return jsonify({'error': '請提供正確的 JSON 物件'}), 400
+    data, error = _get_json_dict_or_400()
+    if error:
+        return error
 
     unknown_fields = find_unknown_fields(data, TASK_CREATE_ALLOWED_FIELDS)
     if unknown_fields:
@@ -135,7 +141,7 @@ def create_task():
         return jsonify({'message': '任務新增成功', 'task_id': new_task.task_id}), 201
     except Exception as e:
         db.session.rollback()
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': '任務新增失敗，請稍後再試'}), 500
 
 @tasks_bp.route('/<int:task_id>', methods=['PUT'])
 @jwt_required()
@@ -147,10 +153,9 @@ def update_task(task_id):
     if not task:
         return jsonify({'error': '找不到該任務'}), 404
     
-    data = request.get_json() or {}
-
-    if not isinstance(data, dict):
-        return jsonify({'error': '請提供正確的 JSON 物件'}), 400
+    data, error = _get_json_dict_or_400()
+    if error:
+        return error
 
     unknown_fields = find_unknown_fields(data, TASK_UPDATE_ALLOWED_FIELDS)
     if unknown_fields:
@@ -217,7 +222,7 @@ def update_task(task_id):
         return jsonify({'message': '任務更新成功'}), 200
     except Exception as e:
         db.session.rollback()
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': '任務更新失敗，請稍後再試'}), 500
 
 @tasks_bp.route('/<int:task_id>', methods=['DELETE'])
 @jwt_required()
@@ -235,7 +240,7 @@ def delete_task(task_id):
         return jsonify({'message': '任務刪除成功'}), 200
     except Exception as e:
         db.session.rollback()
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': '任務刪除失敗，請稍後再試'}), 500
 
 @tasks_bp.route('/<int:task_id>/toggle', methods=['PATCH'])
 @jwt_required()
@@ -255,7 +260,7 @@ def toggle_task(task_id):
         return jsonify({'message': '狀態更新成功', 'completed': task.completed}), 200
     except Exception as e:
         db.session.rollback()
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': '狀態更新失敗，請稍後再試'}), 500
 
 # ===== 任務成員 API =====
 
@@ -279,7 +284,10 @@ def add_task_member(task_id):
     if not can_manage_task_members(user_id, task):
         return jsonify({'error': '只有負責人可新增成員'}), 403
 
-    data = request.get_json()
+    data, error = _get_json_dict_or_400()
+    if error:
+        return error
+
     new_user_id = data.get('user_id')
     
     if not new_user_id:
@@ -313,7 +321,7 @@ def add_task_member(task_id):
         return jsonify({'message': '成員新增成功'}), 201
     except Exception as e:
         db.session.rollback()
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': '成員新增失敗，請稍後再試'}), 500
 
 @tasks_bp.route('/<int:task_id>/members/<int:member_id>', methods=['DELETE'])
 @jwt_required()
@@ -330,7 +338,7 @@ def remove_task_member(task_id, member_id):
         return jsonify({'message': '成員移除成功'}), 200
     except Exception as e:
         db.session.rollback()
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': '成員移除失敗，請稍後再試'}), 500
 
 
 @tasks_bp.route('/<int:task_id>/members/<int:member_id>', methods=['PATCH'])
@@ -338,9 +346,9 @@ def remove_task_member(task_id, member_id):
 def update_task_member_role(task_id, member_id):
     """更新任務成員角色。
     當 role=0 時，會把該任務其餘成員降為協作者，形成單一主責人。"""
-    payload = request.get_json() or {}
-    if not isinstance(payload, dict):
-        return jsonify({'error': '請提供正確的 JSON 物件'}), 400
+    payload, error = _get_json_dict_or_400()
+    if error:
+        return error
 
     if 'role' not in payload:
         return jsonify({'error': '請提供 role 欄位'}), 400
@@ -390,7 +398,7 @@ def update_task_member_role(task_id, member_id):
         return jsonify({'message': '成員角色更新成功'}), 200
     except Exception as e:
         db.session.rollback()
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': '成員角色更新失敗，請稍後再試'}), 500
 
 # ===== 任務留言 API =====
 
@@ -412,7 +420,10 @@ def get_task_comments(task_id):
 def add_task_comment(task_id):
     """新增任務留言"""
     user_id = int(get_jwt_identity())
-    data = request.get_json()
+    data, error = _get_json_dict_or_400()
+    if error:
+        return error
+
     message = data.get('message') or data.get('task_message')
     
     if not message:
@@ -455,7 +466,7 @@ def add_task_comment(task_id):
         }), 201
     except Exception as e:
         db.session.rollback()
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': '留言新增失敗，請稍後再試'}), 500
 
 @tasks_bp.route('/<int:task_id>/comments/<int:comment_id>', methods=['DELETE'])
 @jwt_required()
@@ -476,7 +487,7 @@ def delete_task_comment(task_id, comment_id):
         return jsonify({'message': '留言刪除成功'}), 200
     except Exception as e:
         db.session.rollback()
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': '留言刪除失敗，請稍後再試'}), 500
 
 
 # ===== 任務檔案 API =====
@@ -562,13 +573,13 @@ def upload_task_file(task_id):
             'id': task_file.id,
             'message': '檔案上傳成功',
             'filename': unique_filename,
-            'original_filename': filename,
+            'original_filename': original_filename,
             'file_size': file_size,
             'uploaded_at': task_file.uploaded_at.isoformat() + 'Z' if task_file.uploaded_at else None,
         }), 201
     except Exception as e:
         db.session.rollback()
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': '檔案上傳失敗，請稍後再試'}), 500
 
 @tasks_bp.route('/<int:task_id>/files/<int:file_id>', methods=['DELETE'])
 @jwt_required()
@@ -594,14 +605,24 @@ def delete_task_file(task_id, file_id):
         return jsonify({'message': '檔案刪除成功'}), 200
     except Exception as e:
         db.session.rollback()
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': '檔案刪除失敗，請稍後再試'}), 500
 
 @tasks_bp.route('/files/<filename>', methods=['GET'])
+@jwt_required()
 def download_task_file(filename):
     """下載/預覽任務附件（以原始檔名呈現）"""
     from models.timeline import TaskFile
+
+    user_id = int(get_jwt_identity())
     upload_folder = os.path.join(os.path.dirname(__file__), '..', 'uploads', 'task_files')
     task_file = TaskFile.query.filter_by(filename=filename).first()
+    if not task_file:
+        return jsonify({'error': '找不到該檔案'}), 404
+
+    role = get_user_task_role(user_id, task_file.task_id)
+    if role is None:
+        return jsonify({'error': '你沒有權限存取此檔案'}), 403
+
     original_name = task_file.original_filename if task_file else filename
     return send_from_directory(upload_folder, filename, as_attachment=False, download_name=original_name)
 
@@ -618,7 +639,10 @@ def get_subtasks(task_id):
 @require_task_role('member')
 def create_subtask(task_id):
     """新增子任務"""
-    data = request.get_json()
+    data, error = _get_json_dict_or_400()
+    if error:
+        return error
+
     name = data.get('name')
     
     if not name:
@@ -638,7 +662,7 @@ def create_subtask(task_id):
         return jsonify({'message': '子任務新增成功', 'subtask': subtask.to_dict()}), 201
     except Exception as e:
         db.session.rollback()
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': '子任務新增失敗，請稍後再試'}), 500
 
 @tasks_bp.route('/<int:task_id>/subtasks/<int:subtask_id>', methods=['PUT'])
 @jwt_required()
@@ -650,7 +674,9 @@ def update_subtask(task_id, subtask_id):
     if not subtask:
         return jsonify({'error': '找不到該子任務'}), 404
     
-    data = request.get_json()
+    data, error = _get_json_dict_or_400()
+    if error:
+        return error
     
     if 'name' in data:
         subtask.name = data['name']
@@ -664,7 +690,7 @@ def update_subtask(task_id, subtask_id):
         return jsonify({'message': '子任務更新成功', 'subtask': subtask.to_dict()}), 200
     except Exception as e:
         db.session.rollback()
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': '子任務更新失敗，請稍後再試'}), 500
 
 @tasks_bp.route('/<int:task_id>/subtasks/<int:subtask_id>', methods=['DELETE'])
 @jwt_required()
@@ -682,7 +708,7 @@ def delete_subtask(task_id, subtask_id):
         return jsonify({'message': '子任務刪除成功'}), 200
     except Exception as e:
         db.session.rollback()
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': '子任務刪除失敗，請稍後再試'}), 500
 
 @tasks_bp.route('/<int:task_id>/subtasks/<int:subtask_id>/toggle', methods=['PATCH'])
 @jwt_required()
@@ -701,7 +727,7 @@ def toggle_subtask(task_id, subtask_id):
         return jsonify({'message': '狀態更新成功', 'subtask': subtask.to_dict()}), 200
     except Exception as e:
         db.session.rollback()
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': '狀態更新失敗，請稍後再試'}), 500
 
 
 # ===== 任務狀態更新 API (看板用) =====
@@ -716,7 +742,10 @@ def update_task_status(task_id):
     if not task:
         return jsonify({'error': '找不到該任務'}), 404
     
-    data = request.get_json()
+    data, error = _get_json_dict_or_400()
+    if error:
+        return error
+
     new_status = data.get('status')
     
     valid_statuses = ['pending', 'in_progress', 'completed']
@@ -731,7 +760,7 @@ def update_task_status(task_id):
         return jsonify({'message': '狀態更新成功', 'status': task.status, 'completed': task.completed}), 200
     except Exception as e:
         db.session.rollback()
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': '狀態更新失敗，請稍後再試'}), 500
 
 
 @tasks_bp.route('/upcoming', methods=['GET'])

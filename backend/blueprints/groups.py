@@ -13,6 +13,13 @@ from services.group_service import (
 
 groups_bp = Blueprint('groups', __name__)
 
+
+def _get_json_dict_or_400():
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return None, (jsonify({'error': '請提供正確的 JSON 物件'}), 400)
+    return data, None
+
 @groups_bp.route('', methods=['GET'])
 @jwt_required()
 def get_groups():
@@ -30,7 +37,9 @@ def get_groups():
 def create_group():
     """建立新群組"""
     user_id = int(get_jwt_identity())
-    data = request.get_json()
+    data, error = _get_json_dict_or_400()
+    if error:
+        return error
     
     group_name = data.get('group_name', '').strip()
     if not group_name:
@@ -60,14 +69,16 @@ def create_group():
         }), 201
     except Exception as e:
         db.session.rollback()
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': '建立群組失敗，請稍後再試'}), 500
 
 @groups_bp.route('/join', methods=['POST'])
 @jwt_required()
 def join_group():
     """透過邀請碼加入群組"""
     user_id = int(get_jwt_identity())
-    data = request.get_json()
+    data, error = _get_json_dict_or_400()
+    if error:
+        return error
     
     invite_code = data.get('invite_code', '').strip()
     if not invite_code:
@@ -90,7 +101,7 @@ def join_group():
         return jsonify({'message': '成功加入群組'}), 200
     except Exception as e:
         db.session.rollback()
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': '加入群組失敗，請稍後再試'}), 500
 
 @groups_bp.route('/<int:group_id>/leave', methods=['POST'])
 @jwt_required()
@@ -108,7 +119,7 @@ def leave_group(group_id):
         return jsonify({'message': '已離開群組'}), 200
     except Exception as e:
         db.session.rollback()
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': '離開群組失敗，請稍後再試'}), 500
 
 @groups_bp.route('/<int:group_id>/members', methods=['GET'])
 @jwt_required()
@@ -148,7 +159,9 @@ def get_group_messages(group_id):
 def send_message(group_id):
     """發送群組訊息"""
     user_id = int(get_jwt_identity())
-    data = request.get_json()
+    data, error = _get_json_dict_or_400()
+    if error:
+        return error
     
     content = data.get('content', '').strip()
     if not content:
@@ -170,4 +183,4 @@ def send_message(group_id):
         return jsonify({'message': '訊息已發送', 'message_id': new_message.message_id}), 201
     except Exception as e:
         db.session.rollback()
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': '發送訊息失敗，請稍後再試'}), 500

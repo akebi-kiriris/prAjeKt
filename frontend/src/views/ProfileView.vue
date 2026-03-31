@@ -433,7 +433,7 @@ const loadProjectStats = async () => {
   projectStats.value = null;
   try {
     const res = await timelineService.getMemberStats(selectedTimelineId.value);
-    projectStats.value = res.data as unknown as ProjectStats;
+    projectStats.value = res.data;
   } catch {
     toast.error('載入專案統計失敗');
   } finally {

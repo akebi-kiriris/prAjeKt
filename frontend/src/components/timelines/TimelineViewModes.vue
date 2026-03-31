@@ -1047,13 +1047,24 @@ const getTaskProgress = (timeline: Timeline): number => {
 
 const getTimeProgress = (timeline: Timeline): number => {
   if (!timeline.startDate || !timeline.endDate) return 0;
-  const today = new Date();
   const start = parseDateOnlyLocal(timeline.startDate);
   const end = parseDateOnlyLocal(timeline.endDate);
   if (!start || !end) return 0;
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
   if (today < start) return 0;
   if (today > end) return 100;
-  return Math.round(((today.getTime() - start.getTime()) / (end.getTime() - start.getTime())) * 100);
+
+  const totalDuration = end.getTime() - start.getTime();
+  if (totalDuration <= 0) {
+    return today.getTime() >= end.getTime() ? 100 : 0;
+  }
+
+  const elapsed = today.getTime() - start.getTime();
+  const progress = Math.round((elapsed / totalDuration) * 100);
+  return Math.min(100, Math.max(0, progress));
 };
 
 const getTimelineStatus = (timeline: Timeline) => {

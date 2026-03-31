@@ -16,6 +16,13 @@ todos_bp = Blueprint('todos', __name__)
 def _utcnow_naive():
     return datetime.now(timezone.utc).replace(tzinfo=None)
 
+
+def _get_json_dict_or_400():
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return None, (jsonify({'error': '請提供正確的 JSON 物件'}), 400)
+    return data, None
+
 @todos_bp.route('', methods=['GET'])
 @jwt_required()
 def get_todos():
@@ -40,10 +47,9 @@ def get_todos():
 def create_todo():
     """新增待辦事項"""
     user_id = int(get_jwt_identity())
-    data = request.get_json() or {}
-
-    if not isinstance(data, dict):
-        return jsonify({'error': '請提供正確的 JSON 物件'}), 400
+    data, error = _get_json_dict_or_400()
+    if error:
+        return error
 
     unknown_fields = find_unknown_fields(data, TODO_CREATE_ALLOWED_FIELDS)
     if unknown_fields:
@@ -85,7 +91,7 @@ def create_todo():
         return jsonify({'message': '待辦事項新增成功', 'id': new_todo.id}), 201
     except Exception as e:
         db.session.rollback()
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': '待辦事項新增失敗，請稍後再試'}), 500
 
 @todos_bp.route('/<int:todo_id>', methods=['PUT'])
 @jwt_required()
@@ -97,10 +103,9 @@ def update_todo(todo_id):
     if not todo:
         return jsonify({'error': '找不到該待辦事項'}), 404
     
-    data = request.get_json() or {}
-
-    if not isinstance(data, dict):
-        return jsonify({'error': '請提供正確的 JSON 物件'}), 400
+    data, error = _get_json_dict_or_400()
+    if error:
+        return error
 
     unknown_fields = find_unknown_fields(data, TODO_UPDATE_ALLOWED_FIELDS)
     if unknown_fields:
@@ -147,7 +152,7 @@ def update_todo(todo_id):
         return jsonify({'message': '待辦事項更新成功'}), 200
     except Exception as e:
         db.session.rollback()
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': '待辦事項更新失敗，請稍後再試'}), 500
 
 @todos_bp.route('/<int:todo_id>', methods=['DELETE'])
 @jwt_required()
@@ -165,7 +170,7 @@ def delete_todo(todo_id):
         return jsonify({'message': '待辦事項刪除成功'}), 200
     except Exception as e:
         db.session.rollback()
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': '待辦事項刪除失敗，請稍後再試'}), 500
 
 @todos_bp.route('/<int:todo_id>/toggle', methods=['PATCH'])
 @jwt_required()
@@ -185,4 +190,4 @@ def toggle_todo(todo_id):
         return jsonify({'message': '狀態更新成功', 'completed': todo.completed}), 200
     except Exception as e:
         db.session.rollback()
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': '狀態更新失敗，請稍後再試'}), 500

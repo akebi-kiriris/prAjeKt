@@ -581,7 +581,19 @@ def test_task_file_upload_list_download_and_delete(client):
     assert list_response.status_code == 200
     assert any(item["id"] == file_id for item in list_response.get_json())
 
-    download = client.get(f"/api/tasks/files/{stored_filename}")
+    download_unauthorized = client.get(f"/api/tasks/files/{stored_filename}")
+    assert download_unauthorized.status_code == 401
+
+    download_forbidden = client.get(
+        f"/api/tasks/files/{stored_filename}",
+        headers=outsider_headers,
+    )
+    assert download_forbidden.status_code == 403
+
+    download = client.get(
+        f"/api/tasks/files/{stored_filename}",
+        headers=member_headers,
+    )
     assert download.status_code == 200
     assert download.data == b"hello"
     download.close()

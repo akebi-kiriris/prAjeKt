@@ -83,6 +83,7 @@ const { notifications, hasUnread } = storeToRefs(store);
 const userName = computed(() => authStore.currentUser?.name || '使用者');
 const showNotifPanel = ref(false);
 const notifRef = ref<HTMLElement | null>(null);
+let pollInterval: ReturnType<typeof setInterval> | null = null;
 
 defineEmits<{
   (e: 'logout'): void;
@@ -128,12 +129,17 @@ const onClickOutside = (e: MouseEvent) => {
 
 onMounted(() => {
   document.addEventListener('click', onClickOutside);
-  store.fetchUnreadCount();
-  const pollInterval = setInterval(() => store.fetchUnreadCount(), 30000);
-  onUnmounted(() => clearInterval(pollInterval));
+  void store.fetchUnreadCount();
+  pollInterval = setInterval(() => {
+    void store.fetchUnreadCount();
+  }, 30000);
 });
 
 onUnmounted(() => {
   document.removeEventListener('click', onClickOutside);
+  if (pollInterval) {
+    clearInterval(pollInterval);
+    pollInterval = null;
+  }
 });
 </script>

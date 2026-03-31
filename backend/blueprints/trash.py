@@ -66,7 +66,7 @@ def restore_task(task_id):
         return jsonify({'message': '任務已還原'}), 200
     except Exception as e:
         db.session.rollback()
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': '任務還原失敗，請稍後再試'}), 500
 
 
 @trash_bp.route('/tasks/<int:task_id>', methods=['DELETE'])
@@ -85,7 +85,7 @@ def permanently_delete_task(task_id):
         return jsonify({'message': '任務已永久刪除'}), 200
     except Exception as e:
         db.session.rollback()
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': '任務永久刪除失敗，請稍後再試'}), 500
 
 
 # ─────────────── 專案：還原 / 永久刪除 ───────────────
@@ -104,7 +104,7 @@ def restore_timeline(timeline_id):
         return jsonify({'message': '專案已還原'}), 200
     except Exception as e:
         db.session.rollback()
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': '專案還原失敗，請稍後再試'}), 500
 
 
 @trash_bp.route('/timelines/<int:timeline_id>', methods=['DELETE'])
@@ -129,4 +129,4 @@ def permanently_delete_timeline(timeline_id):
         return jsonify({'message': '專案已永久刪除'}), 200
     except Exception as e:
         db.session.rollback()
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': '專案永久刪除失敗，請稍後再試'}), 500

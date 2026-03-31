@@ -15,17 +15,25 @@ migrate = None
 jwt = JWTManager()
 socketio = SocketIO(async_mode='threading')
 
+
+def _resolve_secret(env_key: str, fallback: str) -> str:
+    value = os.getenv(env_key, fallback)
+    is_production = os.getenv('FLASK_ENV') == 'production' or os.getenv('APP_ENV') == 'production'
+    if is_production and value == fallback:
+        raise RuntimeError(f'{env_key} 必須在生產環境中設定，不能使用預設值')
+    return value
+
 def create_app():
     app = Flask(__name__)
     cors_origins = ['http://localhost:5173', 'http://127.0.0.1:5173', 'https://prajekt-kiriris.web.app']
     
     # 設定
-    app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev-secret-key-change-in-production')
+    app.config['SECRET_KEY'] = _resolve_secret('SECRET_KEY', 'dev-secret-key-change-in-production')
     # 使用 SQLite 開發資料庫
     basedir = os.path.abspath(os.path.dirname(__file__))
     app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL', f'sqlite:///{os.path.join(basedir, "instance", "prajekt.db")}')
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-    app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'jwt-secret-key-change-in-production')
+    app.config['JWT_SECRET_KEY'] = _resolve_secret('JWT_SECRET_KEY', 'jwt-secret-key-change-in-production')
     app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(hours=1)
     app.config['JWT_REFRESH_TOKEN_EXPIRES'] = timedelta(days=30)
     app.config['JWT_ENCODE_ISSUER'] = None

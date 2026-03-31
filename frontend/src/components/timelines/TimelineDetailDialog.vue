@@ -24,14 +24,14 @@
 
         <div class="flex-1 overflow-y-auto p-5">
           <!-- 備註區域 -->
-          <div v-if="!isEditingRemark && !selectedTimeline.remark" class="mb-4">
+          <div v-if="!isEditingRemark && !timelineRemark" class="mb-4">
             <button @click="isEditingRemark = true" class="text-sm text-gray-400 hover:text-primary transition-colors flex items-center gap-1">
               <span>✏️</span> 新增備註
             </button>
           </div>
-          <div v-if="!isEditingRemark && selectedTimeline.remark" class="mb-4 p-4 bg-yellow-50/70 border border-yellow-100 rounded-xl">
+          <div v-if="!isEditingRemark && timelineRemark" class="mb-4 p-4 bg-yellow-50/70 border border-yellow-100 rounded-xl">
             <div class="flex items-start justify-between">
-              <p class="text-sm text-gray-600">{{ selectedTimeline.remark }}</p>
+              <p class="text-sm text-gray-600">{{ timelineRemark }}</p>
               <button @click="startEditRemark" class="ml-2 text-gray-400 hover:text-primary transition-colors shrink-0">✏️</button>
             </div>
           </div>
@@ -469,6 +469,7 @@ import { toast } from 'vue-sonner';
 import { taskService } from '../../services/taskService';
 import { timelineService } from '../../services/timelineService';
 import { formatDate, formatDateTime, formatFileSize, isImageFile, getFileIcon } from '../../utils/formatters';
+import { downloadFileFromUrl, loadTaskDetailResourcesWithMembers } from '../../utils/taskDetails';
 import { useConfirm } from '../../composables/useConfirm';
 import { mapToCreateTaskPayload } from '../../utils/payloadMappers';
 import type {
@@ -523,6 +524,7 @@ const aiGeneratedTasks = ref<AiGeneratedTask[]>([]);
 const selectedAiTasks = ref<number[]>([]);
 const isGeneratingAi = ref(false);
 const isEditingRemark = ref(false);
+const timelineRemark = ref('');
 const localRemark = ref('');
 const newComment = ref('');
 const inputEmail = ref('');
@@ -539,7 +541,11 @@ const taskForm = ref<CreateTaskPayload>({ name: '', start_date: '', end_date: ''
 watch(() => props.selectedTimeline, (val) => {
   if (val) {
     isEditingRemark.value = false;
-    localRemark.value = val.remark || '';
+    timelineRemark.value = val.remark || '';
+    localRemark.value = timelineRemark.value;
+  } else {
+    timelineRemark.value = '';
+    localRemark.value = '';
   }
 }, { immediate: true });
 
@@ -549,7 +555,7 @@ const resetTaskForm = () => {
 
 // ────────────── 備註 ──────────────
 const startEditRemark = () => {
-  localRemark.value = props.selectedTimeline?.remark || '';
+  localRemark.value = timelineRemark.value;
   isEditingRemark.value = true;
 };
 
@@ -557,7 +563,7 @@ const saveRemark = async () => {
   if (!props.selectedTimeline) return;
   try {
     await timelineService.updateRemark(props.selectedTimeline.id, localRemark.value);
-    props.selectedTimeline.remark = localRemark.value;
+    timelineRemark.value = localRemark.value;
     isEditingRemark.value = false;
     emit('refresh-all');
   } catch { toast.error('更新備註失敗'); }
@@ -587,16 +593,11 @@ const openTaskDetail = async (task: Task) => {
   taskMembersForAssign.value = [];
   showTaskDetail.value = true;
   try {
-    const [commentsRes, filesRes, subtasksRes, membersRes] = await Promise.allSettled([
-      taskService.getComments(task.task_id),
-      taskService.getFiles(task.task_id),
-      taskService.getSubtasks(task.task_id),
-      taskService.getMembers(task.task_id)
-    ]);
-    if (commentsRes.status === 'fulfilled') taskComments.value = commentsRes.value.data || [];
-    if (filesRes.status === 'fulfilled') taskFiles.value = filesRes.value.data || [];
-    if (subtasksRes.status === 'fulfilled') taskSubtasks.value = subtasksRes.value.data || [];
-    if (membersRes.status === 'fulfilled') taskMembersForAssign.value = membersRes.value.data || [];
+    const resources = await loadTaskDetailResourcesWithMembers(task.task_id);
+    taskComments.value = resources.comments;
+    taskFiles.value = resources.files;
+    taskSubtasks.value = resources.subtasks;
+    taskMembersForAssign.value = resources.members;
   } catch (err) {
     console.error('取得任務詳情失敗:', err);
   }
@@ -838,17 +839,7 @@ const batchCreateAiTasks = async () => {
 
 const downloadFile = async (url: string, originalFilename: string) => {
   try {
-    const res = await fetch(url);
-    if (!res.ok) throw new Error('下載失敗');
-    const blob = await res.blob();
-    const blobUrl = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = blobUrl;
-    a.download = originalFilename || 'download';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(blobUrl);
+    await downloadFileFromUrl(url, originalFilename);
   } catch {
     toast.error('下載失敗，請稍後再試');
   }

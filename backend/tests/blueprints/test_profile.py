@@ -86,6 +86,28 @@ def test_update_profile_rejects_duplicate_username(client):
     assert response.status_code == 409
 
 
+def test_update_profile_rejects_duplicate_email(client):
+    _create_user(
+        email="profile-email-owner@example.com",
+        password="Password123!",
+        username="profile_email_owner_user",
+    )
+    _create_user(
+        email="profile-email-taken@example.com",
+        password="Password123!",
+        username="profile_email_taken_user",
+    )
+    headers = _get_auth_headers(client, "profile-email-owner@example.com", "Password123!")
+
+    response = client.put(
+        "/api/profile/me",
+        headers=headers,
+        json={"email": "profile-email-taken@example.com"},
+    )
+
+    assert response.status_code == 409
+
+
 def test_update_profile_password_requires_current_password(client):
     _create_user(
         email="profile-password@example.com",

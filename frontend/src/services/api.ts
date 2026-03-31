@@ -83,7 +83,10 @@ api.interceptors.response.use(
 
       // 沒有 refresh_token，直接跳轉登入
       if (!refreshToken) {
+        processQueue(error, null);
+        isRefreshing = false;
         localStorage.removeItem('access_token');
+        localStorage.removeItem('refresh_token');
         router.push('/login');
         return Promise.reject(error);
       }

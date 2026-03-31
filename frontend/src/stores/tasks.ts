@@ -10,9 +10,12 @@ export const useTaskStore = defineStore('tasks', () => {
 
   async function fetchTasks(): Promise<void> {
     loading.value = true;
-    const response = await taskService.getAll();
-    tasks.value = response.data;
-    loading.value = false;
+    try {
+      const response = await taskService.getAll();
+      tasks.value = response.data;
+    } finally {
+      loading.value = false;
+    }
   }
 
   async function addTask(data: CreateTaskPayload): Promise<void> {

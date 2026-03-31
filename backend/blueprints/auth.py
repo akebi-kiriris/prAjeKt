@@ -7,10 +7,19 @@ from services.auth_service import auth_user_to_dict, current_user_to_dict
 
 auth_bp = Blueprint('auth', __name__)
 
+
+def _get_json_dict_or_400():
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return None, (jsonify({'error': '請提供正確的 JSON 物件'}), 400)
+    return data, None
+
 @auth_bp.route('/register', methods=['POST'])
 def register():
     """註冊新使用者"""
-    data = request.get_json()
+    data, error = _get_json_dict_or_400()
+    if error:
+        return error
     
     name = data.get('name')
     username = data.get('username')
@@ -45,12 +54,14 @@ def register():
         return jsonify({'message': '註冊成功', 'user_id': new_user.id}), 201
     except Exception as e:
         db.session.rollback()
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': '註冊失敗，請稍後再試'}), 500
 
 @auth_bp.route('/login', methods=['POST'])
 def login():
     """使用者登入"""
-    data = request.get_json()
+    data, error = _get_json_dict_or_400()
+    if error:
+        return error
     
     email = data.get('email')
     password = data.get('password')

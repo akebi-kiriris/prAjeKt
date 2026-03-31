@@ -199,6 +199,25 @@ const { confirm } = useConfirm();
 
 const store = useTodoStore();
 
+const pad2 = (value: number): string => String(value).padStart(2, '0');
+
+const toLocalDatetimeInputValue = (value: string | null): string => {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  const year = date.getFullYear();
+  const month = pad2(date.getMonth() + 1);
+  const day = pad2(date.getDate());
+  const hour = pad2(date.getHours());
+  const minute = pad2(date.getMinutes());
+  return `${year}-${month}-${day}T${hour}:${minute}`;
+};
+
+const toApiDeadlineValue = (value: string): string | null => {
+  if (!value) return null;
+  return `${value}:00`;
+};
+
 // UI 狀態（留在 View）
 const showAddForm = ref(false);
 const editingTodo = ref<Todo | null>(null);
@@ -213,14 +232,16 @@ const { incompleteTodos, completedTodos } = storeToRefs(store);
 
 const handleSubmit = async () => {
   try {
+    const deadline = toApiDeadlineValue(todoForm.value.deadline);
+
     const createPayload: CreateTodoPayload = {
       ...todoForm.value,
-      deadline: todoForm.value.deadline ? `${todoForm.value.deadline}:00` : undefined
+      deadline: deadline ?? undefined,
     };
 
     const updatePayload: UpdateTodoPayload = {
       ...todoForm.value,
-      deadline: todoForm.value.deadline ? `${todoForm.value.deadline}:00` : null
+      deadline,
     };
 
     if (editingTodo.value) {
@@ -239,7 +260,7 @@ const editTodo = (todo: Todo) => {
   todoForm.value = {
     title: todo.title,
     content: todo.content,
-    deadline: todo.deadline ? new Date(todo.deadline).toISOString().slice(0, 16) : ''
+    deadline: toLocalDatetimeInputValue(todo.deadline),
   };
   showAddForm.value = true;
 };

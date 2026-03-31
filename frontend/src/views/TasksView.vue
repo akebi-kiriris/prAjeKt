@@ -441,6 +441,7 @@ import { useTaskStore } from '../stores/tasks';
 import { taskService } from '../services/taskService';
 import { timelineService } from '../services/timelineService';
 import { formatDate, formatDateTime, formatFileSize, isImageFile, getFileIcon } from '../utils/formatters';
+import { downloadFileFromUrl, loadTaskDetailResources } from '../utils/taskDetails';
 import { useConfirm } from '../composables/useConfirm';
 import type { Task, TaskComment, TaskFile, Subtask, TaskMember, SearchUserResult, ApiErrorPayload } from '../types';
 
@@ -540,14 +541,10 @@ const openTaskDetail = async (task: Task) => {
   detailSubtasks.value = [];
   showTaskDetail.value = true;
   try {
-    const [cRes, fRes, sRes] = await Promise.allSettled([
-      taskService.getComments(task.task_id),
-      taskService.getFiles(task.task_id),
-      taskService.getSubtasks(task.task_id)
-    ]);
-    if (cRes.status === 'fulfilled') detailComments.value = cRes.value.data || [];
-    if (fRes.status === 'fulfilled') detailFiles.value = fRes.value.data || [];
-    if (sRes.status === 'fulfilled') detailSubtasks.value = sRes.value.data || [];
+    const resources = await loadTaskDetailResources(task.task_id);
+    detailComments.value = resources.comments;
+    detailFiles.value = resources.files;
+    detailSubtasks.value = resources.subtasks;
   } catch (err) {
     console.error('取得任務詳情失敗:', err);
   }
@@ -743,17 +740,7 @@ const setTaskOwner = async (member: TaskMember) => {
 
 const downloadFile = async (url: string, originalFilename: string) => {
   try {
-    const res = await fetch(url);
-    if (!res.ok) throw new Error('下載失敗');
-    const blob = await res.blob();
-    const blobUrl = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = blobUrl;
-    a.download = originalFilename || 'download';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(blobUrl);
+    await downloadFileFromUrl(url, originalFilename);
   } catch {
     toast.error('下載失敗，請稍後再試');
   }

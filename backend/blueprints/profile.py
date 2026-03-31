@@ -34,7 +34,7 @@ def update_profile():
     if not user:
         return jsonify({'error': '使用者不存在'}), 404
     
-    data = request.get_json() or {}
+    data = request.get_json(silent=True) or {}
 
     if not isinstance(data, dict):
         return jsonify({'error': '請提供正確的 JSON 物件'}), 400
@@ -54,7 +54,12 @@ def update_profile():
     if 'phone' in data:
         user.phone = data['phone']
     if 'email' in data:
-        user.email = data['email']
+        if not isinstance(data['email'], str) or not data['email'].strip():
+            return jsonify({'error': 'email 必須是非空字串'}), 400
+        normalized_email = data['email'].strip()
+        if User.query.filter(User.email == normalized_email, User.id != user_id).first():
+            return jsonify({'error': '此 email 已被使用'}), 409
+        user.email = normalized_email
     if 'avatar' in data:
         user.avatar = data['avatar']
     if 'bio' in data:
@@ -75,13 +80,16 @@ def update_profile():
         return jsonify({'message': '個人資料更新成功'}), 200
     except Exception as e:
         db.session.rollback()
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': '更新個人資料失敗，請稍後再試'}), 500
 
 @profile_bp.route('/search', methods=['POST'])
 @jwt_required()
 def search_user():
     """搜尋使用者（透過 username 或 email）"""
-    data = request.get_json()
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({'error': '請提供正確的 JSON 物件'}), 400
+
     query = data.get('query', '').strip()
     
     if not query:
