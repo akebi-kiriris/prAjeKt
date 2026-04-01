@@ -45,6 +45,29 @@ export interface TaskComment {
   created_at: string;
 }
 
+export interface TaskCommentSummary {
+  decisions: string[];
+  risks: string[];
+  next_actions: string[];
+  raw?: string;
+}
+
+export interface TaskCommentSummaryMeta {
+  comment_count: number;
+  total_comments?: number;
+  used_comments?: number;
+  truncated?: boolean;
+  context_chars?: number;
+  model?: string;
+}
+
+export interface TaskCommentSummaryResponse {
+  task_id: number;
+  summary: TaskCommentSummary;
+  meta: TaskCommentSummaryMeta;
+  message?: string;
+}
+
 export interface TaskFile {
   id: number;
   task_id: number;

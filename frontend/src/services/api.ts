@@ -4,6 +4,10 @@ import router from '../router';
 // 統一管理 baseURL
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
 
+if (import.meta.env.DEV) {
+  console.info('[API] BASE_URL =', BASE_URL);
+}
+
 // 擴充 InternalAxiosRequestConfig，加入 _retry 防止無限重試
 interface RetryableAxiosRequestConfig extends InternalAxiosRequestConfig {
   _retry?: boolean;
@@ -16,7 +20,7 @@ type FailedQueueItem = {
 
 const api = axios.create({
   baseURL: BASE_URL,
-  timeout: 10000,
+  timeout: 30000,
   withCredentials: true,
 });
 

@@ -361,10 +361,47 @@
 
           <!-- ── 留言區 ── -->
           <div>
-            <h4 class="font-semibold text-gray-700 mb-4 flex items-center gap-2">
-              <span>💬</span> 留言
-              <span class="text-xs text-gray-400 font-normal">({{ taskComments.length }})</span>
-            </h4>
+            <div class="mb-4 flex items-center justify-between gap-3">
+              <h4 class="font-semibold text-gray-700 flex items-center gap-2">
+                <span>💬</span> 留言
+                <span class="text-xs text-gray-400 font-normal">({{ taskComments.length }})</span>
+              </h4>
+              <button
+                @click="summarizeComments"
+                :disabled="isSummarizingComments"
+                class="px-3 py-1.5 bg-violet-100 text-violet-700 text-xs font-semibold rounded-lg hover:bg-violet-200 transition-colors disabled:opacity-50"
+              >
+                {{ isSummarizingComments ? '摘要中...' : '🤖 AI 摘要' }}
+              </button>
+            </div>
+
+            <div v-if="commentSummary" class="mb-4 p-4 bg-violet-50 border border-violet-100 rounded-xl text-sm text-gray-700 space-y-3">
+              <div>
+                <p class="font-semibold text-violet-800 mb-1">決議</p>
+                <ul v-if="commentSummary.decisions.length" class="list-disc list-inside space-y-1">
+                  <li v-for="(item, idx) in commentSummary.decisions" :key="`d-${idx}`">{{ item }}</li>
+                </ul>
+                <p v-else class="text-gray-400">暫無</p>
+              </div>
+              <div>
+                <p class="font-semibold text-violet-800 mb-1">風險</p>
+                <ul v-if="commentSummary.risks.length" class="list-disc list-inside space-y-1">
+                  <li v-for="(item, idx) in commentSummary.risks" :key="`r-${idx}`">{{ item }}</li>
+                </ul>
+                <p v-else class="text-gray-400">暫無</p>
+              </div>
+              <div>
+                <p class="font-semibold text-violet-800 mb-1">下一步</p>
+                <ul v-if="commentSummary.next_actions.length" class="list-disc list-inside space-y-1">
+                  <li v-for="(item, idx) in commentSummary.next_actions" :key="`n-${idx}`">{{ item }}</li>
+                </ul>
+                <p v-else class="text-gray-400">暫無</p>
+              </div>
+              <p v-if="commentSummaryMeta?.truncated" class="text-xs text-violet-600">
+                已自動截斷較舊留言，摘要以最近 {{ commentSummaryMeta.used_comments }} / {{ commentSummaryMeta.total_comments }} 筆為主。
+              </p>
+            </div>
+
             <div class="space-y-3 max-h-60 overflow-y-auto mb-4">
               <div v-for="comment in taskComments" :key="comment.comment_id" class="flex gap-3 p-3 bg-gray-50 rounded-xl group">
                 <div class="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center text-sm font-bold text-primary shrink-0">
@@ -476,6 +513,7 @@ import type {
   TimelineDetailDialogProps,
   Task,
   TaskComment,
+  TaskCommentSummary,
   TaskFile,
   Subtask,
   TaskMember,
@@ -527,6 +565,9 @@ const isEditingRemark = ref(false);
 const timelineRemark = ref('');
 const localRemark = ref('');
 const newComment = ref('');
+const isSummarizingComments = ref(false);
+const commentSummary = ref<TaskCommentSummary | null>(null);
+const commentSummaryMeta = ref<{ total_comments?: number; used_comments?: number; truncated?: boolean } | null>(null);
 const inputEmail = ref('');
 const searchResult = ref<SearchUserResult | null>(null);
 const searchError = ref('');
@@ -588,6 +629,8 @@ const openTaskDetail = async (task: Task) => {
   selectedTask.value = { ...task };
   assignTask.value = { ...task };
   taskComments.value = [];
+  commentSummary.value = null;
+  commentSummaryMeta.value = null;
   taskFiles.value = [];
   taskSubtasks.value = [];
   taskMembersForAssign.value = [];
@@ -640,6 +683,8 @@ const addComment = async () => {
     newComment.value = '';
     const res = await taskService.getComments(selectedTask.value.task_id);
     taskComments.value = res.data || [];
+    commentSummary.value = null;
+    commentSummaryMeta.value = null;
   } catch { toast.error('新增留言失敗'); }
 };
 
@@ -649,7 +694,28 @@ const deleteComment = async (commentId: number) => {
   try {
     await taskService.deleteComment(selectedTask.value.task_id, commentId);
     taskComments.value = taskComments.value.filter(c => c.comment_id !== commentId);
+    commentSummary.value = null;
+    commentSummaryMeta.value = null;
   } catch { toast.error('刪除留言失敗'); }
+};
+
+const summarizeComments = async () => {
+  if (!selectedTask.value) return;
+  isSummarizingComments.value = true;
+  try {
+    const res = await taskService.summarizeComments(selectedTask.value.task_id);
+    commentSummary.value = res.data.summary;
+    commentSummaryMeta.value = res.data.meta;
+    if (res.data.message) {
+      toast.info(res.data.message);
+    } else {
+      toast.success('AI 摘要完成');
+    }
+  } catch (err: unknown) {
+    toast.error(getApiErrorMessage(err, 'AI 摘要失敗'));
+  } finally {
+    isSummarizingComments.value = false;
+  }
 };
 
 const handleFileUpload = async (event: Event) => {

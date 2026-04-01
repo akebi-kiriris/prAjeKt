@@ -1,6 +1,6 @@
 import api from './api';
 import type { AxiosResponse } from 'axios';
-import type { ApiCompletionResponse, ApiMutationResponse, ApiTaskStatusResponse, Task, CreateTaskPayload, TaskUpdatePayload, Subtask, TaskComment, TaskFile, TaskMember, SearchUserResult } from '../types';
+import type { ApiCompletionResponse, ApiMutationResponse, ApiTaskStatusResponse, Task, CreateTaskPayload, TaskUpdatePayload, Subtask, TaskComment, TaskCommentSummaryResponse, TaskFile, TaskMember, SearchUserResult } from '../types';
 
 export const taskService = {
   getAll:        (): Promise<AxiosResponse<Task[]>>                                    => api.get('/tasks'),
@@ -27,6 +27,7 @@ export const taskService = {
   getComments:   (id: number): Promise<AxiosResponse<TaskComment[]>>                  => api.get(`/tasks/${id}/comments`),
   addComment:    (id: number, msg: string): Promise<AxiosResponse<TaskComment>>       => api.post(`/tasks/${id}/comments`, { task_message: msg }),
   deleteComment: (taskId: number, cid: number): Promise<AxiosResponse<void>>          => api.delete(`/tasks/${taskId}/comments/${cid}`),
+  summarizeComments: (id: number): Promise<AxiosResponse<TaskCommentSummaryResponse>> => api.post(`/tasks/${id}/ai-comment-summary`, {}),
 
   // 附件
   getFiles:      (id: number): Promise<AxiosResponse<TaskFile[]>>                     => api.get(`/tasks/${id}/files`),

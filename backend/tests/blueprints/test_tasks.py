@@ -525,6 +525,119 @@ def test_task_comment_flow_and_permissions(client):
     assert owner.id != member.id
 
 
+def test_ai_comment_summary_returns_empty_payload_when_no_comments(client):
+    _create_user(
+        email="task-summary-empty@example.com",
+        password="Password123!",
+        username="task_summary_empty_user",
+    )
+    headers = _get_auth_headers(client, "task-summary-empty@example.com", "Password123!")
+    task_id = _create_task(client, headers, name="Summary empty")
+
+    response = client.post(f"/api/tasks/{task_id}/ai-comment-summary", headers=headers, json={})
+    assert response.status_code == 200
+
+    payload = response.get_json()
+    assert payload["summary"]["decisions"] == []
+    assert payload["summary"]["risks"] == []
+    assert payload["summary"]["next_actions"] == []
+    assert payload["meta"]["comment_count"] == 0
+
+
+def test_ai_comment_summary_success(client, monkeypatch):
+    import blueprints.tasks as tasks_blueprint
+
+    _create_user(
+        email="task-summary-success@example.com",
+        password="Password123!",
+        username="task_summary_success_user",
+    )
+    headers = _get_auth_headers(client, "task-summary-success@example.com", "Password123!")
+    task_id = _create_task(client, headers, name="Summary success")
+
+    create_comment = client.post(
+        f"/api/tasks/{task_id}/comments",
+        headers=headers,
+        json={"message": "今天確認採用 JWT 方案"},
+    )
+    assert create_comment.status_code == 201
+
+    def _fake_summary(task, comment_items):
+        assert task.task_id == task_id
+        assert len(comment_items) == 1
+        return {
+            "decisions": ["採用 JWT 驗證流程"],
+            "risks": ["refresh token 失效處理需再補測"],
+            "next_actions": ["補上 refresh 失效測試案例"],
+        }, {
+            "total_comments": 1,
+            "used_comments": 1,
+            "truncated": False,
+            "context_chars": 120,
+            "model": "qwen",
+        }
+
+    monkeypatch.setattr(tasks_blueprint, "generate_task_comment_summary", _fake_summary)
+
+    response = client.post(f"/api/tasks/{task_id}/ai-comment-summary", headers=headers, json={})
+    assert response.status_code == 200
+
+    payload = response.get_json()
+    assert payload["summary"]["decisions"][0] == "採用 JWT 驗證流程"
+    assert payload["summary"]["risks"][0] == "refresh token 失效處理需再補測"
+    assert payload["summary"]["next_actions"][0] == "補上 refresh 失效測試案例"
+    assert payload["meta"]["comment_count"] == 1
+    assert payload["meta"]["model"] == "qwen"
+
+
+def test_ai_comment_summary_requires_member_role(client):
+    _create_user(
+        email="task-summary-owner@example.com",
+        password="Password123!",
+        username="task_summary_owner_user",
+    )
+    _create_user(
+        email="task-summary-outsider@example.com",
+        password="Password123!",
+        username="task_summary_outsider_user",
+    )
+
+    owner_headers = _get_auth_headers(client, "task-summary-owner@example.com", "Password123!")
+    outsider_headers = _get_auth_headers(client, "task-summary-outsider@example.com", "Password123!")
+    task_id = _create_task(client, owner_headers, name="Summary role check")
+
+    response = client.post(f"/api/tasks/{task_id}/ai-comment-summary", headers=outsider_headers, json={})
+    assert response.status_code == 403
+
+
+def test_ai_comment_summary_returns_503_when_service_unavailable(client, monkeypatch):
+    import blueprints.tasks as tasks_blueprint
+
+    _create_user(
+        email="task-summary-unavailable@example.com",
+        password="Password123!",
+        username="task_summary_unavailable_user",
+    )
+    headers = _get_auth_headers(client, "task-summary-unavailable@example.com", "Password123!")
+    task_id = _create_task(client, headers, name="Summary unavailable")
+
+    create_comment = client.post(
+        f"/api/tasks/{task_id}/comments",
+        headers=headers,
+        json={"message": "留言一"},
+    )
+    assert create_comment.status_code == 201
+
+    def _fake_raise(*_args, **_kwargs):
+        raise RuntimeError("AI 摘要服務暫時不可用，請稍後再試")
+
+    monkeypatch.setattr(tasks_blueprint, "generate_task_comment_summary", _fake_raise)
+
+    response = client.post(f"/api/tasks/{task_id}/ai-comment-summary", headers=headers, json={})
+    assert response.status_code == 503
+    assert "暫時不可用" in response.get_json()["error"]
+
+
 def test_task_file_upload_list_download_and_delete(client):
     owner = _create_user(
         email="task-file-owner@example.com",

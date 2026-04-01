@@ -17,6 +17,7 @@ from services.task_service import (
     can_manage_task_members,
     create_notification,
     find_unknown_fields,
+    generate_task_comment_summary,
     get_user_task_role,
     require_task_role,
     task_comment_to_dict,
@@ -413,6 +414,59 @@ def get_task_comments(task_id):
         user = db.session.get(User, c.user_id)
         result.append(task_comment_to_dict(c, user))
     return jsonify(result), 200
+
+
+@tasks_bp.route('/<int:task_id>/ai-comment-summary', methods=['POST'])
+@jwt_required()
+@require_task_role('member')
+def summarize_task_comments(task_id):
+    """任務留言 AI 智能摘要（決議 / 風險 / 下一步）"""
+    task = Task.query.filter_by(task_id=task_id).filter(Task.deleted_at.is_(None)).first()
+    if not task:
+        return jsonify({'error': '找不到該任務'}), 404
+
+    comments = (
+        TaskComment.query
+        .filter_by(task_id=task_id)
+        .filter(TaskComment.deleted_at.is_(None))
+        .order_by(TaskComment.created_at.asc())
+        .all()
+    )
+
+    if not comments:
+        return jsonify({
+            'task_id': task_id,
+            'message': '目前尚無留言可摘要',
+            'summary': {
+                'decisions': [],
+                'risks': [],
+                'next_actions': [],
+            },
+            'meta': {
+                'task_id': task_id,
+                'comment_count': 0,
+            },
+        }), 200
+
+    comment_items = []
+    for comment in comments:
+        user = db.session.get(User, comment.user_id)
+        comment_items.append(task_comment_to_dict(comment, user))
+
+    try:
+        summary, summary_meta = generate_task_comment_summary(task, comment_items)
+        return jsonify({
+            'task_id': task_id,
+            'summary': summary,
+            'meta': {
+                'comment_count': len(comment_items),
+                **summary_meta,
+            },
+        }), 200
+    except RuntimeError as e:
+        return jsonify({'error': str(e)}), 503
+    except Exception:
+        return jsonify({'error': 'AI 摘要失敗，請稍後再試'}), 500
 
 @tasks_bp.route('/<int:task_id>/comments', methods=['POST'])
 @jwt_required()

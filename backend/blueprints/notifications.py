@@ -27,7 +27,9 @@ def get_notifications():
 def get_unread_count():
     """取得未讀通知數量"""
     user_id = int(get_jwt_identity())
+    print(f"📌 GET /api/notifications/unread-count | user_id={user_id}", flush=True)
     count = Notification.query.filter_by(user_id=user_id, is_read=False).count()
+    print(f"📊 返回 count={count}", flush=True)
     return jsonify({'count': count}), 200
 
 
