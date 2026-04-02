@@ -545,7 +545,7 @@ def test_ai_comment_summary_returns_empty_payload_when_no_comments(client):
 
 
 def test_ai_comment_summary_success(client, monkeypatch):
-    import blueprints.tasks as tasks_blueprint
+    import services.task_service as task_service_module
 
     _create_user(
         email="task-summary-success@example.com",
@@ -577,7 +577,7 @@ def test_ai_comment_summary_success(client, monkeypatch):
             "model": "qwen",
         }
 
-    monkeypatch.setattr(tasks_blueprint, "generate_task_comment_summary", _fake_summary)
+    monkeypatch.setattr(task_service_module, "generate_task_comment_summary", _fake_summary)
 
     response = client.post(f"/api/tasks/{task_id}/ai-comment-summary", headers=headers, json={})
     assert response.status_code == 200
@@ -611,7 +611,7 @@ def test_ai_comment_summary_requires_member_role(client):
 
 
 def test_ai_comment_summary_returns_503_when_service_unavailable(client, monkeypatch):
-    import blueprints.tasks as tasks_blueprint
+    import services.task_service as task_service_module
 
     _create_user(
         email="task-summary-unavailable@example.com",
@@ -631,7 +631,7 @@ def test_ai_comment_summary_returns_503_when_service_unavailable(client, monkeyp
     def _fake_raise(*_args, **_kwargs):
         raise RuntimeError("AI 摘要服務暫時不可用，請稍後再試")
 
-    monkeypatch.setattr(tasks_blueprint, "generate_task_comment_summary", _fake_raise)
+    monkeypatch.setattr(task_service_module, "generate_task_comment_summary", _fake_raise)
 
     response = client.post(f"/api/tasks/{task_id}/ai-comment-summary", headers=headers, json={})
     assert response.status_code == 503

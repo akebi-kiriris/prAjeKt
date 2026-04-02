@@ -168,3 +168,138 @@ def test_leave_group_removes_membership(client):
 
     member_row = GroupMember.query.filter_by(group_id=group_id, user_id=user.id).first()
     assert member_row is None
+
+
+def test_create_group_requires_non_empty_name(client):
+    _create_user(
+        email="group-empty-name@example.com",
+        password="Password123!",
+        username="group_empty_name_user",
+    )
+    headers = _get_auth_headers(client, "group-empty-name@example.com", "Password123!")
+
+    response = client.post(
+        "/api/groups",
+        headers=headers,
+        json={"group_name": "   "},
+    )
+
+    assert response.status_code == 400
+
+
+def test_join_group_invalid_and_duplicate(client):
+    owner = _create_user(
+        email="group-join-owner@example.com",
+        password="Password123!",
+        username="group_join_owner_user",
+    )
+    owner_headers = _get_auth_headers(client, "group-join-owner@example.com", "Password123!")
+
+    create_response = client.post(
+        "/api/groups",
+        headers=owner_headers,
+        json={"group_name": "Duplicate Join Group"},
+    )
+    assert create_response.status_code == 201
+    invite_code = create_response.get_json()["invite_code"]
+
+    invalid = client.post(
+        "/api/groups/join",
+        headers=owner_headers,
+        json={"invite_code": "999999"},
+    )
+    assert invalid.status_code == 404
+
+    duplicate = client.post(
+        "/api/groups/join",
+        headers=owner_headers,
+        json={"invite_code": invite_code},
+    )
+    assert duplicate.status_code == 409
+    assert owner.id is not None
+
+
+def test_leave_group_returns_404_when_user_not_member(client):
+    owner = _create_user(
+        email="group-leave-owner404@example.com",
+        password="Password123!",
+        username="group_leave_owner404",
+    )
+    outsider = _create_user(
+        email="group-leave-outsider404@example.com",
+        password="Password123!",
+        username="group_leave_outsider404",
+    )
+    owner_headers = _get_auth_headers(client, "group-leave-owner404@example.com", "Password123!")
+    outsider_headers = _get_auth_headers(client, "group-leave-outsider404@example.com", "Password123!")
+
+    create_response = client.post(
+        "/api/groups",
+        headers=owner_headers,
+        json={"group_name": "Leave 404 Group"},
+    )
+    assert create_response.status_code == 201
+    group_id = create_response.get_json()["group_id"]
+
+    leave_response = client.post(f"/api/groups/{group_id}/leave", headers=outsider_headers)
+    assert leave_response.status_code == 404
+    assert owner.id != outsider.id
+
+
+def test_send_group_message_validation_and_members_api(client):
+    owner = _create_user(
+        email="group-message-owner@example.com",
+        password="Password123!",
+        username="group_message_owner",
+    )
+    member = _create_user(
+        email="group-message-member@example.com",
+        password="Password123!",
+        username="group_message_member",
+    )
+    outsider = _create_user(
+        email="group-message-outsider@example.com",
+        password="Password123!",
+        username="group_message_outsider",
+    )
+
+    owner_headers = _get_auth_headers(client, "group-message-owner@example.com", "Password123!")
+    member_headers = _get_auth_headers(client, "group-message-member@example.com", "Password123!")
+    outsider_headers = _get_auth_headers(client, "group-message-outsider@example.com", "Password123!")
+
+    create_response = client.post(
+        "/api/groups",
+        headers=owner_headers,
+        json={"group_name": "Message Guard Group"},
+    )
+    assert create_response.status_code == 201
+    payload = create_response.get_json()
+    group_id = payload["group_id"]
+    invite_code = payload["invite_code"]
+
+    join_response = client.post(
+        "/api/groups/join",
+        headers=member_headers,
+        json={"invite_code": invite_code},
+    )
+    assert join_response.status_code == 200
+
+    members_response = client.get(f"/api/groups/{group_id}/members", headers=owner_headers)
+    assert members_response.status_code == 200
+    member_ids = {item["user_id"] for item in members_response.get_json()}
+    assert owner.id in member_ids
+    assert member.id in member_ids
+
+    empty_message = client.post(
+        f"/api/groups/{group_id}/messages",
+        headers=owner_headers,
+        json={"content": "   "},
+    )
+    assert empty_message.status_code == 400
+
+    forbidden_message = client.post(
+        f"/api/groups/{group_id}/messages",
+        headers=outsider_headers,
+        json={"content": "not allowed"},
+    )
+    assert forbidden_message.status_code == 403

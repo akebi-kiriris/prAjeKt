@@ -24,6 +24,8 @@ const mockedApi = api as unknown as {
 describe('notificationService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // 確保所有使用到 .then 的 mock 都回傳一個 Promise，避免測試中讀取到 undefined
+    (api.get as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({ data: { count: 0 } } as any);
   });
 
   it('should map notification endpoints correctly', () => {

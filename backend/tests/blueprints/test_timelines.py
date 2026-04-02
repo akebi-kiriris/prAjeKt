@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
-import blueprints.timelines as timelines_module
+import services.timeline_service as timeline_service_module
 from werkzeug.security import generate_password_hash
 
 from models import db
@@ -431,7 +431,7 @@ def test_generate_tasks_with_ai_success_and_json_decode_error(client, monkeypatc
     db.session.commit()
 
     monkeypatch.setenv("GOOGLE_API_KEY", "fake-key")
-    monkeypatch.setattr(timelines_module.genai, "configure", lambda api_key: None)
+    monkeypatch.setattr(timeline_service_module.genai, "configure", lambda api_key: None)
 
     class GoodModel:
         def __init__(self, *args, **kwargs):
@@ -442,7 +442,7 @@ def test_generate_tasks_with_ai_success_and_json_decode_error(client, monkeypatc
                 text='[{"name":"AI Task","priority":1,"estimated_days":2,"task_remark":"AI generated"}]'
             )
 
-    monkeypatch.setattr(timelines_module.genai, "GenerativeModel", GoodModel)
+    monkeypatch.setattr(timeline_service_module.genai, "GenerativeModel", GoodModel)
 
     success = client.post(
         f"/api/timelines/{timeline_id}/generate-tasks",
@@ -462,7 +462,7 @@ def test_generate_tasks_with_ai_success_and_json_decode_error(client, monkeypatc
         def generate_content(self, prompt, generation_config):
             return SimpleNamespace(text="not-json")
 
-    monkeypatch.setattr(timelines_module.genai, "GenerativeModel", BadJsonModel)
+    monkeypatch.setattr(timeline_service_module.genai, "GenerativeModel", BadJsonModel)
 
     bad_json = client.post(
         f"/api/timelines/{timeline_id}/generate-tasks",

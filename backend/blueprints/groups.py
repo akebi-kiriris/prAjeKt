@@ -1,14 +1,14 @@
 ﻿from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from models import db
-from models.group import Group, GroupMember
-from models.message import Message
 from services.group_service import (
-    generate_unique_invite_code,
-    group_to_dict,
-    group_member_to_dict,
-    group_message_to_dict,
-    is_group_member,
+    GroupOperationError,
+    create_group_for_user,
+    join_group_by_invite_code,
+    leave_group_for_user,
+    list_group_members_payload,
+    list_group_messages_for_member,
+    list_groups_for_user,
+    send_group_message_for_member,
 )
 
 groups_bp = Blueprint('groups', __name__)
@@ -25,12 +25,8 @@ def _get_json_dict_or_400():
 def get_groups():
     """取得使用者所屬的所有群組"""
     user_id = int(get_jwt_identity())
-    
-    groups = db.session.query(Group).join(
-        GroupMember, Group.group_id == GroupMember.group_id
-    ).filter(GroupMember.user_id == user_id).all()
-    
-    return jsonify([group_to_dict(g) for g in groups]), 200
+
+    return jsonify(list_groups_for_user(user_id)), 200
 
 @groups_bp.route('', methods=['POST'])
 @jwt_required()
@@ -40,36 +36,16 @@ def create_group():
     data, error = _get_json_dict_or_400()
     if error:
         return error
-    
-    group_name = data.get('group_name', '').strip()
-    if not group_name:
-        return jsonify({'error': '請輸入群組名稱'}), 400
-    
-    invite_code = generate_unique_invite_code()
-    
-    new_group = Group(
-        group_name=group_name,
-        group_type='task',
-        group_inviteCode=invite_code
-    )
-    
+
     try:
-        db.session.add(new_group)
-        db.session.flush()  # ?��? group_id
-        
-        # 將創建者加入群組
-        member = GroupMember(group_id=new_group.group_id, user_id=user_id)
-        db.session.add(member)
-        db.session.commit()
-        
+        payload = create_group_for_user(user_id, data.get('group_name', ''))
         return jsonify({
             'message': '任務小組已創建',
-            'group_id': new_group.group_id,
-            'invite_code': invite_code
+            'group_id': payload['group_id'],
+            'invite_code': payload['invite_code'],
         }), 201
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'error': '建立群組失敗，請稍後再試'}), 500
+    except GroupOperationError as err:
+        return jsonify({'error': err.message}), err.status_code
 
 @groups_bp.route('/join', methods=['POST'])
 @jwt_required()
@@ -79,80 +55,41 @@ def join_group():
     data, error = _get_json_dict_or_400()
     if error:
         return error
-    
-    invite_code = data.get('invite_code', '').strip()
-    if not invite_code:
-        return jsonify({'error': '請輸入邀請碼'}), 400
-    
-    group = Group.query.filter_by(group_inviteCode=invite_code).first()
-    if not group:
-        return jsonify({'error': '邀請碼無效'}), 404
-    
-    # 檢查是否已加入
-    existing = GroupMember.query.filter_by(group_id=group.group_id, user_id=user_id).first()
-    if existing:
-        return jsonify({'error': '您已經是該群組成員'}), 409
-    
-    member = GroupMember(group_id=group.group_id, user_id=user_id)
-    
+
     try:
-        db.session.add(member)
-        db.session.commit()
+        join_group_by_invite_code(user_id, data.get('invite_code', ''))
         return jsonify({'message': '成功加入群組'}), 200
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'error': '加入群組失敗，請稍後再試'}), 500
+    except GroupOperationError as err:
+        return jsonify({'error': err.message}), err.status_code
 
 @groups_bp.route('/<int:group_id>/leave', methods=['POST'])
 @jwt_required()
 def leave_group(group_id):
     """離開群組"""
     user_id = int(get_jwt_identity())
-    
-    member = GroupMember.query.filter_by(group_id=group_id, user_id=user_id).first()
-    if not member:
-        return jsonify({'error': '您不是該群組成員'}), 404
-    
+
     try:
-        db.session.delete(member)
-        db.session.commit()
+        leave_group_for_user(group_id, user_id)
         return jsonify({'message': '已離開群組'}), 200
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'error': '離開群組失敗，請稍後再試'}), 500
+    except GroupOperationError as err:
+        return jsonify({'error': err.message}), err.status_code
 
 @groups_bp.route('/<int:group_id>/members', methods=['GET'])
 @jwt_required()
 def get_group_members(group_id):
     """取得群組成員清單"""
-    from models.user import User
-    
-    members = db.session.query(User.id, User.name, User.email).join(
-        GroupMember, User.id == GroupMember.user_id
-    ).filter(GroupMember.group_id == group_id).all()
-    
-    return jsonify([group_member_to_dict(m) for m in members]), 200
+    return jsonify(list_group_members_payload(group_id)), 200
 
 @groups_bp.route('/<int:group_id>/messages', methods=['GET'])
 @jwt_required()
 def get_group_messages(group_id):
     """取得群組訊息"""
-    from models.user import User
     user_id = int(get_jwt_identity())
 
-    if not is_group_member(group_id, user_id):
-        return jsonify({'error': '您不是該群組成員'}), 403
-    
-    messages = db.session.query(
-        Message.message_id,
-        Message.content,
-        Message.created_at,
-        User.name.label('sender_name')
-    ).join(User, Message.sender_id == User.id).filter(
-        Message.group_id == group_id
-    ).order_by(Message.created_at).all()
-    
-    return jsonify([group_message_to_dict(m) for m in messages]), 200
+    try:
+        return jsonify(list_group_messages_for_member(group_id, user_id)), 200
+    except GroupOperationError as err:
+        return jsonify({'error': err.message}), err.status_code
 
 @groups_bp.route('/<int:group_id>/messages', methods=['POST'])
 @jwt_required()
@@ -162,25 +99,9 @@ def send_message(group_id):
     data, error = _get_json_dict_or_400()
     if error:
         return error
-    
-    content = data.get('content', '').strip()
-    if not content:
-        return jsonify({'error': '訊息內容不可為空'}), 400
-    
-    # 檢查是否為群組成員
-    if not is_group_member(group_id, user_id):
-        return jsonify({'error': '您不是該群組成員'}), 403
-    
-    new_message = Message(
-        group_id=group_id,
-        sender_id=user_id,
-        content=content
-    )
-    
+
     try:
-        db.session.add(new_message)
-        db.session.commit()
-        return jsonify({'message': '訊息已發送', 'message_id': new_message.message_id}), 201
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'error': '發送訊息失敗，請稍後再試'}), 500
+        message_id = send_group_message_for_member(group_id, user_id, data.get('content', ''))
+        return jsonify({'message': '訊息已發送', 'message_id': message_id}), 201
+    except GroupOperationError as err:
+        return jsonify({'error': err.message}), err.status_code

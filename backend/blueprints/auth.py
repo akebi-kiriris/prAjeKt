@@ -1,9 +1,13 @@
 from flask import Blueprint, request, jsonify, session
 from flask_jwt_extended import create_access_token, create_refresh_token, jwt_required, get_jwt_identity
-from models import db
-from models.user import User
-from werkzeug.security import check_password_hash, generate_password_hash
-from services.auth_service import auth_user_to_dict, current_user_to_dict
+from services.auth_service import (
+    AuthOperationError,
+    auth_user_to_dict,
+    authenticate_user,
+    current_user_to_dict,
+    get_current_user_or_404,
+    register_user,
+)
 
 auth_bp = Blueprint('auth', __name__)
 
@@ -20,41 +24,12 @@ def register():
     data, error = _get_json_dict_or_400()
     if error:
         return error
-    
-    name = data.get('name')
-    username = data.get('username')
-    email = data.get('email')
-    password = data.get('password')
-    phone = data.get('phone')
-    
-    if not all([name, email, password]):
-        return jsonify({'error': '缺少必要欄位'}), 400
-    
-    # 檢查 email 是否已存在
-    if User.query.filter_by(email=email).first():
-        return jsonify({'error': '此 email 已被註冊'}), 409
-    
-    # 檢查 username 是否已存在（如果提供）
-    if username and User.query.filter_by(username=username).first():
-        return jsonify({'error': '此用戶名已被使用'}), 409
-    
-    # 建立新使用者
-    hashed_password = generate_password_hash(password)
-    new_user = User(
-        name=name,
-        username=username if username else None,
-        email=email,
-        password=hashed_password,
-        phone=phone
-    )
-    
+
     try:
-        db.session.add(new_user)
-        db.session.commit()
-        return jsonify({'message': '註冊成功', 'user_id': new_user.id}), 201
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'error': '註冊失敗，請稍後再試'}), 500
+        user_id = register_user(data)
+        return jsonify({'message': '註冊成功', 'user_id': user_id}), 201
+    except AuthOperationError as err:
+        return jsonify({'error': err.message}), err.status_code
 
 @auth_bp.route('/login', methods=['POST'])
 def login():
@@ -62,17 +37,11 @@ def login():
     data, error = _get_json_dict_or_400()
     if error:
         return error
-    
-    email = data.get('email')
-    password = data.get('password')
-    
-    if not email or not password:
-        return jsonify({'error': '請提供 email 和密碼'}), 400
-    
-    user = User.query.filter_by(email=email).first()
-    
-    if not user or not check_password_hash(user.password, password):
-        return jsonify({'error': '帳號或密碼錯誤'}), 401
+
+    try:
+        user = authenticate_user(data.get('email'), data.get('password'))
+    except AuthOperationError as err:
+        return jsonify({'error': err.message}), err.status_code
     
     # 建立 JWT tokens
     access_token = create_access_token(identity=str(user.id))
@@ -96,12 +65,12 @@ def logout():
 def get_current_user():
     """取得當前使用者資訊"""
     user_id = int(get_jwt_identity())
-    user = db.session.get(User, user_id)
-    
-    if not user:
-        return jsonify({'error': '使用者不存在'}), 404
-    
-    return jsonify(current_user_to_dict(user)), 200
+
+    try:
+        user = get_current_user_or_404(user_id)
+        return jsonify(current_user_to_dict(user)), 200
+    except AuthOperationError as err:
+        return jsonify({'error': err.message}), err.status_code
     
 @auth_bp.route('/refresh', methods=['POST'])
 @jwt_required(refresh=True)

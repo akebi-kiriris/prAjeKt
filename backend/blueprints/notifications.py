@@ -1,8 +1,14 @@
-﻿from flask import Blueprint, request, jsonify
+﻿from flask import Blueprint, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from models import db
-from models.notification import Notification
-from services.notification_service import notification_to_dict
+from services.notification_service import (
+    NotificationOperationError,
+    delete_notification_for_user,
+    get_notifications_for_user,
+    get_unread_count_for_user,
+    mark_all_notifications_as_read,
+    mark_notification_as_read,
+    notification_to_dict,
+)
 
 notifications_bp = Blueprint('notifications', __name__)
 
@@ -12,13 +18,7 @@ notifications_bp = Blueprint('notifications', __name__)
 def get_notifications():
     """取得目前使用者的所有通知（最新 50 筆）"""
     user_id = int(get_jwt_identity())
-    notifications = (
-        Notification.query
-        .filter_by(user_id=user_id)
-        .order_by(Notification.created_at.desc())
-        .limit(50)
-        .all()
-    )
+    notifications = get_notifications_for_user(user_id, limit=50)
     return jsonify([notification_to_dict(n) for n in notifications]), 200
 
 
@@ -27,9 +27,7 @@ def get_notifications():
 def get_unread_count():
     """取得未讀通知數量"""
     user_id = int(get_jwt_identity())
-    print(f"📌 GET /api/notifications/unread-count | user_id={user_id}", flush=True)
-    count = Notification.query.filter_by(user_id=user_id, is_read=False).count()
-    print(f"📊 返回 count={count}", flush=True)
+    count = get_unread_count_for_user(user_id)
     return jsonify({'count': count}), 200
 
 
@@ -38,12 +36,11 @@ def get_unread_count():
 def mark_as_read(notification_id):
     """標記單筆通知為已讀"""
     user_id = int(get_jwt_identity())
-    notification = Notification.query.filter_by(id=notification_id, user_id=user_id).first()
-    if not notification:
-        return jsonify({'error': '找不到通知'}), 404
-    notification.is_read = True
-    db.session.commit()
-    return jsonify({'message': '已標記為已讀'}), 200
+    try:
+        mark_notification_as_read(notification_id, user_id)
+        return jsonify({'message': '已標記為已讀'}), 200
+    except NotificationOperationError as err:
+        return jsonify({'error': err.message}), err.status_code
 
 
 @notifications_bp.route('/read-all', methods=['PATCH'])
@@ -51,8 +48,7 @@ def mark_as_read(notification_id):
 def mark_all_as_read():
     """標記所有通知為已讀"""
     user_id = int(get_jwt_identity())
-    Notification.query.filter_by(user_id=user_id, is_read=False).update({'is_read': True})
-    db.session.commit()
+    mark_all_notifications_as_read(user_id)
     return jsonify({'message': '全部標記為已讀'}), 200
 
 
@@ -61,9 +57,8 @@ def mark_all_as_read():
 def delete_notification(notification_id):
     """刪除單筆通知"""
     user_id = int(get_jwt_identity())
-    notification = Notification.query.filter_by(id=notification_id, user_id=user_id).first()
-    if not notification:
-        return jsonify({'error': '找不到通知'}), 404
-    db.session.delete(notification)
-    db.session.commit()
-    return jsonify({'message': '通知已刪除'}), 200
+    try:
+        delete_notification_for_user(notification_id, user_id)
+        return jsonify({'message': '通知已刪除'}), 200
+    except NotificationOperationError as err:
+        return jsonify({'error': err.message}), err.status_code
