@@ -50,6 +50,5 @@ jobs:
     - name: Deploy to Firebase Hosting
       if: success()
       run: |
-        cd frontend
         npm install -g firebase-tools
-        firebase deploy --token ${{ secrets.FIREBASE_TOKEN }} --only hosting
+        firebase deploy --token ${{ secrets.FIREBASE_TOKEN }} --project prajekt-kiriris --only hosting
