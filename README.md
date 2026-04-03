@@ -123,7 +123,7 @@ DATABASE_URL=postgresql+psycopg2://postgres:postgres@localhost:5433/prajekt
 cd ..
 docker compose up -d postgres
 cd backend
-venv\Scripts\python.exe -m flask --app app.py db upgrade
+venv\Scripts\python.exe safe_migrate.py
 venv\Scripts\python.exe migrate_sqlite_to_postgres.py --sqlite-path instance/prajekt.db --pg-dsn postgresql://postgres:postgres@localhost:5433/prajekt --skip-if-not-empty
 venv\Scripts\python.exe app.py
 ```

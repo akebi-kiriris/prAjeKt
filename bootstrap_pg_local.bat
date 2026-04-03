@@ -12,9 +12,9 @@ if errorlevel 1 (
 
 echo [2/4] 套用 schema migration...
 cd /d backend
-call venv\Scripts\python.exe -m flask --app app.py db upgrade
+call venv\Scripts\python.exe safe_migrate.py
 if errorlevel 1 (
-  echo [ERROR] flask db upgrade 失敗。
+  echo [ERROR] schema migration 失敗。
   pause
   exit /b 1
 )

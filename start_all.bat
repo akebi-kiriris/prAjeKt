@@ -12,7 +12,7 @@ if errorlevel 1 (
 
 echo [2/5] 套用資料庫 migration...
 cd /d backend
-call venv\Scripts\python.exe -m flask --app app.py db upgrade
+call venv\Scripts\python.exe safe_migrate.py
 if errorlevel 1 (
     echo [ERROR] 資料庫 migration 失敗。
     pause

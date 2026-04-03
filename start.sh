@@ -14,7 +14,7 @@ pip install --no-cache-dir -r requirements.txt
 
 # 套用資料庫 Migration（PostgreSQL 主線）
 echo "🗄️  套用資料庫 Migration..."
-python -m flask --app app.py db upgrade
+python safe_migrate.py
 
 echo "✅ 後端準備就緒"
 
