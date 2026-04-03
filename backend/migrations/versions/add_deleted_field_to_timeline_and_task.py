@@ -11,7 +11,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = 'add_deleted_field'
-down_revision = None  # 改成你最新的 migration ID
+down_revision = '1f7e8f9caaff'
 branch_labels = None
 depends_on = None
 
