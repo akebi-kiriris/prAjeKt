@@ -8,11 +8,11 @@ from datetime import timedelta
 from dotenv import load_dotenv
 
 # 載入 .env 文件中的環境變量（本地優先）
-# 優先級：.env.local（本地開發 SQLite）> .env（雲端 PostgreSQL）
+# 優先級：.env.local（本地開發覆寫）> .env（雲端 PostgreSQL）
 if os.path.exists('.env.local'):
     # override=True 避免 Flask reloader 或外部殘留環境變數覆蓋本地設定
-    load_dotenv('.env.local', override=True)  # 本地開發環境（SQLite）
-    print("✅ 使用 .env.local（本地 SQLite）", flush=True)
+    load_dotenv('.env.local', override=True)  # 本地開發環境（可為 PostgreSQL / SQLite）
+    print("✅ 使用 .env.local（本地開發覆寫）", flush=True)
 else:
     # 保留外部環境變數優先權（例如部署平台注入設定）
     load_dotenv('.env', override=False)        # 雲端生產環境（PostgreSQL）

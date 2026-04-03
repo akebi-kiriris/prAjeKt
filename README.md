@@ -1,8 +1,8 @@
-# LearnLink
+# prajekt
 
 基於 Vue 3 + Flask 的專案管理與協作平台，整合 Google Gemini AI 實現智能任務生成。
 
-> **開發狀態**：Phase 1~5.6 已完成 ✅（前端 `85/85`、後端 `108 passed`）；Backend CI 已啟用 pytest + coverage 報告，Phase 6 採本地主線驗證（n8n + MCP + AI），不新增雲端部署目標。
+> **開發狀態**：Phase 1~5.6 已完成 ✅（前端 `85/85`、後端最新回歸 `136 passed`）；Backend CI 已啟用 pytest + coverage 報告，Phase 6 主線為「AI 產品化 + PostgreSQL 開發遷移」。
 
 ## 功能模組
 
@@ -30,120 +30,116 @@
 | 後端 | Flask 3 + SQLAlchemy + Flask-Migrate + Flask-SocketIO |
 | 即時通訊 | Socket.IO（flask-socketio / socket.io-client） |
 | 認證 | Flask-JWT-Extended（access + refresh token）|
-| 資料庫 | SQLite（本地） / Supabase PostgreSQL（既有上線環境）|
+| 資料庫 | PostgreSQL（Supabase + Phase 6 本地遷移主線）/ SQLite（舊環境相容） |
 | AI | Google Gemini 2.0 Flash（LangChain）|
 
 ## 專案結構
 
 ```
-LearnLink/
+prajekt/
+├── .github/
+│   └── workflows/
+│       ├── backend-tests.yml
+│       └── frontend-tests.yml
 ├── backend/
-│   ├── app.py                    # Flask 應用入口，註冊 blueprints、JWT、CORS
-│   ├── realtime/
-│   │   └── socket_events.py      # Socket 事件（connect/join/leave/send-message）
-│   ├── blueprints/               # 路由層（每個模組一個 blueprint）
-│   │   ├── auth.py               # 登入 / 註冊 / token 刷新
-│   │   ├── tasks.py              # 任務 CRUD、子任務、狀態切換、留言、附件
-│   │   ├── todos.py              # 個人待辦 CRUD
-│   │   ├── timelines.py          # 專案 CRUD、成員管理、AI 生成
-│   │   ├── trash.py              # 垃圾桶：查詢 / 還原 / 永久刪除
-│   │   ├── groups.py             # 群組 CRUD、邀請碼
-│   │   ├── messages.py           # 群組訊息
-│   │   └── profile.py            # 個人資料讀寫
-│   ├── models/                   # SQLAlchemy ORM 模型
-│   │   ├── user.py
-│   │   ├── task.py / subtask.py / task_comment.py / task_user.py
-│   │   ├── timeline.py / timeline_user.py
-│   │   ├── group.py / message.py
-│   │   ├── todo.py
-│   │   └── notification.py / activity_log.py
-│   ├── migrations/               # Flask-Migrate 版本控制
-│   ├── uploads/                  # 上傳檔案存放
+│   ├── app.py                    # Flask 應用入口
+│   ├── blueprints/               # Route 層
+│   ├── services/                 # Business 層
+│   ├── repositories/             # 資料查詢層（2026/04 收斂）
+│   ├── models/                   # SQLAlchemy ORM
+│   ├── realtime/                 # Socket 事件
+│   │   └── socket_events.py
+│   ├── tests/                    # pytest
+│   ├── migrations/               # Flask-Migrate
+│   ├── uploads/                  # 任務附件
 │   └── requirements.txt
 │
 ├── frontend/
 │   └── src/
 │       ├── components/
-│       │   ├── Header.vue        # 頂部導覽列（用戶名、通知鈴鐺 30s 輪詢）
-│       │   └── Sidebar.vue       # 側邊導覽列（可收合）
-│       │   ├── ConfirmDialog.vue # 全域確認對話框（取代原生 confirm）
-│       │   └── timelines/        # TimelineHeader / TimelineViewModes / TimelineDetailDialog
-│       ├── services/             # API 封裝層（所有 HTTP 呼叫集中於此）
-│       │   ├── api.ts            # Axios 實例 + JWT 自動刷新攔截器
-│       │   ├── socketService.ts  # Socket 連線與事件綁定
-│       │   ├── todoService.ts    # 待辦 API（5 個方法）
-│       │   ├── taskService.ts    # 任務 API（含子任務、留言、附件）
-│       │   ├── trashService.ts   # 垃圾桶 API（5 個方法）
-│       │   ├── groupService.ts   # 群組 API（6 個方法）
-│       │   ├── profileService.ts # 個人資料 API（getMe / update / getChartStats）
-│       │   ├── notificationService.ts # 通知 API（列表/未讀/已讀）
-│       │   └── timelineService.ts # 專案 API（含 AI 生成 / 成員統計）
-│       ├── stores/               # Pinia 全域狀態
-│       │   ├── auth.ts           # 登入狀態、token 儲存
-│       │   ├── tasks.ts          # 任務狀態（全域）
-│       │   ├── todos.ts          # 待辦狀態（全域）
-│       │   ├── timelines.ts      # 專案狀態（urgentCount / sortedTimelines 等 computed）
-│       │   ├── groups.ts         # 群組狀態（groups / messages / currentGroup）
-│       │   ├── profile.ts        # 個人資料狀態（profile / stats / chartStats / ownedTimelines）
-│       │   └── notifications.ts  # 通知狀態（notifications / unreadCount）
+│       │   ├── ConfirmDialog.vue
+│       │   ├── Header.vue
+│       │   ├── Sidebar.vue
+│       │   └── timelines/
+│       ├── services/             # API 封裝層（含 __tests__）
+│       ├── stores/               # Pinia（含 __tests__）
 │       ├── composables/
-│       │   └── useConfirm.ts     # Promise-based 確認對話框（全域單例）
-│       ├── views/                # 頁面元件
-│       │   ├── TimelinesView.vue   # 專案管理（多視圖切換）
-│       │   ├── TasksView.vue       # 任務管理（Modal 表單 + 留言 / 附件）
-│       │   ├── TodosView.vue       # 個人待辦
-│       │   ├── GroupsView.vue      # 群組協作
-│       │   ├── ProfileView.vue     # 個人資料
-│       │   └── TrashView.vue       # 垃圾桶（已刪任務 / 專案）
-│       └── router/index.js       # 路由設定（含導航守衛）
+│       ├── utils/
+│       ├── types/
+│       ├── views/
+│       └── router/
 │
-└── docs/                         # 開發筆記與流程文件（納入版控）
+├── docs/                         # 開發筆記與流程文件（納入版控）
+├── scripts/
+│   └── count_loc.py
+├── 重構計畫.md
+└── 進度追蹤.md
 ```
 
-## 快速啟動
+## 快速本地部署（PostgreSQL 主線）
 
-### 後端
+### 0. 前置需求
 
-```bash
+- Docker Desktop
+- Python 3.10+
+- Node.js 18+
+
+### 1. 一鍵初始化 + 啟動（Windows，推薦）
+
+```bat
+bootstrap_pg_local.bat
+```
+
+此腳本會自動完成：
+- 啟動本地 PostgreSQL 容器（`localhost:5433`）
+- 套用資料庫 migration（`flask db upgrade`）
+- 首次將 SQLite 舊資料遷移到 PostgreSQL（目標已有資料時自動略過）
+- 啟動後端與前端開發服務
+
+### 2. 日常啟動（已初始化後）
+
+```bat
+start_all.bat
+```
+
+### 3. 手動流程（可選）
+
+```bat
 cd backend
-pip install -r requirements.txt
+python -m venv venv
+venv\Scripts\pip install -r requirements.txt
 ```
 
-在 `backend/` 目錄下建立 `.env`：
+在 `backend/` 目錄下建立或更新 `.env.local`：
 
 ```env
 SECRET_KEY=your-secret-key
 JWT_SECRET_KEY=your-jwt-secret
 GOOGLE_API_KEY=your-google-api-key
+DATABASE_URL=postgresql+psycopg2://postgres:postgres@localhost:5433/prajekt
 ```
 
-```bash
-flask db upgrade
-python app.py
+```bat
+cd ..
+docker compose up -d postgres
+cd backend
+venv\Scripts\python.exe -m flask --app app.py db upgrade
+venv\Scripts\python.exe migrate_sqlite_to_postgres.py --sqlite-path instance/prajekt.db --pg-dsn postgresql://postgres:postgres@localhost:5433/prajekt --skip-if-not-empty
+venv\Scripts\python.exe app.py
 ```
 
-後端運行於 `http://localhost:5000`
-
-### 前端
-
-```bash
+```bat
 cd frontend
 npm install
 npm run dev
 npm run guardrails:payload
 ```
 
-前端運行於 `http://localhost:5173`
+後端運行於 `http://localhost:5000`，前端運行於 `http://localhost:5173`。
 
 `npm run guardrails:payload` 會檢查兩個規則：
 - 禁止在 mutation payload 使用 `Partial<Entity>`
 - 禁止 `service.update(..., { ...entity })` 的 over-posting 寫法
-
-### 一鍵啟動
-
-```bat
-start_all.bat
-```
 
 ## 測試與 CI/CD 現況
 
@@ -160,7 +156,7 @@ npm run test:run
 
 ### 後端測試（pytest + coverage）
 
-- 結果：`108 passed`，coverage `80.59%`
+- 結果：最新回歸 `136 passed`（coverage 基線 `80.59%`）
 - 覆蓋範圍：`blueprints`、`services`、`models`
 - 指令：
 
@@ -272,7 +268,7 @@ pytest --cov=blueprints --cov=services --cov=models --cov-report=term-missing --
 
 - **API Base URL**：前端透過 `VITE_API_BASE_URL` 環境變數配置，預設為 `http://localhost:5000/api`
 - **Token 刷新**：access token 過期時，Axios 攔截器會自動使用 refresh token 換新，無需手動處理
-- **開發資料庫**：使用 SQLite（`backend/instance/`），不需要額外安裝資料庫服務
+- **開發資料庫**：Phase 6 主線改為 PostgreSQL；SQLite 保留舊環境相容與資料比對用途
 - **AI 功能**：需要有效的 Google API Key，可於 [Google AI Studio](https://aistudio.google.com/app/apikey) 免費申請；目前生產驗收不包含 AI 任務生成
 - **Payload 契約**：請參考 `docs/payload-contracts.md`，前後端 update/create 請遵守 allowlist
 - **文件同步流程**：請參考 `docs/文件更新與發布流程.md`
@@ -288,9 +284,10 @@ pytest --cov=blueprints --cov=services --cov=models --cov-report=term-missing --
 	- 已完成：Backend PR checks + coverage 報告
 	- 待完成：Frontend PR checks、branch protection、`docs/CI_CD_最小流程.md`
 - **Phase 6 AI 主線（本地執行中，未納入雲端上線）**：
-	- A：n8n + MCP 本地工作流整合
-	- B：Prompt + CoT 本地模板化與評測
-	- C+ 題目（微調/安全/多模態/GUI Agent）走 Labs 本地驗證
+	- 6.0：開發資料庫遷移到 PostgreSQL（SQLite → PG）
+	- 6.1：AI Provider 收斂（Gemini 主線 + 可替換 Adapter）
+	- 6.2：Task Comment 智能摘要（已完成核心版）
+	- 6.3+：RAG-B / RAG-C / MCP 接線
 	- 邊界：不建立 staging、不新增雲端擴展部署
 
 ## 環境需求

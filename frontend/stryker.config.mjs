@@ -1,5 +1,5 @@
 /**
- * Stryker configuration for LearnLink frontend mutation testing
+ * Stryker configuration for prajekt frontend mutation testing
  * Targets: src/utils (formatters, validators, payloadMappers)
  */
 const config = {

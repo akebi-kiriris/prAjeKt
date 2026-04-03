@@ -1,4 +1,4 @@
-# LearnLink Backend Dependencies
+# prajekt Backend Dependencies
 # Root reference file for deployment systems
 
 # Framework

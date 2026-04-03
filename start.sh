@@ -4,7 +4,7 @@ set -e
 # 移到後端目錄
 cd "$(dirname "$0")/backend"
 
-echo "🚀 LearnLink 應用啟動..."
+echo "🚀 prajekt 應用啟動..."
 echo "📍 當前環境: $FLASK_ENV"
 echo "📂 工作目錄: $(pwd)"
 
@@ -12,12 +12,9 @@ echo "📂 工作目錄: $(pwd)"
 echo "📦 確保後端依賴..."
 pip install --no-cache-dir -r requirements.txt
 
-# 初始化資料庫（如果需要）
-if [ ! -f ".db_init_done" ]; then
-  echo "🗄️  初始化資料庫..."
-  python init_db.py
-  touch .db_init_done
-fi
+# 套用資料庫 Migration（PostgreSQL 主線）
+echo "🗄️  套用資料庫 Migration..."
+python -m flask --app app.py db upgrade
 
 echo "✅ 後端準備就緒"
 
