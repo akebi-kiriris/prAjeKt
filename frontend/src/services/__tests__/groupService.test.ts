@@ -55,4 +55,19 @@ describe('groupService', () => {
     groupService.sendMessage(12, 'hello');
     expect(mockedApi.post).toHaveBeenCalledWith('/groups/12/messages', { content: 'hello' });
   });
+
+  it('generateSnapshot should call POST /groups/:id/ai-snapshot', () => {
+    groupService.generateSnapshot(12, { window_days: 30, async: true });
+    expect(mockedApi.post).toHaveBeenCalledWith('/groups/12/ai-snapshot', { window_days: 30, async: true });
+  });
+
+  it('getLatestSnapshot should call GET /groups/:id/ai-snapshot/latest', () => {
+    groupService.getLatestSnapshot(12);
+    expect(mockedApi.get).toHaveBeenCalledWith('/groups/12/ai-snapshot/latest');
+  });
+
+  it('getSnapshotJobStatus should call GET /groups/snapshot-jobs/:jobId', () => {
+    groupService.getSnapshotJobStatus('job-123');
+    expect(mockedApi.get).toHaveBeenCalledWith('/groups/snapshot-jobs/job-123');
+  });
 });

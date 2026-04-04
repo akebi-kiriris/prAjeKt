@@ -1,4 +1,6 @@
 from werkzeug.security import generate_password_hash
+import blueprints.groups as groups_blueprint_module
+import services.group_service as group_service_module
 
 from models import db
 from models.group import GroupMember
@@ -303,3 +305,160 @@ def test_send_group_message_validation_and_members_api(client):
         json={"content": "not allowed"},
     )
     assert forbidden_message.status_code == 403
+
+
+def test_group_ai_snapshot_requires_member(client):
+    _create_user(
+        email="group-snapshot-owner@example.com",
+        password="Password123!",
+        username="group_snapshot_owner",
+    )
+    owner_headers = _get_auth_headers(client, "group-snapshot-owner@example.com", "Password123!")
+
+    create_response = client.post(
+        "/api/groups",
+        headers=owner_headers,
+        json={"group_name": "Snapshot Group"},
+    )
+    assert create_response.status_code == 201
+    group_id = create_response.get_json()["group_id"]
+
+    _create_user(
+        email="group-snapshot-outsider@example.com",
+        password="Password123!",
+        username="group_snapshot_outsider",
+    )
+    outsider_headers = _get_auth_headers(client, "group-snapshot-outsider@example.com", "Password123!")
+
+    response = client.post(
+        f"/api/groups/{group_id}/ai-snapshot",
+        headers=outsider_headers,
+        json={"window_days": 30},
+    )
+    assert response.status_code == 403
+
+
+def test_group_ai_snapshot_success_and_latest(client, monkeypatch):
+    _create_user(
+        email="group-snapshot-success@example.com",
+        password="Password123!",
+        username="group_snapshot_success",
+    )
+    headers = _get_auth_headers(client, "group-snapshot-success@example.com", "Password123!")
+
+    create_response = client.post(
+        "/api/groups",
+        headers=headers,
+        json={"group_name": "Snapshot Success Group"},
+    )
+    assert create_response.status_code == 201
+    group_id = create_response.get_json()["group_id"]
+
+    send_response_a = client.post(
+        f"/api/groups/{group_id}/messages",
+        headers=headers,
+        json={"content": "今天決定先做 API"},
+    )
+    assert send_response_a.status_code == 201
+
+    send_response_b = client.post(
+        f"/api/groups/{group_id}/messages",
+        headers=headers,
+        json={"content": "明天補測試"},
+    )
+    assert send_response_b.status_code == 201
+
+    class FakeSnapshotProvider:
+        model = "fake-model"
+
+        def generate_content(self, system_prompt, user_message, response_format="json"):
+            return (
+                '{"topics":[{"title":"API 實作","message_ids":[1]}],'
+                '"decisions":[{"text":"先做後端 API","message_ids":[1]}],'
+                '"action_items":[{"text":"補上測試","assignee":"Owner","due":null,"message_ids":[2]}],'
+                '"notable_quotes":[{"text":"明天補測試","message_id":2}]}'
+            )
+
+    monkeypatch.setattr(group_service_module, "get_ai_provider", lambda: FakeSnapshotProvider())
+
+    snapshot_response = client.post(
+        f"/api/groups/{group_id}/ai-snapshot",
+        headers=headers,
+        json={"window_days": 30, "async": False},
+    )
+    assert snapshot_response.status_code == 200
+    payload = snapshot_response.get_json()
+    assert payload["group_id"] == group_id
+    assert payload["summary"]["topics"][0]["title"] == "API 實作"
+    assert payload["summary"]["action_items"][0]["text"] == "補上測試"
+
+    latest_response = client.get(
+        f"/api/groups/{group_id}/ai-snapshot/latest",
+        headers=headers,
+    )
+    assert latest_response.status_code == 200
+    latest_payload = latest_response.get_json()
+    assert latest_payload["snapshot_id"] == payload["snapshot_id"]
+
+
+def test_group_ai_snapshot_async_job_status(client, monkeypatch):
+    _create_user(
+        email="group-snapshot-async@example.com",
+        password="Password123!",
+        username="group_snapshot_async",
+    )
+    headers = _get_auth_headers(client, "group-snapshot-async@example.com", "Password123!")
+
+    create_response = client.post(
+        "/api/groups",
+        headers=headers,
+        json={"group_name": "Snapshot Async Group"},
+    )
+    assert create_response.status_code == 201
+    group_id = create_response.get_json()["group_id"]
+
+    send_response = client.post(
+        f"/api/groups/{group_id}/messages",
+        headers=headers,
+        json={"content": "大量訊息測試"},
+    )
+    assert send_response.status_code == 201
+
+    monkeypatch.setattr(
+        groups_blueprint_module,
+        "enqueue_snapshot_job",
+        lambda app, group_id, user_id, window_days: {
+            "job_id": "job-demo-001",
+            "status": "queued",
+            "group_id": group_id,
+            "requested_by": user_id,
+            "window_days": window_days,
+        },
+    )
+    monkeypatch.setattr(
+        groups_blueprint_module,
+        "get_snapshot_job_status",
+        lambda job_id, requester_user_id=None: {
+            "job_id": job_id,
+            "status": "completed",
+            "requested_by": requester_user_id,
+            "snapshot_id": 123,
+        },
+    )
+
+    snapshot_response = client.post(
+        f"/api/groups/{group_id}/ai-snapshot",
+        headers=headers,
+        json={"window_days": 30, "async": True},
+    )
+    assert snapshot_response.status_code == 202
+    assert snapshot_response.get_json()["job_id"] == "job-demo-001"
+
+    status_response = client.get(
+        "/api/groups/snapshot-jobs/job-demo-001",
+        headers=headers,
+    )
+    assert status_response.status_code == 200
+    status_payload = status_response.get_json()
+    assert status_payload["status"] == "completed"
+    assert status_payload["snapshot_id"] == 123

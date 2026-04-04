@@ -92,7 +92,7 @@ def create_app():
         from models import (User, Group, GroupMember, Message, MessageRead, 
                            Task, TaskFile, Timeline, Todo, 
                            TaskComment, TaskUser, TimelineUser,
-                           Notification, ActivityLog)
+                           Notification, ActivityLog, GroupAISnapshot)
     
     # 註冊 blueprints
     from blueprints.auth import auth_bp

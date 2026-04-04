@@ -15,6 +15,7 @@ from models.timeline_user import TimelineUser
 from models.notification import Notification
 from models.activity_log import ActivityLog
 from models.subtask import Subtask
+from models.group_ai_snapshot import GroupAISnapshot
 
 __all__ = [
     'db',
@@ -29,5 +30,6 @@ __all__ = [
     'TimelineUser',
     'Notification',
     'ActivityLog',
-    'Subtask'
+    'Subtask',
+    'GroupAISnapshot'
 ]

@@ -46,3 +46,60 @@ export interface GroupCreateResponse {
 }
 
 export interface GroupErrorPayload extends ApiErrorPayload {}
+
+export interface GroupSnapshotTopic {
+  title: string;
+  message_ids: number[];
+}
+
+export interface GroupSnapshotDecision {
+  text: string;
+  message_ids: number[];
+}
+
+export interface GroupSnapshotActionItem {
+  text: string;
+  assignee: string | null;
+  due: string | null;
+  message_ids: number[];
+}
+
+export interface GroupSnapshotQuote {
+  text: string;
+  message_id: number | null;
+}
+
+export interface GroupSnapshotSummary {
+  topics: GroupSnapshotTopic[];
+  decisions: GroupSnapshotDecision[];
+  action_items: GroupSnapshotActionItem[];
+  notable_quotes: GroupSnapshotQuote[];
+}
+
+export interface GroupSnapshotResponse {
+  snapshot_id: number;
+  group_id: number;
+  summary: GroupSnapshotSummary;
+  created_by: number | null;
+  created_at: string;
+  source_count: number;
+  model: string | null;
+  provider: string | null;
+  metadata: Record<string, unknown>;
+}
+
+export interface GroupSnapshotJobStatus {
+  job_id: string;
+  status: 'queued' | 'running' | 'completed' | 'failed' | string;
+  group_id?: number;
+  requested_by?: number;
+  window_days?: number;
+  snapshot_id?: number | null;
+  snapshot?: GroupSnapshotResponse | null;
+  error?: string | null;
+}
+
+export interface GroupSnapshotRequest {
+  window_days?: number;
+  async?: boolean;
+}
