@@ -115,12 +115,12 @@ def get_ai_provider() -> AIProvider:
         RuntimeError: Provider 配置失敗時
     """
     provider_name = os.getenv("AI_PROVIDER", "gemini").lower()
+    # 從環境變數讀取要使用的模型型號（可透過 AI_MODEL 指定）
+    model = os.getenv("AI_MODEL", "gemini-2.5-flash-lite")
 
     if provider_name == "mock":
         return MockProvider()
-    elif provider_name == "gemini" or provider_name not in ["mock"]:
-        return GeminiProvider()
     else:
-        # 預設回落 Gemini
-        return GeminiProvider()
+        # 預設或其他所有提供者目前皆使用 GeminiProvider，可傳入 model
+        return GeminiProvider(model=model)
 
