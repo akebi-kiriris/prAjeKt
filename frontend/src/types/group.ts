@@ -60,7 +60,11 @@ export interface GroupSnapshotDecision {
 export interface GroupSnapshotActionItem {
   text: string;
   assignee: string | null;
-  due: string | null;
+  message_ids: number[];
+}
+
+export interface GroupSnapshotBlocker {
+  text: string;
   message_ids: number[];
 }
 
@@ -73,7 +77,14 @@ export interface GroupSnapshotSummary {
   topics: GroupSnapshotTopic[];
   decisions: GroupSnapshotDecision[];
   action_items: GroupSnapshotActionItem[];
+  blockers?: GroupSnapshotBlocker[];
   notable_quotes: GroupSnapshotQuote[];
+  digest?: {
+    overview: string;
+    todo_for_user: GroupSnapshotActionItem[];
+    watch_out: GroupSnapshotBlocker[];
+    decisions_brief: GroupSnapshotDecision[];
+  };
 }
 
 export interface GroupSnapshotResponse {

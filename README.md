@@ -2,7 +2,7 @@
 
 基於 Vue 3 + Flask 的專案管理與協作平台，整合 Google Gemini AI 實現智能任務生成。
 
-> **開發狀態**：Phase 1~5.6 已完成 ✅（前端 `85/85`、後端最新回歸 `136 passed`）；Backend CI 已啟用 pytest + coverage 報告，Phase 6 主線為「AI 產品化 + PostgreSQL 開發遷移」。
+> **開發狀態**：Phase 1~5.6 已完成 ✅（前端 `85/85`、後端最新回歸 `144 passed`）；Backend CI 已啟用 pytest + coverage 報告，Phase 6 主線為「AI 產品化 + PostgreSQL 開發遷移 + 群組快照」。
 
 ## 功能模組
 
@@ -13,6 +13,7 @@
 - **個人資料**：個人資訊編輯、密碼變更、使用統計
 - **數據分析儀表板**：整合於個人資料頁，Level 1 個人圖表（30 天完成趨勢、任務狀態分布、各專案任務量）+ Level 2 專案圖表（成員貢獻、任務狀態，負責人限定）
 - **AI 任務生成**：Gemini 根據專案名稱自動生成任務建議，支援批次創建（本功能不在本輪上線驗收範圍）
+- **AI 群組快照（RAG-B 核心）**：群組聊天可生成「行動導向 Digest」（一句重點 / 你現在要做什麼 / 阻塞風險 / 精簡決議）
 - **垃圾桶回收機制**：已刪任務 / 專案暫存，支援還原或永久刪除；非建立者唯讀
 - **通知系統**：任務指派 / 專案邀請通知、鈴鐺 30 秒輪詢更新、主頁即將到期提醒區塊（3 天內截止或進度 ≥80%）
 
@@ -31,7 +32,7 @@
 | 即時通訊 | Socket.IO（flask-socketio / socket.io-client） |
 | 認證 | Flask-JWT-Extended（access + refresh token）|
 | 資料庫 | PostgreSQL（Supabase + Phase 6 本地遷移主線）/ SQLite（舊環境相容） |
-| AI | Google Gemini 2.0 Flash（LangChain）|
+| AI | Google Gemini（Provider 可切換：`gemini` / `mock`）|
 
 ## 專案結構
 
@@ -252,7 +253,7 @@ pytest --cov=blueprints --cov=services --cov=models --cov-report=term-missing --
 | 資源 | 路徑 |
 |------|------|
 | 待辦 | `CRUD /api/todos` + `PATCH /api/todos/:id/toggle` |
-| 群組 | `GET/POST /api/groups` + `POST /api/groups/join` + `POST /api/groups/:id/leave` + `GET /api/groups/:id/members` + `GET/POST /api/groups/:id/messages` |
+| 群組 | `GET/POST /api/groups` + `POST /api/groups/join` + `POST /api/groups/:id/leave` + `GET /api/groups/:id/members` + `GET/POST /api/groups/:id/messages` + `POST /api/groups/:id/ai-snapshot` + `GET /api/groups/:id/ai-snapshot/latest` + `GET /api/groups/snapshot-jobs/:job_id` |
 
 ### WebSocket 事件（群組聊天室）
 
@@ -285,9 +286,11 @@ pytest --cov=blueprints --cov=services --cov=models --cov-report=term-missing --
 	- 待完成：Frontend PR checks、branch protection、`docs/CI_CD_最小流程.md`
 - **Phase 6 AI 主線（本地執行中，未納入雲端上線）**：
 	- 6.0：開發資料庫遷移到 PostgreSQL（SQLite → PG）
-	- 6.1：AI Provider 收斂（Gemini 主線 + 可替換 Adapter）
-	- 6.2：Task Comment 智能摘要（已完成核心版）
-	- 6.3+：RAG-B / RAG-C / MCP 接線
+	- 6.1：AI Provider 收斂（Gemini 主線 + 可替換 Adapter）✅
+	- 6.2：Task Comment 智能摘要（已完成核心版）✅
+	- 6.3：RAG-B 群組快照（核心流程完成，採行動導向 Digest）🟡
+	- 6.3.x：群組與專案聯動（群聊後一鍵建立專案任務）⏳
+	- 6.4+：RAG-C / MCP 接線
 	- 邊界：不建立 staging、不新增雲端擴展部署
 
 ## 環境需求

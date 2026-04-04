@@ -375,7 +375,8 @@ def test_group_ai_snapshot_success_and_latest(client, monkeypatch):
             return (
                 '{"topics":[{"title":"API 實作","message_ids":[1]}],'
                 '"decisions":[{"text":"先做後端 API","message_ids":[1]}],'
-                '"action_items":[{"text":"補上測試","assignee":"Owner","due":null,"message_ids":[2]}],'
+                '"action_items":[{"text":"補上測試","assignee":"Owner","message_ids":[2]}],'
+                '"blockers":[{"text":"等待合併","message_ids":[2]}],'
                 '"notable_quotes":[{"text":"明天補測試","message_id":2}]}'
             )
 
@@ -391,6 +392,7 @@ def test_group_ai_snapshot_success_and_latest(client, monkeypatch):
     assert payload["group_id"] == group_id
     assert payload["summary"]["topics"][0]["title"] == "API 實作"
     assert payload["summary"]["action_items"][0]["text"] == "補上測試"
+    assert payload["summary"]["digest"]["todo_for_user"][0]["text"] == "補上測試"
 
     latest_response = client.get(
         f"/api/groups/{group_id}/ai-snapshot/latest",

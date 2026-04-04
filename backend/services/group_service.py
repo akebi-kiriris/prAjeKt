@@ -290,12 +290,10 @@ def _normalize_action_items(raw_actions):
         if isinstance(item, str):
             text = item.strip()
             assignee = None
-            due = None
             message_ids = []
         elif isinstance(item, dict):
             text = str(item.get('text') or '').strip()
             assignee = item.get('assignee')
-            due = item.get('due')
             message_ids = _normalize_message_ids(item.get('message_ids'))
         else:
             continue
@@ -305,11 +303,32 @@ def _normalize_action_items(raw_actions):
         action_items.append({
             'text': text,
             'assignee': assignee,
-            'due': due,
             'message_ids': message_ids,
         })
 
     return action_items
+
+
+def _normalize_blockers(raw_blockers):
+    blockers = []
+    if not isinstance(raw_blockers, list):
+        return blockers
+
+    for item in raw_blockers:
+        if isinstance(item, str):
+            text = item.strip()
+            message_ids = []
+        elif isinstance(item, dict):
+            text = str(item.get('text') or '').strip()
+            message_ids = _normalize_message_ids(item.get('message_ids'))
+        else:
+            continue
+
+        if not text:
+            continue
+        blockers.append({'text': text, 'message_ids': message_ids})
+
+    return blockers
 
 
 def _normalize_notable_quotes(raw_quotes):
@@ -350,21 +369,88 @@ def _normalize_snapshot_payload(payload):
     decisions = _normalize_decisions(payload.get('decisions', []))
     action_items = _normalize_action_items(payload.get('action_items', payload.get('next_actions', [])))
     notable_quotes = _normalize_notable_quotes(payload.get('notable_quotes', []))
+    blockers = _normalize_blockers(payload.get('blockers', []))
 
-    # 兼容部分 provider 以「risks」輸出，先放進 decisions 做可追溯記錄
+    # 兼容部分 provider 以「risks」輸出，收斂到 blockers。
     risks = payload.get('risks', [])
     if isinstance(risks, list):
         for risk in risks:
             text = str(risk).strip()
             if text:
-                decisions.append({'text': f'風險：{text}', 'message_ids': []})
+                blockers.append({'text': text, 'message_ids': []})
 
-    return {
+    # 若模型沒有給 action_items，從 decisions 補最小可執行清單，避免輸出只剩長摘要。
+    if not action_items:
+        for decision in decisions[:3]:
+            action_items.append({
+                'text': f'跟進：{decision["text"]}',
+                'assignee': None,
+                'message_ids': decision.get('message_ids', []),
+            })
+
+    normalized = {
         'topics': topics,
         'decisions': decisions,
         'action_items': action_items,
+        'blockers': blockers,
         'notable_quotes': notable_quotes,
     }
+
+    return _finalize_snapshot_payload(normalized)
+
+
+def _limit_and_trim_items(items, max_count, max_message_ids=3):
+    limited = []
+    for item in items[:max_count]:
+        if isinstance(item, dict):
+            cloned = dict(item)
+            if 'message_ids' in cloned and isinstance(cloned['message_ids'], list):
+                cloned['message_ids'] = cloned['message_ids'][:max_message_ids]
+            limited.append(cloned)
+    return limited
+
+
+def _build_snapshot_digest(payload):
+    action_items = payload.get('action_items', [])
+    decisions = payload.get('decisions', [])
+    blockers = payload.get('blockers', [])
+    topics = payload.get('topics', [])
+
+    if action_items:
+        overview = f"目前優先：{action_items[0]['text']}"
+    elif decisions:
+        overview = f"目前共識：{decisions[0]['text']}"
+    elif topics:
+        overview = f"主要議題：{topics[0]['title']}"
+    else:
+        overview = '目前沒有明確可執行項目，建議先補充具體行動。'
+
+    return {
+        'overview': overview,
+        'todo_for_user': [
+            {
+                'text': item.get('text'),
+                'assignee': item.get('assignee'),
+                'message_ids': item.get('message_ids', []),
+            }
+            for item in action_items[:5]
+        ],
+        'watch_out': blockers[:3],
+        'decisions_brief': decisions[:3],
+    }
+
+
+def _finalize_snapshot_payload(payload):
+    compacted = {
+        'topics': _limit_and_trim_items(payload.get('topics', []), 3),
+        'decisions': _limit_and_trim_items(payload.get('decisions', []), 5),
+        'action_items': _limit_and_trim_items(payload.get('action_items', []), 5),
+        'blockers': _limit_and_trim_items(payload.get('blockers', []), 3),
+        'notable_quotes': _limit_and_trim_items(payload.get('notable_quotes', []), 5, max_message_ids=1),
+    }
+
+    compacted['digest'] = _build_snapshot_digest(compacted)
+    return compacted
 
 
 def parse_ai_snapshot_response(raw_text):
@@ -390,6 +476,7 @@ def merge_chunk_summaries(chunk_summaries):
     topic_map = {}
     decision_map = {}
     action_map = {}
+    blocker_map = {}
     quote_map = {}
 
     for summary in chunk_summaries:
@@ -409,16 +496,20 @@ def merge_chunk_summaries(chunk_summaries):
             key = (
                 action['text'].strip().lower(),
                 (action.get('assignee') or '').strip().lower() if isinstance(action.get('assignee'), str) else action.get('assignee'),
-                action.get('due'),
             )
             if key not in action_map:
                 action_map[key] = {
                     'text': action['text'],
                     'assignee': action.get('assignee'),
-                    'due': action.get('due'),
                     'message_ids': [],
                 }
             action_map[key]['message_ids'] = _merge_message_ids(action_map[key]['message_ids'], action.get('message_ids', []))
+
+        for blocker in summary.get('blockers', []):
+            key = blocker['text'].strip().lower()
+            if key not in blocker_map:
+                blocker_map[key] = {'text': blocker['text'], 'message_ids': []}
+            blocker_map[key]['message_ids'] = _merge_message_ids(blocker_map[key]['message_ids'], blocker.get('message_ids', []))
 
         for quote in summary.get('notable_quotes', []):
             key = (quote['text'].strip().lower(), quote.get('message_id'))
@@ -428,12 +519,15 @@ def merge_chunk_summaries(chunk_summaries):
                     'message_id': quote.get('message_id'),
                 }
 
-    return {
+    merged = {
         'topics': list(topic_map.values()),
         'decisions': list(decision_map.values()),
         'action_items': list(action_map.values()),
+        'blockers': list(blocker_map.values()),
         'notable_quotes': list(quote_map.values()),
     }
+
+    return _finalize_snapshot_payload(merged)
 
 
 def count_group_messages_for_snapshot(group_id, window_days):
@@ -489,11 +583,15 @@ def chunk_messages(messages, size):
 
 def build_group_snapshot_system_prompt():
     return (
-        '你是專案協作知識整理助手。請輸出 JSON 物件，且 schema 必須為：'
+        '你是專案協作知識整理助手。重點是給出可執行下一步，避免冗長敘述。'
+        '請輸出 JSON 物件，schema 必須為：'
         '{"topics":[{"title":str,"message_ids":[int]}],'
         '"decisions":[{"text":str,"message_ids":[int]}],'
-        '"action_items":[{"text":str,"assignee":str|null,"due":str|null,"message_ids":[int]}],'
+        '"action_items":[{"text":str,"assignee":str|null,"message_ids":[int]}],'
+        '"blockers":[{"text":str,"message_ids":[int]}],'
         '"notable_quotes":[{"text":str,"message_id":int|null}]}'
+        '限制：topics<=3, decisions<=5, action_items<=5, blockers<=3。'
+        '不要輸出 today/tomorrow 這類相對日期 due。'
     )
 
 

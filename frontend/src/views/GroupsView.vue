@@ -119,21 +119,42 @@
               </p>
             </div>
             
-            <div class="mt-4 pt-4 border-t flex gap-2">
-              <button 
-                @click="openChat(group)"
-                class="flex-1 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors flex items-center justify-center gap-2"
-              >
-                <span>💬</span>
-                開啟聊天
-              </button>
-              <button 
-                @click="leaveGroup(group.group_id)"
-                class="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors flex items-center justify-center gap-2"
-              >
-                <span>✕</span>
-                離開
-              </button>
+            <div class="mt-4 pt-4 border-t space-y-2">
+              <div class="flex gap-2">
+                <button 
+                  @click="openChat(group)"
+                  class="flex-1 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors flex items-center justify-center gap-2"
+                >
+                  <span>💬</span>
+                  開啟聊天
+                </button>
+                <button 
+                  @click="leaveGroup(group.group_id)"
+                  class="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors flex items-center justify-center gap-2"
+                >
+                  <span>✕</span>
+                  離開
+                </button>
+              </div>
+
+              <div class="flex gap-2">
+                <button
+                  @click="generateSnapshot(group.group_id)"
+                  :disabled="snapshotLoadingGroupId === group.group_id"
+                  class="flex-1 px-4 py-2 bg-indigo-500 text-white rounded-lg hover:bg-indigo-600 disabled:bg-indigo-300 transition-colors flex items-center justify-center gap-2"
+                >
+                  <span>🧠</span>
+                  生成快照
+                </button>
+                <button
+                  @click="viewLatestSnapshot(group.group_id)"
+                  :disabled="snapshotLoadingGroupId === group.group_id"
+                  class="flex-1 px-4 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 disabled:bg-amber-300 transition-colors flex items-center justify-center gap-2"
+                >
+                  <span>📄</span>
+                  最新快照
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -195,20 +216,94 @@
         </div>
       </div>
     </div>
+
+    <!-- Snapshot Modal -->
+    <div v-if="showSnapshotModal && snapshotPreview" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" @click.self="closeSnapshotModal">
+      <div class="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[85vh] overflow-hidden flex flex-col animate-slideUp">
+        <div class="p-4 border-b flex justify-between items-center">
+          <div>
+            <h3 class="text-xl font-semibold text-primary">群組知識快照</h3>
+            <p class="text-sm text-gray-500 mt-1">來源訊息：{{ snapshotPreview.source_count }} 則</p>
+          </div>
+          <button @click="closeSnapshotModal" class="text-gray-400 hover:text-gray-600 text-2xl">✕</button>
+        </div>
+
+        <div class="p-4 overflow-y-auto space-y-4 bg-gray-50">
+          <section class="bg-white rounded-xl border p-4">
+            <h4 class="font-semibold text-gray-800 mb-2">🎯 一句重點</h4>
+            <p class="text-sm text-gray-700">{{ snapshotDigestOverview || '目前沒有足夠訊息產出重點。' }}</p>
+          </section>
+
+          <section class="bg-white rounded-xl border p-4">
+            <h4 class="font-semibold text-gray-800 mb-2">🧭 你現在要做什麼</h4>
+            <ul v-if="snapshotTodoItems.length > 0" class="space-y-2 text-sm text-gray-700">
+              <li
+                v-for="(item, index) in snapshotTodoItems"
+                :key="`todo-${index}-${item.text}`"
+                class="border-l-4 border-amber-400 pl-3"
+              >
+                <div class="font-medium">{{ index + 1 }}. {{ item.text }}</div>
+                <div class="text-xs text-gray-500">負責人：{{ item.assignee || '未指定' }}</div>
+                <div class="text-xs text-gray-500">來源 message_ids: {{ item.message_ids?.join(', ') || '無' }}</div>
+              </li>
+            </ul>
+            <p v-else class="text-sm text-gray-500">目前沒有明確行動項，建議先在群組補充具體下一步。</p>
+          </section>
+
+          <section class="bg-white rounded-xl border p-4">
+            <h4 class="font-semibold text-gray-800 mb-2">⚠️ 目前阻塞/風險</h4>
+            <ul v-if="snapshotWatchOutItems.length > 0" class="space-y-2 text-sm text-gray-700">
+              <li
+                v-for="(item, index) in snapshotWatchOutItems"
+                :key="`risk-${index}-${item.text}`"
+                class="border-l-4 border-red-400 pl-3"
+              >
+                <div class="font-medium">{{ item.text }}</div>
+                <div class="text-xs text-gray-500">來源 message_ids: {{ item.message_ids?.join(', ') || '無' }}</div>
+              </li>
+            </ul>
+            <p v-else class="text-sm text-gray-500">目前未偵測到明確阻塞。</p>
+          </section>
+
+          <section class="bg-white rounded-xl border p-4">
+            <h4 class="font-semibold text-gray-800 mb-2">✅ 已有共識（精簡）</h4>
+            <ul v-if="snapshotDecisionItems.length > 0" class="space-y-2 text-sm text-gray-700">
+              <li
+                v-for="(item, index) in snapshotDecisionItems"
+                :key="`decision-${index}-${item.text}`"
+                class="border-l-4 border-green-400 pl-3"
+              >
+                <div class="font-medium">{{ item.text }}</div>
+                <div class="text-xs text-gray-500">來源 message_ids: {{ item.message_ids?.join(', ') || '無' }}</div>
+              </li>
+            </ul>
+            <p v-else class="text-sm text-gray-500">目前尚未形成明確決議。</p>
+          </section>
+        </div>
+      </div>
+    </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted } from 'vue';
 import type { AxiosError } from 'axios';
 import type { Ref } from 'vue';
 import { toast } from 'vue-sonner';
 import { storeToRefs } from 'pinia';
 import { useGroupStore } from '../stores/groups';
+import { groupService } from '../services/groupService';
 import { formatDate, formatDateTime } from '../utils/formatters';
 import { useConfirm } from '../composables/useConfirm';
-import type { Group, Message, GroupCreateResponse, GroupErrorPayload } from '../types';
+import type {
+  Group,
+  Message,
+  GroupCreateResponse,
+  GroupErrorPayload,
+  GroupSnapshotResponse,
+  GroupSnapshotJobStatus,
+} from '../types';
 
 const { confirm } = useConfirm();
 
@@ -234,6 +329,9 @@ const inviteCode = ref('');
 const showCreateGroup = ref(false);
 const showJoinGroup = ref(false);
 const messagesContainer = ref<HTMLDivElement | null>(null);
+const showSnapshotModal = ref(false);
+const snapshotPreview = ref<GroupSnapshotResponse | null>(null);
+const snapshotLoadingGroupId = ref<number | null>(null);
 
 const scrollToBottom = () => {
   if (messagesContainer.value) {
@@ -280,6 +378,102 @@ const openChat = async (group: Group) => {
 
 const closeChat = () => {
   groupStore.closeChat();
+};
+
+const closeSnapshotModal = () => {
+  showSnapshotModal.value = false;
+  snapshotPreview.value = null;
+};
+
+const openSnapshotModal = (payload: GroupSnapshotResponse) => {
+  snapshotPreview.value = payload;
+  showSnapshotModal.value = true;
+};
+
+const snapshotDigestOverview = computed(() => snapshotPreview.value?.summary?.digest?.overview || '');
+
+const snapshotTodoItems = computed(() => {
+  const digestItems = snapshotPreview.value?.summary?.digest?.todo_for_user;
+  if (Array.isArray(digestItems) && digestItems.length > 0) {
+    return digestItems;
+  }
+  return snapshotPreview.value?.summary?.action_items || [];
+});
+
+const snapshotWatchOutItems = computed(() => {
+  const digestItems = snapshotPreview.value?.summary?.digest?.watch_out;
+  if (Array.isArray(digestItems) && digestItems.length > 0) {
+    return digestItems;
+  }
+  return snapshotPreview.value?.summary?.blockers || [];
+});
+
+const snapshotDecisionItems = computed(() => {
+  const digestItems = snapshotPreview.value?.summary?.digest?.decisions_brief;
+  if (Array.isArray(digestItems) && digestItems.length > 0) {
+    return digestItems;
+  }
+  return snapshotPreview.value?.summary?.decisions || [];
+});
+
+const pollSnapshotJob = async (jobId: string): Promise<GroupSnapshotJobStatus> => {
+  const maxAttempts = 15;
+  const intervalMs = 1000;
+
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    const response = await groupService.getSnapshotJobStatus(jobId);
+    const payload = response.data as GroupSnapshotJobStatus;
+
+    if (payload.status === 'completed') {
+      return payload;
+    }
+    if (payload.status === 'failed') {
+      throw new Error(payload.error || '群組快照背景工作失敗');
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+  }
+
+  throw new Error('群組快照背景工作逾時，請稍後再查詢');
+};
+
+const generateSnapshot = async (groupId: number) => {
+  try {
+    snapshotLoadingGroupId.value = groupId;
+    const response = await groupService.generateSnapshot(groupId, { window_days: 30, async: false });
+
+    if (response.status === 202) {
+      const jobPayload = response.data as GroupSnapshotJobStatus;
+      toast.info('群組快照已進入背景工作，正在等待完成...');
+      const finalJob = await pollSnapshotJob(jobPayload.job_id);
+      if (finalJob.snapshot) {
+        openSnapshotModal(finalJob.snapshot);
+        toast.success('群組快照生成完成');
+      }
+      return;
+    }
+
+    openSnapshotModal(response.data as GroupSnapshotResponse);
+    toast.success('群組快照生成完成');
+  } catch (error) {
+    const message = (error as AxiosError<GroupErrorPayload>).response?.data?.error || (error as Error).message;
+    toast.error(message || '生成群組快照失敗');
+  } finally {
+    snapshotLoadingGroupId.value = null;
+  }
+};
+
+const viewLatestSnapshot = async (groupId: number) => {
+  try {
+    snapshotLoadingGroupId.value = groupId;
+    const response = await groupService.getLatestSnapshot(groupId);
+    openSnapshotModal(response.data as GroupSnapshotResponse);
+  } catch (error) {
+    const message = (error as AxiosError<GroupErrorPayload>).response?.data?.error;
+    toast.error(message || '取得最新快照失敗');
+  } finally {
+    snapshotLoadingGroupId.value = null;
+  }
 };
 
 const sendMessage = async () => {

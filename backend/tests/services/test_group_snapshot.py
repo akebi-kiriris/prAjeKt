@@ -62,13 +62,15 @@ def test_merge_chunk_summaries_deduplicates(app):
             {
                 "topics": [{"title": "API", "message_ids": [1]}],
                 "decisions": [{"text": "先做後端", "message_ids": [1]}],
-                "action_items": [{"text": "補測試", "assignee": "A", "due": None, "message_ids": [1]}],
+                "action_items": [{"text": "補測試", "assignee": "A", "message_ids": [1]}],
+                "blockers": [{"text": "等待環境穩定", "message_ids": [1]}],
                 "notable_quotes": [{"text": "先做後端", "message_id": 1}],
             },
             {
                 "topics": [{"title": "API", "message_ids": [2]}],
                 "decisions": [{"text": "先做後端", "message_ids": [2]}],
-                "action_items": [{"text": "補測試", "assignee": "A", "due": None, "message_ids": [2]}],
+                "action_items": [{"text": "補測試", "assignee": "A", "message_ids": [2]}],
+                "blockers": [{"text": "等待環境穩定", "message_ids": [2]}],
                 "notable_quotes": [{"text": "先做後端", "message_id": 1}],
             },
         ]
@@ -80,7 +82,10 @@ def test_merge_chunk_summaries_deduplicates(app):
     assert merged["decisions"][0]["message_ids"] == [1, 2]
     assert len(merged["action_items"]) == 1
     assert merged["action_items"][0]["message_ids"] == [1, 2]
+    assert len(merged["blockers"]) == 1
+    assert merged["blockers"][0]["message_ids"] == [1, 2]
     assert len(merged["notable_quotes"]) == 1
+    assert merged["digest"]["todo_for_user"][0]["text"] == "補測試"
 
 
 def test_generate_group_snapshot_success_and_latest(app, monkeypatch):
@@ -107,13 +112,14 @@ def test_generate_group_snapshot_success_and_latest(app, monkeypatch):
                 return (
                     '{"topics":[{"title":"API","message_ids":[1]}],'
                     '"decisions":[{"text":"先做 API","message_ids":[1]}],'
-                    '"action_items":[{"text":"補上測試","assignee":"Owner","due":null,"message_ids":[1]}],'
+                    '"action_items":[{"text":"補上測試","assignee":"Owner","message_ids":[1]}],'
+                    '"blockers":[{"text":"等待 API 合併","message_ids":[1]}],'
                     '"notable_quotes":[{"text":"先完成 API 設計","message_id":1}]}'
                 )
             return (
                 '{"topics":[{"title":"API","message_ids":[2]}],'
                 '"decisions":[{"text":"先做 API","message_ids":[2]}],'
-                '"action_items":[{"text":"補上測試","assignee":"Owner","due":null,"message_ids":[2]}],'
+                '"action_items":[{"text":"補上測試","assignee":"Owner","message_ids":[2]}],'
                 '"notable_quotes":[{"text":"明天補上測試","message_id":2}]}'
             )
 
@@ -125,6 +131,8 @@ def test_generate_group_snapshot_success_and_latest(app, monkeypatch):
     assert snapshot["source_count"] == 2
     assert snapshot["summary"]["topics"][0]["title"] == "API"
     assert snapshot["summary"]["topics"][0]["message_ids"] == [1, 2]
+    assert snapshot["summary"]["digest"]["todo_for_user"][0]["text"] == "補上測試"
+    assert snapshot["summary"]["digest"]["watch_out"][0]["text"] == "等待 API 合併"
 
     latest = get_latest_group_snapshot_for_member(group.group_id, owner.id)
     assert latest["snapshot_id"] == snapshot["snapshot_id"]
