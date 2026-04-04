@@ -1205,19 +1205,15 @@ def test_generate_timeline_tasks_with_ai_success_and_json_decode_error(app, monk
     db.session.add(existing_task)
     db.session.commit()
 
-    monkeypatch.setenv("GOOGLE_API_KEY", "fake-key")
-    monkeypatch.setattr(timeline_service_module.genai, "configure", lambda api_key: None)
+    # Mock successful AI provider response
+    class MockAIProviderSuccess:
+        def generate_content(self, system_prompt, user_message, response_format="json"):
+            return '[{"name":"service ai task","priority":1,"estimated_days":2,"task_remark":"from service"}]'
 
-    class GoodModel:
-        def __init__(self, *args, **kwargs):
-            pass
+    def mock_get_ai_provider_success():
+        return MockAIProviderSuccess()
 
-        def generate_content(self, prompt, generation_config):
-            return SimpleNamespace(
-                text='[{"name":"service ai task","priority":1,"estimated_days":2,"task_remark":"from service"}]'
-            )
-
-    monkeypatch.setattr(timeline_service_module.genai, "GenerativeModel", GoodModel)
+    monkeypatch.setattr(timeline_service_module, "get_ai_provider", mock_get_ai_provider_success)
 
     payload = generate_timeline_tasks_with_ai(
         timeline_id=timeline.id,
@@ -1231,14 +1227,15 @@ def test_generate_timeline_tasks_with_ai_success_and_json_decode_error(app, monk
     assert payload["tasks"][1]["name"] == "service ai task"
     assert payload["tasks"][1]["isExisting"] is False
 
-    class BadJsonModel:
-        def __init__(self, *args, **kwargs):
-            pass
+    # Mock AI provider with invalid JSON response
+    class MockAIProviderBadJson:
+        def generate_content(self, system_prompt, user_message, response_format="json"):
+            return "not-json"
 
-        def generate_content(self, prompt, generation_config):
-            return SimpleNamespace(text="not-json")
+    def mock_get_ai_provider_bad_json():
+        return MockAIProviderBadJson()
 
-    monkeypatch.setattr(timeline_service_module.genai, "GenerativeModel", BadJsonModel)
+    monkeypatch.setattr(timeline_service_module, "get_ai_provider", mock_get_ai_provider_bad_json)
 
     with pytest.raises(TimelineAIGenerationError) as excinfo:
         generate_timeline_tasks_with_ai(

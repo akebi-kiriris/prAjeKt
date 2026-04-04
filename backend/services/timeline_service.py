@@ -15,6 +15,7 @@ from models.task_user import TaskUser
 from models.timeline import Timeline
 from models.timeline_user import TimelineUser
 from models.user import User
+from services.ai_provider import get_ai_provider
 from repositories.timeline_repository import (
     get_active_tasks_by_timeline_id,
     get_active_tasks_by_timeline_id_ordered_end_date,
@@ -30,12 +31,7 @@ from repositories.timeline_repository import (
     get_users_by_ids,
 )
 
-with warnings.catch_warnings():
-    warnings.simplefilter("ignore", FutureWarning)
-    import google.generativeai as genai
-
 TIMELINE_UPDATE_ALLOWED_FIELDS = {'name', 'start_date', 'end_date', 'remark'}
-AI_TASK_MODEL = 'gemini-2.5-flash-lite'
 
 
 class TimelineAIGenerationError(Exception):
@@ -291,29 +287,23 @@ def _normalize_generated_tasks(generated_tasks, timeline_id):
 def generate_timeline_tasks_with_ai(timeline_id, project_name, description=''):
     existing_tasks_info = _build_existing_tasks_info(timeline_id)
 
-    api_key = os.getenv('GOOGLE_API_KEY')
-    if not api_key:
-        raise TimelineAIGenerationError(
-            'missing_api_key',
-            'Google API Key 未配置，請在 .env 中設定 GOOGLE_API_KEY',
-        )
-
     prompt = _build_ai_task_prompt(project_name, description, existing_tasks_info)
 
     try:
-        genai.configure(api_key=api_key)
-        model = genai.GenerativeModel(AI_TASK_MODEL)
-        response = model.generate_content(
+        provider = get_ai_provider()
+        raw_text = provider.generate_content(
+            "你是一個專業的專案管理助手。請根據以下專案資訊生成任務清單，回傳 JSON 陣列。",
             prompt,
-            generation_config={
-                'response_mime_type': 'application/json',
-                'temperature': 0.7,
-            },
+            response_format="json_array"
         )
-    except Exception as exc:
-        raise TimelineAIGenerationError('generation_failed', 'AI 生成失敗，請稍後再試') from exc
+    except RuntimeError as exc:
+        # 檢查是否是 API key 缺失的錯誤
+        if "GOOGLE_API_KEY" in str(exc):
+            raise TimelineAIGenerationError('missing_api_key', 'AI 服務配置不完整') from exc
+        else:
+            raise TimelineAIGenerationError('generation_failed', 'AI 生成失敗，請稍後再試') from exc
 
-    parsed = _parse_ai_task_response(getattr(response, 'text', ''))
+    parsed = _parse_ai_task_response(raw_text)
     generated_tasks = _normalize_generated_tasks(parsed, timeline_id)
     all_tasks = existing_tasks_info + generated_tasks
 

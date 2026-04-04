@@ -17,6 +17,7 @@ from models.task_user import TaskUser
 from models.timeline import TaskFile
 from models.user import User
 from werkzeug.utils import secure_filename
+from services.ai_provider import get_ai_provider
 from repositories.task_repository import (
     demote_task_members_to_collaborator,
     get_active_task_by_id,
@@ -1031,19 +1032,9 @@ def build_task_comment_summary_context(task, comment_items, max_chars=12000):
 
 
 def generate_task_comment_summary(task, comment_items):
-    """使用 Gemini AI 生成任務留言摘要（決議/風險/下一步）"""
-    import warnings
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore", FutureWarning)
-        import google.generativeai as genai
+    """使用可配置的 AI Provider 生成任務留言摘要（決議/風險/下一步）"""
 
     context, meta = build_task_comment_summary_context(task, comment_items)
-
-    api_key = os.getenv('GOOGLE_API_KEY')
-    if not api_key:
-        raise RuntimeError('AI 摘要服務配置不完整，請稍後再試')
-
-    genai.configure(api_key=api_key)
 
     system_prompt = (
         '你是專案任務摘要助手。\n'
@@ -1056,21 +1047,13 @@ def generate_task_comment_summary(task, comment_items):
         '4) 不要輸出任何 JSON 以外文字'
     )
 
-    user_message = f"{system_prompt}\n\n留言內容：\n{context}"
+    user_message = f"留言內容：\n{context}"
 
     try:
-        model = genai.GenerativeModel('gemini-2.5-flash-lite')
-        response = model.generate_content(
-            user_message,
-            generation_config={
-                'response_mime_type': 'application/json',
-                'temperature': 0.2,
-            }
-        )
-        raw_text = response.text
-
-    except Exception as e:
-        raise RuntimeError('AI 摘要服務暫時不可用，請稍後再試')
+        provider = get_ai_provider()
+        raw_text = provider.generate_content(system_prompt, user_message, response_format="json")
+    except RuntimeError as e:
+        raise RuntimeError(str(e))
 
     cleaned = _strip_markdown_fence(raw_text) if isinstance(raw_text, str) else ''
     if not cleaned:
@@ -1090,5 +1073,7 @@ def generate_task_comment_summary(task, comment_items):
         else:
             summary = _parse_fallback_summary(cleaned)
 
-    meta['model'] = 'gemini-2.5-flash-lite'
+    # 記錄使用的 provider 類型
+    provider_name = os.getenv("AI_PROVIDER", "gemini").lower()
+    meta['provider'] = provider_name if provider_name in ["gemini", "mock"] else "gemini"
     return summary, meta
