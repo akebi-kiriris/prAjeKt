@@ -31,3 +31,6 @@ eventlet==0.33.3
 
 # Utilities
 requests==2.31.0
+
+# MCP
+mcp>=1.0.0

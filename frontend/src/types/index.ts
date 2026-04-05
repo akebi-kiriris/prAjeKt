@@ -15,3 +15,4 @@ export * from './trash';
 export * from './notification';
 export * from './profile';
 export * from './ui';
+export * from './copilot';

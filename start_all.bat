@@ -39,4 +39,8 @@ start "PrAjeKt Frontend" cmd /k "cd /d frontend && npm run dev"
 
 echo 前後端啟動完成。前端連接本地後端：http://localhost:5000
 echo 後端連接本地 PostgreSQL：postgresql://postgres:postgres@localhost:5433/prajekt
+echo.
+echo [可選] 若要測試 MCP：
+echo 1) 執行 start_mcp_inspector.bat（內建 MCP 主機 + Web UI）
+echo 2) 在 Inspector 左側按 Connect 測試 task_comment_summary / group_snapshot
 pause

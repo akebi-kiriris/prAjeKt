@@ -449,11 +449,32 @@
             <p class="text-gray-600 font-medium">AI 正在生成任務建議...</p>
             <p class="text-gray-400 text-sm mt-2">請稍候，正在分析專案內容</p>
           </div>
-          <div v-else-if="aiGeneratedTasks.length === 0" class="text-center py-8">
-            <p class="text-gray-500 mb-4">AI 將根據專案名稱自動生成任務建議</p>
-            <button @click="generateTasksWithAi" class="px-6 py-3 bg-linear-to-r from-purple-500 to-indigo-500 text-white font-semibold rounded-xl hover:brightness-110 transition-all shadow-lg shadow-purple-200">
-              🤖 開始生成
-            </button>
+          <div v-else-if="aiGeneratedTasks.length === 0" class="py-8">
+            <p class="text-gray-500 mb-4 text-center">可輸入需求情境，讓 Copilot 透過 MCP 生成更貼近專案的任務建議</p>
+            <div class="space-y-3 mb-5">
+              <label class="block text-sm font-medium text-gray-700">需求描述（可選）</label>
+              <textarea
+                v-model="aiPrompt"
+                rows="4"
+                placeholder="例如：這個月要完成登入流程重構，請拆成後端 API、前端頁面、測試與上線準備"
+                class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none resize-none"
+              ></textarea>
+              <div class="flex flex-wrap items-center gap-4 text-sm text-gray-600">
+                <label class="inline-flex items-center gap-2 cursor-pointer select-none">
+                  <input v-model="useCopilotMcp" type="checkbox" class="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary" />
+                  優先使用 Copilot + MCP 工具路由
+                </label>
+                <label class="inline-flex items-center gap-2 cursor-pointer select-none">
+                  <input v-model="autoCreateAfterGenerate" type="checkbox" class="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary" />
+                  生成後直接建立任務
+                </label>
+              </div>
+            </div>
+            <div class="text-center">
+              <button @click="generateTasksWithAi" class="px-6 py-3 bg-linear-to-r from-purple-500 to-indigo-500 text-white font-semibold rounded-xl hover:brightness-110 transition-all shadow-lg shadow-purple-200">
+                {{ useCopilotMcp ? '✨ Copilot 智慧生成' : '🤖 開始生成' }}
+              </button>
+            </div>
           </div>
           <div v-else class="space-y-4">
             <div class="flex items-center justify-between mb-4">
@@ -505,6 +526,7 @@ import { isAxiosError } from 'axios';
 import { toast } from 'vue-sonner';
 import { taskService } from '../../services/taskService';
 import { timelineService } from '../../services/timelineService';
+import { copilotService } from '../../services/copilotService';
 import { formatDate, formatDateTime, formatFileSize, isImageFile, getFileIcon } from '../../utils/formatters';
 import { downloadFileFromUrl, loadTaskDetailResourcesWithMembers } from '../../utils/taskDetails';
 import { useConfirm } from '../../composables/useConfirm';
@@ -522,6 +544,7 @@ import type {
   CreateTaskPayload,
   ApiErrorPayload,
   GenerateTasksResponse,
+  CopilotMcpExecuteResponse,
 } from '../../types';
 
 const { confirm } = useConfirm();
@@ -561,6 +584,9 @@ const showAiGenerateModal = ref(false);
 const aiGeneratedTasks = ref<AiGeneratedTask[]>([]);
 const selectedAiTasks = ref<number[]>([]);
 const isGeneratingAi = ref(false);
+const aiPrompt = ref('');
+const useCopilotMcp = ref(true);
+const autoCreateAfterGenerate = ref(false);
 const isEditingRemark = ref(false);
 const timelineRemark = ref('');
 const localRemark = ref('');
@@ -589,6 +615,14 @@ watch(() => props.selectedTimeline, (val) => {
     localRemark.value = '';
   }
 }, { immediate: true });
+
+watch(showAiGenerateModal, (opened) => {
+  if (!opened) return;
+  selectedAiTasks.value = [];
+  if (!aiPrompt.value.trim()) {
+    aiPrompt.value = timelineRemark.value || '';
+  }
+});
 
 const resetTaskForm = () => {
   taskForm.value = { name: '', start_date: '', end_date: '', priority: 2, tags: '', task_remark: '' };
@@ -853,20 +887,90 @@ const kickMember = async (member: TaskMember) => {
 };
 
 // ────────────── AI 生成 ──────────────
+const normalizeGeneratedTasks = (payload: unknown): AiGeneratedTask[] => {
+  if (Array.isArray(payload)) {
+    return payload.filter((item): item is AiGeneratedTask => Boolean(item && typeof item === 'object'));
+  }
+
+  if (payload && typeof payload === 'object') {
+    const candidate = (payload as Record<string, unknown>).tasks;
+    if (Array.isArray(candidate)) {
+      return candidate.filter((item): item is AiGeneratedTask => Boolean(item && typeof item === 'object'));
+    }
+  }
+
+  return [];
+};
+
+const buildAiDescription = (): string => {
+  const prompt = aiPrompt.value.trim();
+  if (prompt) return prompt;
+
+  const remark = timelineRemark.value.trim();
+  if (remark) return remark;
+
+  return `請為「${props.selectedTimeline?.name || '此專案'}」生成可執行的任務拆解，含優先順序。`;
+};
+
 const generateTasksWithAi = async () => {
   if (!props.selectedTimeline) return;
+
+  const description = buildAiDescription();
   isGeneratingAi.value = true;
+
   try {
-    const res = await timelineService.generateTasks(props.selectedTimeline.id);
-    const payload: GenerateTasksResponse = res.data;
-    if (Array.isArray(payload)) {
-      aiGeneratedTasks.value = payload;
+    if (useCopilotMcp.value) {
+      const res = await copilotService.executeMcp({
+        message: description,
+        context: {
+          timeline_id: props.selectedTimeline.id,
+          timeline_name: props.selectedTimeline.name,
+        },
+        preferred_tool: 'timeline_generate_tasks',
+        tool_arguments: {
+          timeline_id: props.selectedTimeline.id,
+          project_name: props.selectedTimeline.name,
+          description,
+        },
+        auto_create_generated_tasks: autoCreateAfterGenerate.value,
+      });
+
+      const payload: CopilotMcpExecuteResponse = res.data;
+      aiGeneratedTasks.value = normalizeGeneratedTasks(payload.result);
+
+      if (payload.auto_create_result) {
+        const createdCount = Number(payload.auto_create_result.created || 0);
+        if (createdCount > 0) {
+          toast.success(payload.auto_create_result.message || 'Copilot 已自動建立任務');
+          showAiGenerateModal.value = false;
+          aiGeneratedTasks.value = [];
+          selectedAiTasks.value = [];
+          emit('refresh-all');
+          return;
+        }
+
+        toast.info(payload.auto_create_result.message || '沒有可建立的新任務，請調整需求描述後再試。');
+      }
     } else {
-      aiGeneratedTasks.value = payload.tasks || [];
+      const res = await timelineService.generateTasks(props.selectedTimeline.id, {
+        name: props.selectedTimeline.name,
+        description,
+      });
+      const payload: GenerateTasksResponse = res.data;
+      aiGeneratedTasks.value = normalizeGeneratedTasks(payload);
     }
+
+    if (aiGeneratedTasks.value.length === 0) {
+      toast.info('目前沒有可新增的任務建議，可調整需求描述後再試。');
+      return;
+    }
+
     selectedAiTasks.value = aiGeneratedTasks.value.map((_, i) => i);
-  } catch (err: unknown) { toast.error(getApiErrorMessage(err, 'AI 生成失敗，請稍後再試')); }
-  finally { isGeneratingAi.value = false; }
+  } catch (err: unknown) {
+    toast.error(getApiErrorMessage(err, 'AI 生成失敗，請稍後再試'));
+  } finally {
+    isGeneratingAi.value = false;
+  }
 };
 
 const toggleAiTaskSelection = (index: number) => {

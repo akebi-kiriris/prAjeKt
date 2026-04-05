@@ -104,6 +104,7 @@ def create_app():
     from blueprints.timelines import timelines_bp
     from blueprints.trash import trash_bp
     from blueprints.notifications import notifications_bp
+    from blueprints.copilot import copilot_bp
     
     app.register_blueprint(auth_bp, url_prefix='/api/auth')
     app.register_blueprint(tasks_bp, url_prefix='/api/tasks')
@@ -114,6 +115,7 @@ def create_app():
     app.register_blueprint(timelines_bp, url_prefix='/api/timelines')
     app.register_blueprint(trash_bp, url_prefix='/api/trash')
     app.register_blueprint(notifications_bp, url_prefix='/api/notifications')
+    app.register_blueprint(copilot_bp, url_prefix='/api/copilot')
 
     from realtime import register_socket_events
     register_socket_events(socketio)

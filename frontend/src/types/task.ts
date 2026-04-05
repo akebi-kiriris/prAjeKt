@@ -25,6 +25,11 @@ export interface AiGeneratedTask {
   task_remark?: string | null;
 }
 
+export interface GenerateTasksRequest {
+  name?: string;
+  description?: string;
+}
+
 export type GenerateTasksResponse = AiGeneratedTask[] | { tasks: AiGeneratedTask[] };
 
 export interface Subtask {
