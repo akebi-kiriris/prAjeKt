@@ -932,25 +932,12 @@ const generateTasksWithAi = async () => {
           project_name: props.selectedTimeline.name,
           description,
         },
-        auto_create_generated_tasks: autoCreateAfterGenerate.value,
+        // 改進：永遠不在後端自動建立，改由前端顯示預覽讓用戶確認
+        auto_create_generated_tasks: false,
       });
 
       const payload: CopilotMcpExecuteResponse = res.data;
       aiGeneratedTasks.value = normalizeGeneratedTasks(payload.result);
-
-      if (payload.auto_create_result) {
-        const createdCount = Number(payload.auto_create_result.created || 0);
-        if (createdCount > 0) {
-          toast.success(payload.auto_create_result.message || 'Copilot 已自動建立任務');
-          showAiGenerateModal.value = false;
-          aiGeneratedTasks.value = [];
-          selectedAiTasks.value = [];
-          emit('refresh-all');
-          return;
-        }
-
-        toast.info(payload.auto_create_result.message || '沒有可建立的新任務，請調整需求描述後再試。');
-      }
     } else {
       const res = await timelineService.generateTasks(props.selectedTimeline.id, {
         name: props.selectedTimeline.name,
@@ -965,7 +952,10 @@ const generateTasksWithAi = async () => {
       return;
     }
 
-    selectedAiTasks.value = aiGeneratedTasks.value.map((_, i) => i);
+    // 改進：如果勾選「生成後直接建立」，預設全選；否則清空選擇，讓用戶手動選
+    selectedAiTasks.value = autoCreateAfterGenerate.value 
+      ? aiGeneratedTasks.value.map((_, i) => i)  // 全選
+      : [];  // 空選，用戶手動選
   } catch (err: unknown) {
     toast.error(getApiErrorMessage(err, 'AI 生成失敗，請稍後再試'));
   } finally {
@@ -986,6 +976,15 @@ const toggleAllAiTasks = () => {
 
 const batchCreateAiTasks = async () => {
   if (!props.selectedTimeline || selectedAiTasks.value.length === 0) return;
+  
+  // 最後確認：讓用戶再次確認要建立的任務數量
+  if (!await confirm({ 
+    title: `確定要新增 ${selectedAiTasks.value.length} 個任務？`,
+    message: '建立後可在任務列表中編輯或刪除。'
+  })) {
+    return;
+  }
+  
   const timelineId = props.selectedTimeline.id;
   const tasksToCreate: CreateTaskPayload[] = selectedAiTasks.value
     .map(i => aiGeneratedTasks.value[i])

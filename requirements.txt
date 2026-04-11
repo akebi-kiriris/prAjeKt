@@ -12,7 +12,9 @@ Werkzeug==3.0.1
 
 # Database
 SQLAlchemy==2.0.23
-psycopg2-binary==2.9.9
+# 使用純 Python 的驅動以避免 Windows 上編譯需求
+# psycopg2-binary==2.9.9
+pg8000==1.29.7
 alembic==1.13.0
 
 # WebSocket & Real-time

@@ -430,15 +430,15 @@ def test_generate_tasks_with_ai_success_and_json_decode_error(client, monkeypatc
     db.session.add(existing_task)
     db.session.commit()
 
-    # Mock successful AI provider response
-    class MockAIProvider:
-        def generate_content(self, system_prompt, user_message, response_format="json"):
-            return '[{"name":"AI Task","priority":1,"estimated_days":2,"task_remark":"AI generated"}]'
+    # Mock successful LangChain generate_tasks response
+    from unittest.mock import MagicMock
+    mock_llm = MagicMock()
+    mock_generate_tasks = MagicMock(return_value=[
+        {"name": "AI Task", "priority": 1, "estimated_days": 2, "task_remark": "AI generated"}
+    ])
 
-    def mock_get_ai_provider_success():
-        return MockAIProvider()
-
-    monkeypatch.setattr(timeline_service_module, "get_ai_provider", mock_get_ai_provider_success)
+    monkeypatch.setattr(timeline_service_module, "get_default_llm", MagicMock(return_value=mock_llm))
+    monkeypatch.setattr(timeline_service_module, "generate_tasks", mock_generate_tasks)
 
     success = client.post(
         f"/api/timelines/{timeline_id}/generate-tasks",
@@ -451,15 +451,9 @@ def test_generate_tasks_with_ai_success_and_json_decode_error(client, monkeypatc
     assert payload["generatedCount"] == 1
     assert len(payload["tasks"]) == 2
 
-    # Mock AI provider with invalid JSON response
-    class MockAIProviderBadJson:
-        def generate_content(self, system_prompt, user_message, response_format="json"):
-            return "not-json"
-
-    def mock_get_ai_provider_bad_json():
-        return MockAIProviderBadJson()
-
-    monkeypatch.setattr(timeline_service_module, "get_ai_provider", mock_get_ai_provider_bad_json)
+    # Mock generate_tasks with ValueError (invalid JSON from LLM)
+    mock_generate_tasks_error = MagicMock(side_effect=ValueError("Invalid JSON from LLM"))
+    monkeypatch.setattr(timeline_service_module, "generate_tasks", mock_generate_tasks_error)
 
     bad_json = client.post(
         f"/api/timelines/{timeline_id}/generate-tasks",

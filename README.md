@@ -2,7 +2,7 @@
 
 基於 Vue 3 + Flask 的專案管理與協作平台，整合 Google Gemini AI 實現智能任務生成。
 
-> **開發狀態**：Phase 1~5.6 已完成 ✅（前端 `85/85`、後端最新回歸 `144 passed`）；Backend CI 已啟用 pytest + coverage 報告，Phase 6 主線為「AI 產品化 + PostgreSQL 開發遷移 + 群組快照」。
+> **開發狀態**：Phase 1~5.6 已完成 ✅（前端 `85/85`、後端回歸 `153 passed`）；Phase 6.6 LangChain 遷移核心完成 ✅ 與文檔化完善（PromptTemplate 修復、舊代碼清理、統一流程驗證）；Backend CI 已啟用 pytest + coverage 報告，Phase 6 重點為「AI 產品化 + PostgreSQL 開發遷移 + Copilot MCP 整合」。
 
 ## 功能模組
 
@@ -48,6 +48,8 @@ prajekt/
 │   ├── blueprints/               # Route 層
 │   ├── services/                 # Business 層
 │   ├── repositories/             # 資料查詢層（2026/04 收斂）
+│   ├── chains/                   # LangChain chains/workflows（Phase 6.6）
+│   ├── prompts/                  # PromptTemplate 管理（Phase 6.6）
 │   ├── models/                   # SQLAlchemy ORM
 │   ├── realtime/                 # Socket 事件
 │   │   └── socket_events.py
@@ -67,11 +69,16 @@ prajekt/
 │       ├── stores/               # Pinia（含 __tests__）
 │       ├── composables/
 │       ├── utils/
-│       ├── types/
+│       ├── types/                # `index.ts` + domain type files
+│       ├── styles/
 │       ├── views/
 │       └── router/
 │
 ├── docs/                         # 開發筆記與流程文件（納入版控）
+│   ├── 進度追蹤.md
+│   ├── 重構計畫.md
+│   └── workflows/
+├── mcp_server.py                 # MCP 工具伺服器
 ├── scripts/
 │   └── count_loc.py
 ├── 重構計畫.md
@@ -287,7 +294,7 @@ pytest --cov=blueprints --cov=services --cov=models --cov-report=term-missing --
 - **API Base URL**：前端透過 `VITE_API_BASE_URL` 環境變數配置，預設為 `http://localhost:5000/api`
 - **Token 刷新**：access token 過期時，Axios 攔截器會自動使用 refresh token 換新，無需手動處理
 - **開發資料庫**：Phase 6 主線改為 PostgreSQL；SQLite 保留舊環境相容與資料比對用途
-- **AI 功能**：需要有效的 Google API Key，可於 [Google AI Studio](https://aistudio.google.com/app/apikey) 免費申請；目前生產驗收不包含 AI 任務生成
+- **AI 功能**：需要有效的 Google API Key，可於 [Google AI Studio](https://aistudio.google.com/app/apikey) 免費申請；目前已完成本地完整鏈路，雲端環境建議以受控方式逐步驗證
 - **Payload 契約**：請參考 `docs/payload-contracts.md`，前後端 update/create 請遵守 allowlist
 - **文件同步流程**：請參考 `docs/文件更新與發布流程.md`
 
@@ -306,8 +313,10 @@ pytest --cov=blueprints --cov=services --cov=models --cov-report=term-missing --
 	- 6.1：AI Provider 收斂（Gemini 主線 + 可替換 Adapter）✅
 	- 6.2：Task Comment 智能摘要（已完成核心版）✅
 	- 6.3：RAG-B 群組快照（核心流程完成，採行動導向 Digest）✅
-	- **6.3+**：Copilot + MCP 整合（自然語言路由至後端工具）✅
 	- 6.4：群組與專案聯動 / RAG-C 週回顧（待開始）⏳
+	- 6.5：MCP 工具擴展與文檔收斂（2/3 工具）🟡
+	- 6.6：LangChain 遷移與統一路徑（PromptTemplate 修復 + 文檔化）✅
+	- **6.3+**：Copilot + MCP 整合（自然語言路由至後端工具）✅
 	- 邊界：不建立 staging、不新增雲端擴展部署
 
 ## 環境需求

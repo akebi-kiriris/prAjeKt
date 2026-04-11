@@ -86,6 +86,9 @@ docs/
 # README 保留追蹤
 !README.md
 
+# Ignore spec directory used by Copilot agent and tooling
+.spec/
+
 # 其他
 *.bak
 

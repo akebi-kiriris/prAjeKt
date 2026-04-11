@@ -3,7 +3,11 @@
 from abc import ABC, abstractmethod
 import json
 import os
-import warnings
+from typing import Any
+
+from langchain_core.messages import HumanMessage, SystemMessage
+
+from chains.llm_factory import get_default_llm
 
 
 class AIProvider(ABC):
@@ -29,10 +33,14 @@ class AIProvider(ABC):
 
 
 class GeminiProvider(AIProvider):
-    """Google Gemini AI Provider"""
+    """Google Gemini AI Provider - 使用 LangChain"""
 
-    def __init__(self, api_key: str = None, model: str = "gemini-2.5-flash-lite"):
+    def __init__(self, api_key: str = None, model: str = None):
         self.api_key = api_key or os.getenv("GOOGLE_API_KEY")
+        
+        # 優先使用 AI_MODEL 環境變數，或傳入的 model 參數，最後回退預設值
+        if model is None:
+            model = os.getenv("AI_MODEL") or "gemini-2.5-flash-lite"
         self.model = model
 
         if not self.api_key:
@@ -40,31 +48,64 @@ class GeminiProvider(AIProvider):
                 "Gemini 服務配置不完整：GOOGLE_API_KEY 未設定。"
             )
 
+        try:
+            self.llm = get_default_llm(
+                provider="google-generativeai",
+                api_key=self.api_key,
+                model_name=self.model,
+                temperature=float(os.getenv("LLM_TEMPERATURE_DEFAULT", "0.2")),
+            )
+        except Exception as exc:
+            raise RuntimeError(f"Gemini 服務初始化失敗：{str(exc)}") from exc
+
+    @staticmethod
+    def _to_text(response: Any) -> str:
+        content = getattr(response, "content", response)
+
+        if isinstance(content, str):
+            return content.strip()
+
+        if isinstance(content, list):
+            parts = []
+            for item in content:
+                if isinstance(item, str):
+                    parts.append(item)
+                elif isinstance(item, dict):
+                    text = item.get("text")
+                    if isinstance(text, str):
+                        parts.append(text)
+            return "\n".join(part for part in parts if part).strip()
+
+        return str(content or "").strip()
+
     def generate_content(self, system_prompt: str, user_message: str, response_format: str = "json") -> str:
-        """使用 Gemini 生成內容"""
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", FutureWarning)
-            import google.generativeai as genai
+        """使用 LangChain 生成內容並回傳文字（由呼叫端解析 JSON）"""
+
+        format_hint = (
+            "請只輸出 JSON 陣列，不要附加說明文字。"
+            if response_format == "json_array"
+            else "請只輸出 JSON 物件，不要附加說明文字。"
+        )
+
+        final_system_prompt = f"{system_prompt}\n\n{format_hint}"
 
         try:
-            genai.configure(api_key=self.api_key)
-            model = genai.GenerativeModel(self.model)
-
-            # 支援不同的 response 格式
-            generation_config = {
-                "response_mime_type": "application/json",
-                "temperature": 0.2 if response_format == "json" else 0.7,
-            }
-
-            response = model.generate_content(
-                f"{system_prompt}\n\n{user_message}",
-                generation_config=generation_config,
+            response = self.llm.invoke(
+                [
+                    SystemMessage(content=final_system_prompt),
+                    HumanMessage(content=user_message),
+                ]
             )
-            return response.text
+
+            result = self._to_text(response)
+            if not result:
+                raise RuntimeError("Gemini 回應為空")
+            return result
         except Exception as e:
-            raise RuntimeError(
-                f"Gemini 服務暫時不可用：{str(e)}"
-            )
+            error_msg = str(e)
+            if "API_KEY" in error_msg or "api_key" in error_msg.lower():
+                raise RuntimeError(f"Gemini 服務配置不完整：{error_msg}") from e
+            raise RuntimeError(f"Gemini 服務暫時不可用：{error_msg}") from e
 
 
 class MockProvider(AIProvider):

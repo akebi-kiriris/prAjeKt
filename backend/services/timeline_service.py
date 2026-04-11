@@ -2,8 +2,6 @@ from functools import wraps
 from datetime import datetime, timedelta, timezone
 import json
 import os
-import re
-import warnings
 
 from flask import jsonify
 from flask_jwt_extended import get_jwt_identity
@@ -15,7 +13,7 @@ from models.task_user import TaskUser
 from models.timeline import Timeline
 from models.timeline_user import TimelineUser
 from models.user import User
-from services.ai_provider import get_ai_provider
+from chains import generate_tasks, get_default_llm
 from repositories.timeline_repository import (
     get_active_tasks_by_timeline_id,
     get_active_tasks_by_timeline_id_ordered_end_date,
@@ -196,70 +194,6 @@ def _build_ai_task_prompt(project_name, description, existing_tasks_info):
                 """
 
 
-def _strip_markdown_fence(text):
-    stripped = text.strip()
-    if stripped.startswith('```'):
-        stripped = re.sub(r'^```(?:json)?\s*', '', stripped, flags=re.IGNORECASE)
-        stripped = re.sub(r'\s*```$', '', stripped)
-    return stripped.strip()
-
-
-def _extract_first_json_array(text):
-    if not isinstance(text, str):
-        return None
-
-    start = text.find('[')
-    if start < 0:
-        return None
-
-    depth = 0
-    in_string = False
-    escaped = False
-
-    for i in range(start, len(text)):
-        ch = text[i]
-
-        if in_string:
-            if escaped:
-                escaped = False
-            elif ch == '\\':
-                escaped = True
-            elif ch == '"':
-                in_string = False
-            continue
-
-        if ch == '"':
-            in_string = True
-            continue
-
-        if ch == '[':
-            depth += 1
-        elif ch == ']':
-            depth -= 1
-            if depth == 0:
-                return text[start:i + 1]
-
-    return None
-
-
-def _parse_ai_task_response(raw_text):
-    cleaned = _strip_markdown_fence(raw_text) if isinstance(raw_text, str) else ''
-    if not cleaned:
-        raise TimelineAIGenerationError('json_decode_error', 'AI 回應解析失敗')
-
-    try:
-        return json.loads(cleaned)
-    except json.JSONDecodeError:
-        extracted_json = _extract_first_json_array(cleaned)
-        if not extracted_json:
-            raise TimelineAIGenerationError('json_decode_error', 'AI 回應解析失敗')
-
-        try:
-            return json.loads(extracted_json)
-        except json.JSONDecodeError:
-            raise TimelineAIGenerationError('json_decode_error', 'AI 回應解析失敗')
-
-
 def _normalize_generated_tasks(generated_tasks, timeline_id):
     if not isinstance(generated_tasks, list):
         raise TimelineAIGenerationError('invalid_payload', 'AI 回傳格式錯誤')
@@ -290,20 +224,20 @@ def generate_timeline_tasks_with_ai(timeline_id, project_name, description=''):
     prompt = _build_ai_task_prompt(project_name, description, existing_tasks_info)
 
     try:
-        provider = get_ai_provider()
-        raw_text = provider.generate_content(
-            "你是一個專業的專案管理助手。請根據以下專案資訊生成任務清單，回傳 JSON 陣列。",
-            prompt,
-            response_format="json_array"
+        llm = get_default_llm(provider="google-generativeai")
+        parsed = generate_tasks(
+            llm=llm,
+            project_name=project_name,
+            project_description=description if isinstance(description, str) else "",
+            user_input=prompt,
+            user_name="timeline_member",
         )
-    except RuntimeError as exc:
-        # 檢查是否是 API key 缺失的錯誤
-        if "GOOGLE_API_KEY" in str(exc):
+    except (RuntimeError, ValueError) as exc:
+        error_str = str(exc)
+        if "GOOGLE_API_KEY" in error_str:
             raise TimelineAIGenerationError('missing_api_key', 'AI 服務配置不完整') from exc
-        else:
-            raise TimelineAIGenerationError('generation_failed', 'AI 生成失敗，請稍後再試') from exc
+        raise TimelineAIGenerationError('generation_failed', 'AI 生成失敗，請稍後再試') from exc
 
-    parsed = _parse_ai_task_response(raw_text)
     generated_tasks = _normalize_generated_tasks(parsed, timeline_id)
     all_tasks = existing_tasks_info + generated_tasks
 

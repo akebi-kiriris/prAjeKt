@@ -1205,15 +1205,16 @@ def test_generate_timeline_tasks_with_ai_success_and_json_decode_error(app, monk
     db.session.add(existing_task)
     db.session.commit()
 
-    # Mock successful AI provider response
-    class MockAIProviderSuccess:
-        def generate_content(self, system_prompt, user_message, response_format="json"):
-            return '[{"name":"service ai task","priority":1,"estimated_days":2,"task_remark":"from service"}]'
+    # Mock successful LangChain generate_tasks response
+    from unittest.mock import MagicMock
+    mock_llm = MagicMock()
+    mock_generate_tasks = MagicMock(return_value=[
+        {"name": "service ai task", "priority": 1, "estimated_days": 2, "task_remark": "from chain"}
+    ])
 
-    def mock_get_ai_provider_success():
-        return MockAIProviderSuccess()
-
-    monkeypatch.setattr(timeline_service_module, "get_ai_provider", mock_get_ai_provider_success)
+    # Patch both get_default_llm and generate_tasks at timeline_service module level
+    monkeypatch.setattr("services.timeline_service.get_default_llm", MagicMock(return_value=mock_llm))
+    monkeypatch.setattr("services.timeline_service.generate_tasks", mock_generate_tasks)
 
     payload = generate_timeline_tasks_with_ai(
         timeline_id=timeline.id,
@@ -1227,15 +1228,9 @@ def test_generate_timeline_tasks_with_ai_success_and_json_decode_error(app, monk
     assert payload["tasks"][1]["name"] == "service ai task"
     assert payload["tasks"][1]["isExisting"] is False
 
-    # Mock AI provider with invalid JSON response
-    class MockAIProviderBadJson:
-        def generate_content(self, system_prompt, user_message, response_format="json"):
-            return "not-json"
-
-    def mock_get_ai_provider_bad_json():
-        return MockAIProviderBadJson()
-
-    monkeypatch.setattr(timeline_service_module, "get_ai_provider", mock_get_ai_provider_bad_json)
+    # Mock generate_tasks with ValueError (invalid JSON from LLM)
+    mock_generate_tasks_error = MagicMock(side_effect=ValueError("Invalid JSON from LLM"))
+    monkeypatch.setattr("services.timeline_service.generate_tasks", mock_generate_tasks_error)
 
     with pytest.raises(TimelineAIGenerationError) as excinfo:
         generate_timeline_tasks_with_ai(
@@ -1244,7 +1239,7 @@ def test_generate_timeline_tasks_with_ai_success_and_json_decode_error(app, monk
             description="service layer prompt",
         )
 
-    assert excinfo.value.code == "json_decode_error"
+    assert excinfo.value.code == "generation_failed"
 
 
 def test_timeline_role_and_task_access_resolution(app):
