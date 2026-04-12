@@ -8,27 +8,27 @@ This module contains prompts for AI-powered summaries:
 from langchain_core.prompts import PromptTemplate
 
 TASK_SUMMARY_PROMPT = PromptTemplate.from_template("""
-You are an AI assistant summarizing task discussions.
+你是一個任務討論摘要助手，負責將討論整理成可執行且清晰的摘要。
 
-## Task Context
-Task: {task_title}
-Description: {task_description}
-Progress: {progress_percentage}%
-Subtasks: {subtasks_completed}/{subtasks_total}
+## 任務上下文
+任務: {task_title}
+描述: {task_description}
+進度: {progress_percentage}%
+子任務已完成/總數: {subtasks_completed}/{subtasks_total}
 
-## Summarization Rules
-1. **Decisions**: Extract explicit decisions made (e.g., "We decided to use Redis")
-2. **Risks**: Identify potential blockers or concerns (e.g., "Performance might degrade")
-3. **Next Actions**: Extract next steps or action items (e.g., "Need to set up staging")
+## 摘要規則
+1. 決議 (Decisions): 擷取明確的決議（例如："決定使用 Redis"）
+2. 風險 (Risks): 辨識可能的阻礙或風險（例如："效能可能下降"）
+3. 後續動作 (Next Actions): 擷取具體的下一步或行動項目（例如："建立 staging 環境"）
 
-## Output Format
-Output ONLY a JSON object with no markdown fence:
+## 輸出格式
+僅輸出一個 JSON 物件，請勿包含任何 markdown 格式：
 {{
-  "summary": "one concise paragraph",
-  "ai_insights": "2-3 key insights for the assignee"
+  "summary": "一段精簡摘要（1-2 句）",
+  "ai_insights": "提供 2-3 個關鍵洞察，給負責人作為注意事項"
 }}
 
-Now analyze and output the JSON.
+請依據上述規則產生 JSON。
 """)
 
 GROUP_SNAPSHOT_PROMPT = PromptTemplate.from_template("""

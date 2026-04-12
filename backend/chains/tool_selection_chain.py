@@ -1,15 +1,21 @@
 """工具選擇鏈
 
 根據使用者輸入為 MCP 工具選擇建立 LangChain 鏈。
+支持 Pydantic v2 驗證層，帶有優雅降級到現有 JSON 提取函數。
 """
 
 import json
 import re
+import logging
 from typing import Any, Dict, Optional, List
+from pydantic import ValidationError
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables import RunnableSequence
 from prompts.tool_selector import TOOL_SELECTOR_PROMPT
 from chains.prompt_manager import PromptManager
+from chains.schemas import ToolSelection
+
+logger = logging.getLogger(__name__)
 
 
 def _strip_markdown_fence(text: str) -> str:
@@ -59,22 +65,56 @@ def _extract_first_json_object(text: str) -> str | None:
 
 
 def _parse_tool_selection(raw_result: str) -> Dict[str, Any]:
+    """使用 Pydantic 驗證來解析和驗證工具選擇結果
+    
+    驗證策略（優先順序）:
+    1. 清理 markdown 圍欄 → JSON 解析 → Pydantic 驗證
+    2. JSON 提取失敗時 → 使用 _extract_first_json_object()
+    3. Pydantic 驗證失敗時 → 記錄並降級到原始 JSON 字典
+    
+    Args:
+        raw_result: 原始 LLM 文本輸出
+        
+    Returns:
+        經過驗證的工具選擇字典（含 tool_name、arguments、reason）
+        
+    Raises:
+        ValueError: 文本為空或完全無法解析
+    """
     cleaned = _strip_markdown_fence(raw_result)
     if not cleaned:
-        raise ValueError("Tool selection output is empty")
+        raise ValueError("工具選擇輸出為空")
 
     try:
         parsed = json.loads(cleaned)
     except json.JSONDecodeError:
         extracted = _extract_first_json_object(cleaned)
         if not extracted:
-            raise ValueError("Failed to parse tool selection JSON")
+            raise ValueError("無法解析工具選擇 JSON")
         parsed = json.loads(extracted)
 
     if not isinstance(parsed, dict):
-        raise ValueError("Tool selection output must be a JSON object")
+        raise ValueError("工具選擇輸出必須是 JSON 物件")
 
-    return parsed
+    # Pydantic 驗證層
+    try:
+        # 試圖用 Pydantic 驗證工具選擇
+        tool_obj = ToolSelection.model_validate(parsed)
+        return tool_obj.model_dump()
+    except ValidationError as e:
+        # 記錄驗證錯誤但不終止 - 降級到原始字典
+        logger.warning(f"工具選擇 Pydantic 驗證失敗: {e}")
+        logger.warning(f"降級使用原始工具選擇字典: {parsed}")
+        # 檢查最少必需欄位
+        if not all(key in parsed for key in ["tool_name", "arguments", "reason"]):
+            raise ValueError(f"工具選擇缺少必需欄位: {parsed}")
+        return parsed
+    except Exception as e:
+        logger.error(f"工具選擇驗證期間發生意外錯誤: {e}，原始結果: {parsed}")
+        # 最後降級檢查
+        if not all(key in parsed for key in ["tool_name", "arguments", "reason"]):
+            raise ValueError(f"工具選擇無效: {parsed}")
+        return parsed
 
 
 def _bind_llm_config(llm: Any, config: Dict[str, Any]) -> Any:
@@ -94,7 +134,7 @@ def create_tool_selection_chain(llm: Any) -> RunnableSequence:
         llm: LangChain LLM 實例
 
     Returns:
-        RunnableSequence for tool selection with string output parsing
+        選擇工具的 RunnableSequence
     """
     prompt_mgr = PromptManager()
     config = prompt_mgr.get_config("tool_selection")
@@ -112,23 +152,23 @@ def select_tools(
     context: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """
-    Select appropriate tools for user input using LangChain.
+    使用 LangChain 為使用者輸入選擇適當的工具。
 
     Args:
-        llm: LangChain LLM instance
-        user_input: User's natural language request
-        available_tools: List of available tool descriptions
-        context: Additional context for tool selection
+        llm: LangChain LLM 實例
+        user_input: 使用者的自然語言要求
+        available_tools: 可用工具的描述列表
+        context: 工具選擇的附加上下文
 
     Returns:
-        Dictionary with selected tools and reasoning
+        包含選中工具及理由的字典
 
     Raises:
-        ValueError: If tool selection fails
+        ValueError: 工具選擇失敗時
     """
     chain = create_tool_selection_chain(llm)
 
-    # Format tools for the prompt
+    # 整理工具描述供 prompt 使用
     tools_str = "\n".join(
         [
             f"- {str(tool.get('name') or '').strip()}: {str(tool.get('description') or '').strip()}"
@@ -156,21 +196,21 @@ def select_tools(
 
         return _parse_tool_selection(raw_result)
     except (json.JSONDecodeError, ValueError) as e:
-        raise ValueError(f"Failed to select tools: {str(e)}")
+        raise ValueError(f"工具選擇失敗：{str(e)}")
 
 
 def parse_tool_selection_result(raw_result: str) -> Dict[str, Any]:
     """
-    Parse raw LLM output for tool selection.
+    解析 LLM 輸出的工具選擇結果。
 
     Args:
-        raw_result: Raw string output from LLM
+        raw_result: LLM 的原始字串輸出
 
     Returns:
-        Parsed dictionary with selected tools
+        解析後的工具選擇字典
     """
     try:
         return _parse_tool_selection(raw_result)
     except ValueError:
-        # Fallback: return empty selection
-        return {"tools": [], "reasoning": "Unable to parse tool selection"}
+        # Fallback: 回傳空的選擇
+        return {"tools": [], "reasoning": "無法解析工具選擇"}

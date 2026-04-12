@@ -54,7 +54,7 @@ def create_google_generative_ai(
         google_api_key=api_key,
         model=model_name,
         temperature=temperature,
-        max_output_tokens=max_tokens or 2048,
+        max_output_tokens=max_tokens or 4096,
     )
 
     return llm
