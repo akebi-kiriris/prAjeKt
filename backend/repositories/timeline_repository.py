@@ -1,5 +1,8 @@
+from sqlalchemy import or_
+
 from models import db
 from models.task import Task
+from models.task_comment import TaskComment
 from models.task_user import TaskUser
 from models.timeline import Timeline
 from models.timeline_user import TimelineUser
@@ -50,6 +53,11 @@ def get_timeline_member(timeline_id, user_id):
     return TimelineUser.query.filter_by(timeline_id=timeline_id, user_id=user_id).first()
 
 
+def get_timeline_role(timeline_id, user_id):
+    member = get_timeline_member(timeline_id, user_id)
+    return member.role if member is not None else None
+
+
 def get_user_by_email(email):
     return User.query.filter_by(email=email).first()
 
@@ -62,6 +70,10 @@ def get_task_users_by_task_ids(task_ids):
     if not task_ids:
         return []
     return TaskUser.query.filter(TaskUser.task_id.in_(task_ids)).all()
+
+
+def get_task_user_membership(task_id, user_id):
+    return TaskUser.query.filter_by(task_id=task_id, user_id=user_id).first()
 
 
 def get_users_by_ids(user_ids):
@@ -77,3 +89,109 @@ def get_active_timelines_by_ids(timeline_ids):
         Timeline.id.in_(timeline_ids),
         Timeline.deleted_at.is_(None),
     ).all()
+
+
+def get_timeline_by_id(timeline_id):
+    return db.session.get(Timeline, timeline_id)
+
+
+def soft_delete_tasks_by_timeline_id(timeline_id, deleted_at):
+    return Task.query.filter_by(timeline_id=timeline_id).update(
+        {'deleted_at': deleted_at},
+        synchronize_session=False,
+    )
+
+
+def soft_delete_tasks_by_ids(task_ids, deleted_at):
+    if not task_ids:
+        return 0
+
+    return Task.query.filter(Task.task_id.in_(task_ids)).update(
+        {'deleted_at': deleted_at},
+        synchronize_session=False,
+    )
+
+
+def list_recent_task_comments_for_timeline_period(timeline_id, period_start_dt, period_end_dt, limit=20):
+    return (
+        TaskComment.query.join(Task, Task.task_id == TaskComment.task_id)
+        .filter(
+            Task.timeline_id == timeline_id,
+            Task.deleted_at.is_(None),
+            TaskComment.deleted_at.is_(None),
+            TaskComment.created_at >= period_start_dt,
+            TaskComment.created_at < period_end_dt,
+        )
+        .order_by(TaskComment.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+
+
+def list_task_ids_by_assignee_user_id(user_id):
+    return [task_user.task_id for task_user in TaskUser.query.filter(TaskUser.user_id == user_id).all()]
+
+
+def list_task_ids_by_assignee_user_id_within(user_id, task_ids):
+    if not task_ids:
+        return []
+
+    return [
+        task_user.task_id
+        for task_user in TaskUser.query.filter(
+            TaskUser.user_id == user_id,
+            TaskUser.task_id.in_(task_ids),
+        ).all()
+    ]
+
+
+def list_cross_project_active_tasks_for_assignee(
+    assignee_user_id,
+    current_timeline_id,
+    assignee_task_id_set,
+    excluded_task_id=None,
+):
+    query = Task.query.filter(
+        Task.deleted_at.is_(None),
+        Task.completed == False,
+        Task.timeline_id.isnot(None),
+        Task.timeline_id != current_timeline_id,
+    )
+
+    if assignee_task_id_set:
+        query = query.filter(
+            or_(
+                Task.user_id == assignee_user_id,
+                Task.task_id.in_(assignee_task_id_set),
+            )
+        )
+    else:
+        query = query.filter(Task.user_id == assignee_user_id)
+
+    if excluded_task_id is not None:
+        query = query.filter(Task.task_id != excluded_task_id)
+
+    return query.all()
+
+
+def list_active_tasks_for_assignee(assignee_user_id, assignee_task_id_set, excluded_task_id=None):
+    query = Task.query.filter(
+        Task.deleted_at.is_(None),
+        Task.completed == False,
+        Task.timeline_id.isnot(None),
+    )
+
+    if assignee_task_id_set:
+        query = query.filter(
+            or_(
+                Task.user_id == assignee_user_id,
+                Task.task_id.in_(assignee_task_id_set),
+            )
+        )
+    else:
+        query = query.filter(Task.user_id == assignee_user_id)
+
+    if excluded_task_id is not None:
+        query = query.filter(Task.task_id != excluded_task_id)
+
+    return query.all()

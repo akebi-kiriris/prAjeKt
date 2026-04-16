@@ -16,6 +16,8 @@ langgraph
 pydantic>=2.0
 flask-socketio
 requests
+networkx>=3.0
+tenacity>=8.0
 mcp
 pytest
 pytest-cov

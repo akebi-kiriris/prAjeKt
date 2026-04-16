@@ -87,6 +87,7 @@ export interface Task {
   task_id: number;
   name: string;
   completed: boolean;
+  completed_at: string | null;
   timeline_id: number | null;
   priority: number;
   status: TaskStatus;
@@ -112,6 +113,7 @@ export interface CreateTaskPayload {
   priority?: number;
   tags?: string | null;
   timeline_id?: number;
+  assignee_user_ids?: number[];
 }
 
 export type TaskUpdatePayload = Partial<Pick<

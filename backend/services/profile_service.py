@@ -1,14 +1,18 @@
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import or_
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from models import db
-from models.task import Task
-from models.task_user import TaskUser
-from models.timeline import Timeline
-from models.timeline_user import TimelineUser
-from models.user import User
+from repositories.profile_repository import (
+    get_user_by_email_excluding_id,
+    get_user_by_id,
+    get_user_by_username_excluding_id,
+    list_active_tasks_for_user_scope,
+    list_active_timelines_by_ids,
+    list_direct_task_ids_for_user,
+    list_timeline_ids_for_user,
+    search_user_by_username_or_email,
+)
 
 
 PROFILE_UPDATE_ALLOWED_FIELDS = {
@@ -57,7 +61,7 @@ def search_user_to_dict(user):
 
 
 def get_profile_user_or_404(user_id):
-    user = db.session.get(User, user_id)
+    user = get_user_by_id(user_id)
     if not user:
         raise ProfileOperationError('使用者不存在', 404)
     return user
@@ -77,7 +81,7 @@ def update_profile_for_user(user_id, data):
         user.name = data['name']
 
     if 'username' in data:
-        if data['username'] and User.query.filter(User.username == data['username'], User.id != user_id).first():
+        if data['username'] and get_user_by_username_excluding_id(data['username'], user_id):
             raise ProfileOperationError('此用戶名已被使用', 409)
         user.username = data['username'] if data['username'] else None
 
@@ -88,7 +92,7 @@ def update_profile_for_user(user_id, data):
         if not isinstance(data['email'], str) or not data['email'].strip():
             raise ProfileOperationError('email 必須是非空字串', 400)
         normalized_email = data['email'].strip()
-        if User.query.filter(User.email == normalized_email, User.id != user_id).first():
+        if get_user_by_email_excluding_id(normalized_email, user_id):
             raise ProfileOperationError('此 email 已被使用', 409)
         user.email = normalized_email
 
@@ -117,9 +121,7 @@ def search_user_by_query(query):
     if not normalized_query:
         raise ProfileOperationError('請提供搜尋條件', 400)
 
-    user = User.query.filter(
-        (User.username == normalized_query) | (User.email == normalized_query)
-    ).first()
+    user = search_user_by_username_or_email(normalized_query)
 
     if not user:
         raise ProfileOperationError('找不到使用者', 404)
@@ -130,19 +132,9 @@ def search_user_by_query(query):
 def build_chart_stats_for_user(user_id):
     today = datetime.now(timezone.utc).date()
 
-    timeline_ids = [tu.timeline_id for tu in TimelineUser.query.filter_by(user_id=user_id).all()]
-    direct_task_ids = [tu.task_id for tu in TaskUser.query.filter_by(user_id=user_id).all()]
-
-    conditions = [Task.user_id == user_id]
-    if direct_task_ids:
-        conditions.append(Task.task_id.in_(direct_task_ids))
-    if timeline_ids:
-        conditions.append(Task.timeline_id.in_(timeline_ids))
-
-    tasks = Task.query.filter(
-        Task.deleted_at.is_(None),
-        or_(*conditions),
-    ).all()
+    timeline_ids = list_timeline_ids_for_user(user_id)
+    direct_task_ids = list_direct_task_ids_for_user(user_id)
+    tasks = list_active_tasks_for_user_scope(user_id, direct_task_ids, timeline_ids)
 
     status_keys = ['pending', 'in_progress', 'review', 'completed', 'cancelled']
     status_dist = {key: 0 for key in status_keys}
@@ -167,10 +159,7 @@ def build_chart_stats_for_user(user_id):
     if timeline_ids:
         timelines_map = {
             timeline.id: timeline.name
-            for timeline in Timeline.query.filter(
-                Timeline.id.in_(timeline_ids),
-                Timeline.deleted_at.is_(None),
-            ).all()
+            for timeline in list_active_timelines_by_ids(timeline_ids)
         }
     else:
         timelines_map = {}

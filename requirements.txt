@@ -33,6 +33,8 @@ eventlet==0.33.3
 
 # Utilities
 requests==2.31.0
+networkx>=3.0
+tenacity>=8.0
 
 # MCP
 mcp>=1.0.0

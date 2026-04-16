@@ -1,10 +1,17 @@
 import os
 
 from models import db
-from models.task import Task
-from models.task_user import TaskUser
-from models.timeline import Timeline
-from models.timeline_user import TimelineUser
+from repositories.trash_repository import (
+    get_deleted_task_by_owner,
+    get_deleted_timeline_by_owner,
+    list_deleted_member_tasks,
+    list_deleted_member_timelines,
+    list_deleted_owned_tasks,
+    list_deleted_owned_timelines,
+    list_member_task_ids,
+    list_member_timeline_ids,
+    list_tasks_by_timeline_id,
+)
 
 
 class TrashOperationError(Exception):
@@ -43,32 +50,16 @@ def remove_task_files(task):
 
 
 def get_trash_payload(user_id):
-    own_deleted_tasks = Task.query.filter_by(user_id=user_id).filter(Task.deleted_at.isnot(None)).all()
+    own_deleted_tasks = list_deleted_owned_tasks(user_id)
 
-    assigned_ids = [tu.task_id for tu in TaskUser.query.filter_by(user_id=user_id).all()]
-    assigned_deleted = (
-        Task.query.filter(
-            Task.task_id.in_(assigned_ids),
-            Task.deleted_at.isnot(None),
-            Task.user_id != user_id,
-        ).all()
-        if assigned_ids
-        else []
-    )
+    assigned_ids = list_member_task_ids(user_id)
+    assigned_deleted = list_deleted_member_tasks(user_id, assigned_ids)
 
     tasks_result = [trash_task_to_dict(task, user_id) for task in own_deleted_tasks + assigned_deleted]
 
-    own_deleted_timelines = Timeline.query.filter_by(user_id=user_id).filter(Timeline.deleted_at.isnot(None)).all()
-    member_timeline_ids = [tu.timeline_id for tu in TimelineUser.query.filter_by(user_id=user_id).all()]
-    member_deleted_timelines = (
-        Timeline.query.filter(
-            Timeline.id.in_(member_timeline_ids),
-            Timeline.deleted_at.isnot(None),
-            Timeline.user_id != user_id,
-        ).all()
-        if member_timeline_ids
-        else []
-    )
+    own_deleted_timelines = list_deleted_owned_timelines(user_id)
+    member_timeline_ids = list_member_timeline_ids(user_id)
+    member_deleted_timelines = list_deleted_member_timelines(user_id, member_timeline_ids)
 
     timelines_result = [
         trash_timeline_to_dict(timeline, user_id)
@@ -79,7 +70,7 @@ def get_trash_payload(user_id):
 
 
 def restore_task_for_owner(task_id, user_id):
-    task = Task.query.filter_by(task_id=task_id, user_id=user_id).filter(Task.deleted_at.isnot(None)).first()
+    task = get_deleted_task_by_owner(task_id, user_id)
     if not task:
         raise TrashOperationError('找不到該任務，或你沒有權限還原', 404)
 
@@ -92,7 +83,7 @@ def restore_task_for_owner(task_id, user_id):
 
 
 def permanently_delete_task_for_owner(task_id, user_id):
-    task = Task.query.filter_by(task_id=task_id, user_id=user_id).filter(Task.deleted_at.isnot(None)).first()
+    task = get_deleted_task_by_owner(task_id, user_id)
     if not task:
         raise TrashOperationError('找不到該任務，或你沒有權限刪除', 404)
 
@@ -106,7 +97,7 @@ def permanently_delete_task_for_owner(task_id, user_id):
 
 
 def restore_timeline_for_owner(timeline_id, user_id):
-    timeline = Timeline.query.filter_by(id=timeline_id, user_id=user_id).filter(Timeline.deleted_at.isnot(None)).first()
+    timeline = get_deleted_timeline_by_owner(timeline_id, user_id)
     if not timeline:
         raise TrashOperationError('找不到該專案，或你沒有權限還原', 404)
 
@@ -119,12 +110,12 @@ def restore_timeline_for_owner(timeline_id, user_id):
 
 
 def permanently_delete_timeline_for_owner(timeline_id, user_id):
-    timeline = Timeline.query.filter_by(id=timeline_id, user_id=user_id).filter(Timeline.deleted_at.isnot(None)).first()
+    timeline = get_deleted_timeline_by_owner(timeline_id, user_id)
     if not timeline:
         raise TrashOperationError('找不到該專案，或你沒有權限刪除', 404)
 
     try:
-        tasks = Task.query.filter_by(timeline_id=timeline_id).all()
+        tasks = list_tasks_by_timeline_id(timeline_id)
         for task in tasks:
             remove_task_files(task)
             db.session.delete(task)

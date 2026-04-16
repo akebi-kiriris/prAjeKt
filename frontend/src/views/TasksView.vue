@@ -75,6 +75,48 @@
               ></textarea>
             </div>
 
+            <div v-if="taskConflictPreview?.has_conflict" class="p-3 bg-amber-50 border border-amber-200 rounded-xl">
+              <p class="text-sm font-semibold text-amber-700 mb-1">⚠️ 偵測到 {{ taskConflictPreview.conflict_count }} 個排程衝突</p>
+              <div class="text-[11px] text-amber-700/90 space-y-1 mb-2">
+                <p v-if="(taskConflictPreview.cross_project_conflict_count ?? 0) > 0">
+                  跨專案衝突：{{ taskConflictPreview.cross_project_conflict_count }} 個
+                </p>
+                <p v-if="(taskConflictPreview.workload_overload_count ?? 0) > 0">
+                  過載日：{{ taskConflictPreview.workload_overload_count }} 天
+                </p>
+              </div>
+              <ul class="list-disc list-inside text-xs text-amber-700 space-y-1">
+                <li v-for="item in taskConflictPreview.conflicts.slice(0, 3)" :key="`task-form-conflict-${item.task_id}`">
+                  {{ item.name }}（{{ item.start_date }} ~ {{ item.end_date }}）
+                </li>
+              </ul>
+              <div
+                v-if="(taskConflictPreview.workload_overload_days ?? []).length > 0"
+                class="mt-2.5 p-2.5 bg-white/70 border border-amber-200 rounded-lg"
+              >
+                <p class="text-xs font-semibold text-amber-700 mb-1.5">📅 過載日列表</p>
+                <ul class="space-y-1.5 max-h-32 overflow-y-auto pr-1">
+                  <li
+                    v-for="day in taskConflictPreview.workload_overload_days"
+                    :key="`task-overload-${day.date}`"
+                    class="text-xs text-amber-700"
+                  >
+                    <span class="font-medium">{{ formatDate(day.date) || day.date }}</span>
+                    <span class="text-amber-600">：{{ day.projected_task_count }} 件（門檻 {{ day.threshold }}）</span>
+                    <p v-if="day.sample_tasks.length" class="text-[11px] text-amber-600 mt-0.5 line-clamp-1">
+                      既有任務：{{ day.sample_tasks.join('、') }}
+                    </p>
+                  </li>
+                </ul>
+              </div>
+              <p v-if="taskConflictPreview.suggestion" class="text-xs text-amber-600 mt-2">
+                建議改期：{{ taskConflictPreview.suggestion.start_date }} ~ {{ taskConflictPreview.suggestion.end_date }}
+              </p>
+              <p v-if="taskConflictPreview.ai_suggestion" class="text-xs text-amber-700 italic mt-2">
+                💡 {{ taskConflictPreview.ai_suggestion }}
+              </p>
+            </div>
+
             <div class="flex gap-3">
               <button
                 type="submit"
@@ -480,7 +522,7 @@ import { timelineService } from '../services/timelineService';
 import { formatDate, formatDateTime, formatFileSize, isImageFile, getFileIcon } from '../utils/formatters';
 import { downloadFileFromUrl, loadTaskDetailResources } from '../utils/taskDetails';
 import { useConfirm } from '../composables/useConfirm';
-import type { Task, TaskComment, TaskCommentSummary, TaskFile, Subtask, TaskMember, SearchUserResult, ApiErrorPayload } from '../types';
+import type { Task, TaskComment, TaskCommentSummary, TaskFile, Subtask, TaskMember, SearchUserResult, ApiErrorPayload, ResourceConflictResponse } from '../types';
 
 const { confirm } = useConfirm();
 
@@ -506,9 +548,116 @@ const taskForm = ref({
   end_date: '',
   task_remark: ''
 });
+const taskConflictPreview = ref<ResourceConflictResponse | null>(null);
+
+const toDateOnly = (value?: string | null): string | null => {
+  if (!value) return null;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+  return parsed.toISOString().split('T')[0];
+};
+
+const runConflictPrecheckForSubmit = async (): Promise<boolean> => {
+  if (!editingTask.value?.timeline_id) {
+    taskConflictPreview.value = null;
+    return true;
+  }
+
+  if (!taskForm.value.end_date) {
+    taskConflictPreview.value = null;
+    return true;
+  }
+
+  const timelineId = editingTask.value.timeline_id;
+
+  try {
+    const res = await timelineService.conflictCheck(timelineId, {
+      task_id: editingTask.value.task_id,
+      name: taskForm.value.name,
+      start_date: taskForm.value.start_date || null,
+      end_date: taskForm.value.end_date || null,
+    });
+    taskConflictPreview.value = res.data;
+
+    if (!res.data.has_conflict) {
+      return true;
+    }
+
+    const lines = res.data.conflicts
+      .slice(0, 3)
+      .map((item) => `• ${item.name}（${item.start_date} ~ ${item.end_date}）`)
+      .join('\n');
+
+    const suggestion = res.data.suggestion
+      ? `\n\n建議改期：${res.data.suggestion.start_date} ~ ${res.data.suggestion.end_date}`
+      : '';
+
+    return await confirm({
+      title: `偵測到 ${res.data.conflict_count} 個衝突，仍要儲存？`,
+      message: `${lines}${suggestion}`,
+    });
+  } catch (error: unknown) {
+    toast.error(getApiErrorMessage(error, '衝突檢查失敗'));
+    return false;
+  }
+};
+
+const runConflictPrecheckForMemberAssignment = async (
+  task: Task,
+  member: Pick<TaskMember, 'user_id' | 'name'>
+): Promise<boolean> => {
+  if (!task.timeline_id) {
+    return true;
+  }
+
+  const endDate = toDateOnly(task.end_date);
+  if (!endDate) {
+    return true;
+  }
+
+  try {
+    const res = await timelineService.conflictCheck(task.timeline_id, {
+      task_id: task.task_id,
+      name: task.name,
+      start_date: toDateOnly(task.start_date) ?? endDate,
+      end_date: endDate,
+      assignee_user_id: member.user_id,
+      priority: task.priority,
+    });
+
+    if (!res.data.has_conflict) {
+      return true;
+    }
+
+    const message = [
+      `日期衝突：${res.data.conflicts.length} 個`,
+      `跨專案衝突：${res.data.cross_project_conflict_count ?? 0} 個`,
+      `過載日：${res.data.workload_overload_count ?? 0} 天`,
+    ].join('\n');
+
+    const suggestion = res.data.suggestion
+      ? `\n\n建議改期：${res.data.suggestion.start_date} ~ ${res.data.suggestion.end_date}`
+      : '';
+
+    return await confirm({
+      title: `指派給 ${member.name} 前偵測到衝突，仍要指派？`,
+      message: `${message}${suggestion}`,
+    });
+  } catch (error: unknown) {
+    toast.error(getApiErrorMessage(error, '檢查衝突失敗'));
+    return false;
+  }
+};
 
 const handleSubmit = async () => {
   try {
+    const canProceed = await runConflictPrecheckForSubmit();
+    if (!canProceed) {
+      return;
+    }
+
     if (editingTask.value) {
       await store.updateTask(editingTask.value.task_id, taskForm.value);
     } else {
@@ -522,6 +671,7 @@ const handleSubmit = async () => {
 
 const editTask = (task: Task) => {
   editingTask.value = task;
+  taskConflictPreview.value = null;
   taskForm.value = {
     name: task.name,
     start_date: task.start_date ? task.start_date.slice(0, 10) : '',
@@ -553,6 +703,7 @@ const toggleTask = async (task: Task) => {
 const resetForm = () => {
   editingTask.value = null;
   showForm.value = false;
+  taskConflictPreview.value = null;
   taskForm.value = { name: '', start_date: '', end_date: '', task_remark: '' };
 };
 
@@ -753,6 +904,15 @@ const searchShareUser = async () => {
 
 const confirmShare = async () => {
   if (!shareSearchResult.value || !shareTask.value) return;
+
+  const canAssign = await runConflictPrecheckForMemberAssignment(shareTask.value, {
+    user_id: shareSearchResult.value.id,
+    name: shareSearchResult.value.name,
+  });
+  if (!canAssign) {
+    return;
+  }
+
   try {
     await taskService.addMember(shareTask.value.task_id, shareSearchResult.value.id);
     shareInputEmail.value = '';
@@ -767,6 +927,12 @@ const confirmShare = async () => {
 
 const quickAssignMember = async (member: TaskMember) => {
   if (!shareTask.value) return;
+
+  const canAssign = await runConflictPrecheckForMemberAssignment(shareTask.value, member);
+  if (!canAssign) {
+    return;
+  }
+
   try {
     await taskService.addMember(shareTask.value.task_id, member.user_id);
     await loadTaskMembers();

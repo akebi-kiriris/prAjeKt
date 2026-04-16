@@ -1,5 +1,10 @@
 from models import db
-from models.notification import Notification
+from repositories.notification_repository import (
+    count_unread_notifications_for_user,
+    get_notification_for_user,
+    list_notifications_for_user,
+    mark_all_unread_notifications_as_read,
+)
 
 
 class NotificationOperationError(Exception):
@@ -22,21 +27,15 @@ def notification_to_dict(notification):
 
 
 def get_notifications_for_user(user_id, limit=50):
-    return (
-        Notification.query
-        .filter_by(user_id=user_id)
-        .order_by(Notification.created_at.desc())
-        .limit(limit)
-        .all()
-    )
+    return list_notifications_for_user(user_id, limit=limit)
 
 
 def get_unread_count_for_user(user_id):
-    return Notification.query.filter_by(user_id=user_id, is_read=False).count()
+    return count_unread_notifications_for_user(user_id)
 
 
 def mark_notification_as_read(notification_id, user_id):
-    notification = Notification.query.filter_by(id=notification_id, user_id=user_id).first()
+    notification = get_notification_for_user(notification_id, user_id)
     if not notification:
         raise NotificationOperationError('找不到通知', 404)
 
@@ -45,12 +44,12 @@ def mark_notification_as_read(notification_id, user_id):
 
 
 def mark_all_notifications_as_read(user_id):
-    Notification.query.filter_by(user_id=user_id, is_read=False).update({'is_read': True})
+    mark_all_unread_notifications_as_read(user_id)
     db.session.commit()
 
 
 def delete_notification_for_user(notification_id, user_id):
-    notification = Notification.query.filter_by(id=notification_id, user_id=user_id).first()
+    notification = get_notification_for_user(notification_id, user_id)
     if not notification:
         raise NotificationOperationError('找不到通知', 404)
 

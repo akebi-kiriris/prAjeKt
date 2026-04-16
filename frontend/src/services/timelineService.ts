@@ -12,6 +12,9 @@ import type {
   SearchUserResult,
   GenerateTasksRequest,
   GenerateTasksResponse,
+  WeeklyReportResponse,
+  ConflictCheckPayload,
+  ResourceConflictResponse,
 } from '../types';
 
 export const timelineService = {
@@ -29,4 +32,10 @@ export const timelineService = {
   removeMember:     (id: number, userId: number): Promise<AxiosResponse<void>>                   => api.delete(`/timelines/${id}/members/${userId}`),
   upcoming:         (): Promise<AxiosResponse<Timeline[]>>                                       => api.get('/timelines/upcoming'),
   getMemberStats:   (id: number): Promise<AxiosResponse<ProjectStats>>                          => api.get(`/timelines/${id}/member-stats`),
+  getWeeklyReport:  (
+    id: number,
+    params?: { start_date?: string; end_date?: string }
+  ): Promise<AxiosResponse<WeeklyReportResponse>> => api.get(`/timelines/${id}/weekly-report`, { params }),
+  conflictCheck:    (id: number, payload: ConflictCheckPayload): Promise<AxiosResponse<ResourceConflictResponse>> =>
+    api.post(`/timelines/${id}/conflict-check`, payload),
 };

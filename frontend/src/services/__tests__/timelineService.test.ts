@@ -59,6 +59,12 @@ describe('timelineService', () => {
     timelineService.generateTasks(5, { description: '先做 API、再做前端' });
     timelineService.upcoming();
     timelineService.getMemberStats(5);
+    timelineService.getWeeklyReport(5, { start_date: '2026-04-14', end_date: '2026-04-20' });
+    timelineService.conflictCheck(5, {
+      name: '新增任務',
+      start_date: '2026-04-16',
+      end_date: '2026-04-18',
+    });
 
     expect(mockedApi.put).toHaveBeenCalledWith('/timelines/5/remark', { remark: 'memo' });
     expect(mockedApi.post).toHaveBeenCalledWith('/timelines/search_user', { email: 'u@example.com' });
@@ -66,5 +72,13 @@ describe('timelineService', () => {
     expect(mockedApi.post).toHaveBeenCalledWith('/timelines/5/generate-tasks', { description: '先做 API、再做前端' });
     expect(mockedApi.get).toHaveBeenCalledWith('/timelines/upcoming');
     expect(mockedApi.get).toHaveBeenCalledWith('/timelines/5/member-stats');
+    expect(mockedApi.get).toHaveBeenCalledWith('/timelines/5/weekly-report', {
+      params: { start_date: '2026-04-14', end_date: '2026-04-20' },
+    });
+    expect(mockedApi.post).toHaveBeenCalledWith('/timelines/5/conflict-check', {
+      name: '新增任務',
+      start_date: '2026-04-16',
+      end_date: '2026-04-18',
+    });
   });
 });

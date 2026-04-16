@@ -6,6 +6,7 @@ from werkzeug.security import generate_password_hash
 
 from models import db
 from models.notification import Notification
+from models.task_comment import TaskComment
 from models.task import Task
 from models.task_user import TaskUser
 from models.timeline import Timeline
@@ -430,7 +431,7 @@ def test_generate_tasks_with_ai_success_and_json_decode_error(client, monkeypatc
     db.session.add(existing_task)
     db.session.commit()
 
-    # Mock successful LangChain generate_tasks response
+    # 模擬 LangChain 成功回傳 timeline 任務生成結果
     from unittest.mock import MagicMock
     mock_llm = MagicMock()
     mock_generate_tasks = MagicMock(return_value=[
@@ -438,7 +439,7 @@ def test_generate_tasks_with_ai_success_and_json_decode_error(client, monkeypatc
     ])
 
     monkeypatch.setattr(timeline_service_module, "get_default_llm", MagicMock(return_value=mock_llm))
-    monkeypatch.setattr(timeline_service_module, "generate_tasks", mock_generate_tasks)
+    monkeypatch.setattr(timeline_service_module, "generate_timeline_tasks_from_context", mock_generate_tasks)
 
     success = client.post(
         f"/api/timelines/{timeline_id}/generate-tasks",
@@ -451,9 +452,9 @@ def test_generate_tasks_with_ai_success_and_json_decode_error(client, monkeypatc
     assert payload["generatedCount"] == 1
     assert len(payload["tasks"]) == 2
 
-    # Mock generate_tasks with ValueError (invalid JSON from LLM)
+    # 模擬鏈路輔助函式拋出 ValueError（LLM JSON 無效）
     mock_generate_tasks_error = MagicMock(side_effect=ValueError("Invalid JSON from LLM"))
-    monkeypatch.setattr(timeline_service_module, "generate_tasks", mock_generate_tasks_error)
+    monkeypatch.setattr(timeline_service_module, "generate_timeline_tasks_from_context", mock_generate_tasks_error)
 
     bad_json = client.post(
         f"/api/timelines/{timeline_id}/generate-tasks",
@@ -516,6 +517,136 @@ def test_batch_create_tasks_validation_and_success(client):
     assert refreshed_delete is not None
     assert refreshed_delete.deleted_at is not None
     assert new_task is not None
+
+
+def test_get_timeline_weekly_report_returns_completed_and_risk_items(client):
+    owner = _create_user(
+        email="timeline-weekly-api-owner@example.com",
+        password="Password123!",
+        username="timeline_weekly_api_owner",
+    )
+    member = _create_user(
+        email="timeline-weekly-api-member@example.com",
+        password="Password123!",
+        username="timeline_weekly_api_member",
+    )
+
+    headers = _get_auth_headers(client, "timeline-weekly-api-owner@example.com", "Password123!")
+    timeline_id = _create_timeline(client, headers, name="Weekly API Timeline")
+
+    db.session.add(TimelineUser(timeline_id=timeline_id, user_id=member.id, role=1))
+    completed_task = Task(
+        user_id=owner.id,
+        timeline_id=timeline_id,
+        name="本期完成",
+        completed=True,
+        status="completed",
+        end_date=datetime(2026, 4, 15),
+        completed_at=datetime(2026, 4, 15, 9, 0, 0),
+    )
+    risk_task = Task(
+        user_id=member.id,
+        timeline_id=timeline_id,
+        name="本期風險",
+        completed=False,
+        status="in_progress",
+        end_date=datetime(2026, 4, 16),
+    )
+    db.session.add_all([completed_task, risk_task])
+    db.session.flush()
+    db.session.add(
+        TaskComment(
+            task_id=risk_task.task_id,
+            user_id=member.id,
+            task_message="等待後端 schema 更新",
+            created_at=datetime(2026, 4, 16, 11, 0, 0),
+        )
+    )
+    db.session.commit()
+
+    response = client.get(
+        f"/api/timelines/{timeline_id}/weekly-report?start_date=2026-04-14&end_date=2026-04-20",
+        headers=headers,
+    )
+    assert response.status_code == 200
+    payload = response.get_json()
+
+    assert payload["timeline_id"] == timeline_id
+    assert payload["overview"]["completed_tasks"] == 1
+    assert payload["overview"]["at_risk_tasks"] == 1
+    assert payload["overview"]["comment_count"] == 1
+    assert any(item["name"] == "本期完成" for item in payload["completed_tasks"])
+    assert any(item["name"] == "本期風險" for item in payload["risk_items"])
+    assert payload["analysis"]["weekly_goal_total"] == 2
+    assert payload["analysis"]["weekly_goal_completed"] == 1
+    assert payload["analysis"]["progress_signal"] in {"進度領先", "進度穩定", "進度落後"}
+
+
+def test_timeline_conflict_check_api_detects_overlap_and_validates_payload(client):
+    owner = _create_user(
+        email="timeline-conflict-api-owner@example.com",
+        password="Password123!",
+        username="timeline_conflict_api_owner",
+    )
+    headers = _get_auth_headers(client, "timeline-conflict-api-owner@example.com", "Password123!")
+    timeline_id = _create_timeline(client, headers, name="Conflict API Timeline")
+
+    existing_task = Task(
+        user_id=owner.id,
+        timeline_id=timeline_id,
+        name="既有排程",
+        status="in_progress",
+        start_date=datetime(2026, 4, 10),
+        end_date=datetime(2026, 4, 12),
+    )
+    db.session.add(existing_task)
+    db.session.flush()
+    db.session.add(TaskUser(task_id=existing_task.task_id, user_id=owner.id, role=0))
+    db.session.commit()
+
+    conflict_response = client.post(
+        f"/api/timelines/{timeline_id}/conflict-check",
+        headers=headers,
+        json={
+            "name": "新任務",
+            "start_date": "2026-04-11",
+            "end_date": "2026-04-13",
+        },
+    )
+    assert conflict_response.status_code == 200
+
+    payload = conflict_response.get_json()
+    assert payload["has_conflict"] is True
+    assert payload["conflict_count"] >= 1
+    assert payload["conflicts"][0]["task_id"] == existing_task.task_id
+    assert payload["suggestion"]["start_date"] == "2026-04-13"
+    assert payload["cross_project_conflict_count"] == 0
+    assert payload["workload_overload_count"] == 0
+    assert payload["workload_overload_days"] == []
+
+    invalid_response = client.post(
+        f"/api/timelines/{timeline_id}/conflict-check",
+        headers=headers,
+        json={"name": "缺少日期"},
+    )
+    assert invalid_response.status_code == 400
+
+    outsider = _create_user(
+        email="timeline-conflict-api-outsider@example.com",
+        password="Password123!",
+        username="timeline_conflict_api_outsider",
+    )
+    non_member_assignee_response = client.post(
+        f"/api/timelines/{timeline_id}/conflict-check",
+        headers=headers,
+        json={
+            "name": "外部指派",
+            "start_date": "2026-04-11",
+            "end_date": "2026-04-13",
+            "assignee_user_id": outsider.id,
+        },
+    )
+    assert non_member_assignee_response.status_code == 400
 
 
 def test_get_upcoming_timelines_returns_due_and_progress_items(client):

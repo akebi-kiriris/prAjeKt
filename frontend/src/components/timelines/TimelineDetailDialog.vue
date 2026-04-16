@@ -43,6 +43,106 @@
             </div>
           </div>
 
+          <!-- 週報預覽（Phase 7.1） -->
+          <div class="mb-4 p-4 bg-slate-50 border border-slate-200 rounded-xl">
+            <div class="flex items-center justify-between gap-3 mb-3">
+              <div>
+                <p class="text-sm font-semibold text-slate-700">📊 週報預覽</p>
+                <p class="text-xs text-slate-500">完成任務、風險與下一步建議</p>
+              </div>
+              <button
+                @click="fetchWeeklyReport"
+                :disabled="weeklyReportLoading"
+                class="px-3 py-1.5 text-xs font-medium rounded-lg bg-white border border-slate-200 text-slate-600 hover:bg-slate-100 transition-colors disabled:opacity-50"
+              >
+                {{ weeklyReportLoading ? '載入中...' : '重新整理' }}
+              </button>
+            </div>
+
+            <div class="grid grid-cols-2 gap-3 mb-3">
+              <div>
+                <label class="block text-[11px] text-slate-500 mb-1">起始日</label>
+                <input
+                  v-model="weeklyReportRange.start_date"
+                  type="date"
+                  class="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
+                />
+              </div>
+              <div>
+                <label class="block text-[11px] text-slate-500 mb-1">結束日</label>
+                <input
+                  v-model="weeklyReportRange.end_date"
+                  type="date"
+                  class="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
+                />
+              </div>
+            </div>
+
+            <div v-if="weeklyReportError" class="mb-3 p-2.5 text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg">
+              {{ weeklyReportError }}
+            </div>
+
+            <div v-if="weeklyReportLoading" class="text-xs text-slate-500 py-2">正在產生週報...</div>
+
+            <div v-else-if="weeklyReport" class="space-y-3">
+              <div v-if="weeklyReport.ai_summary" class="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                <p class="text-xs font-medium text-blue-700 mb-1">📌 AI 週報摘要</p>
+                <p class="text-xs text-blue-600">{{ weeklyReport.ai_summary }}</p>
+              </div>
+
+              <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
+                <div class="p-2.5 bg-white border border-slate-200 rounded-lg">
+                  <p class="text-[11px] text-slate-500">本期完成</p>
+                  <p class="text-sm font-semibold text-slate-700">{{ weeklyReport.overview.completed_tasks }}</p>
+                </div>
+                <div class="p-2.5 bg-white border border-slate-200 rounded-lg">
+                  <p class="text-[11px] text-slate-500">總任務數</p>
+                  <p class="text-sm font-semibold text-slate-700">{{ weeklyReport.overview.total_tasks }}</p>
+                </div>
+                <div class="p-2.5 bg-white border border-slate-200 rounded-lg">
+                  <p class="text-[11px] text-slate-500">完成率</p>
+                  <p class="text-sm font-semibold text-slate-700">{{ weeklyReport.overview.completion_rate }}%</p>
+                </div>
+                <div class="p-2.5 bg-white border border-slate-200 rounded-lg">
+                  <p class="text-[11px] text-slate-500">風險項目</p>
+                  <p class="text-sm font-semibold text-slate-700">{{ weeklyReport.overview.at_risk_tasks }}</p>
+                </div>
+              </div>
+
+              <div class="grid md:grid-cols-2 gap-3">
+                <div class="p-3 bg-white border border-slate-200 rounded-lg">
+                  <p class="text-xs font-medium text-slate-600 mb-2">本期完成任務</p>
+                  <div v-if="weeklyReport.completed_tasks.length === 0" class="text-xs text-slate-400">本期尚無完成任務</div>
+                  <ul v-else class="space-y-1.5">
+                    <li
+                      v-for="item in weeklyReport.completed_tasks.slice(0, 5)"
+                      :key="`weekly-done-${item.task_id}`"
+                      class="text-xs text-slate-600"
+                    >
+                      ✓ {{ item.name }}
+                      <span class="text-slate-400">（{{ formatDate(item.completed_at || item.due_date) || '未標記' }}）</span>
+                    </li>
+                  </ul>
+                </div>
+
+                <div class="p-3 bg-white border border-slate-200 rounded-lg flex flex-col">
+                  <p class="text-xs font-medium text-slate-600 mb-2">風險清單</p>
+                  <div v-if="weeklyReport.risk_items.length === 0" class="text-xs text-slate-400">本期無風險項目</div>
+                  <ul v-else class="space-y-1.5 overflow-y-auto max-h-48 pr-2">
+                    <li
+                      v-for="item in weeklyReport.risk_items"
+                      :key="`weekly-risk-${item.task_id}`"
+                      class="text-xs text-amber-700"
+                    >
+                      ⚠ {{ item.name }}
+                      <span class="text-amber-600">（{{ item.reason }}，截止 {{ formatDate(item.due_date) || item.due_date }}）</span>
+                    </li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <!-- 任務列表 -->
           <div class="space-y-2">
             <div v-for="task in timelineTasks" :key="task.task_id" class="flex items-center gap-3 p-3 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors group">
@@ -93,12 +193,100 @@
             </select>
           </div>
           <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1.5">指派成員（可多選）</label>
+            <select
+              v-model="addTaskAssigneeIds"
+              multiple
+              class="w-full min-h-30 px-3 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none bg-white text-sm"
+            >
+              <option
+                v-for="member in timelineMembers"
+                :key="`add-assignee-${member.user_id}`"
+                :value="member.user_id"
+              >
+                {{ member.username || member.name }}
+              </option>
+            </select>
+            <p class="text-[11px] text-gray-500 mt-1.5">
+              未選擇時預設分派給自己。若分派給他人，衝突明細會只顯示件數。
+            </p>
+            <div v-if="addTaskAssigneeIds.length > 0" class="mt-2 flex flex-wrap gap-1.5">
+              <span
+                v-for="memberId in addTaskAssigneeIds"
+                :key="`add-assignee-chip-${memberId}`"
+                class="px-2.5 py-1 text-xs rounded-full bg-indigo-50 text-indigo-700 border border-indigo-100"
+              >
+                {{ getTimelineMemberName(memberId) }}
+              </span>
+            </div>
+          </div>
+          <div>
             <label class="block text-sm font-medium text-gray-700 mb-1.5">標籤（逗號分隔）</label>
             <input v-model="taskForm.tags" type="text" placeholder="例如：前端, 重要, Bug" class="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none" />
           </div>
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1.5">備註</label>
             <textarea v-model="taskForm.task_remark" rows="3" placeholder="任務備註（可選）" class="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none resize-none"></textarea>
+          </div>
+          <div v-if="addTaskConflictSummary.hasConflict" class="p-3 bg-amber-50 border border-amber-200 rounded-xl">
+            <p class="text-sm font-semibold text-amber-700 mb-1">⚠️ 偵測到 {{ addTaskConflictSummary.totalSignals }} 個排程衝突訊號</p>
+            <p class="text-[11px] text-amber-700/90 mb-2">依被分派者逐一檢測，分派給他人時僅顯示件數。</p>
+
+            <div class="space-y-2.5">
+              <div
+                v-for="item in addTaskConflictPreviews.filter((entry) => entry.preview.has_conflict)"
+                :key="`add-conflict-assignee-${item.assignee_user_id ?? 'self'}`"
+                class="p-2.5 bg-white/70 border border-amber-200 rounded-lg"
+              >
+                <p class="text-xs font-semibold text-amber-700 mb-1.5">
+                  👤 {{ item.assignee_label }}：{{ item.preview.conflict_count }} 個訊號
+                </p>
+                <div class="text-[11px] text-amber-700/90 space-y-1 mb-2">
+                  <p v-if="(item.preview.cross_project_conflict_count ?? 0) > 0">
+                    跨專案衝突：{{ item.preview.cross_project_conflict_count }} 個
+                  </p>
+                  <p v-if="(item.preview.workload_overload_count ?? 0) > 0">
+                    過載日：{{ item.preview.workload_overload_count }} 天
+                  </p>
+                </div>
+
+                <ul class="list-disc list-inside text-xs text-amber-700 space-y-1">
+                  <li v-for="conflict in item.preview.conflicts.slice(0, 3)" :key="`add-conflict-${item.assignee_user_id ?? 'self'}-${conflict.task_id}`">
+                    {{ conflict.name }}（{{ conflict.reason }}，{{ conflict.start_date }} ~ {{ conflict.end_date }}）
+                  </li>
+                </ul>
+
+                <div
+                  v-if="(item.preview.workload_overload_days ?? []).length > 0"
+                  class="mt-2.5 p-2.5 bg-white/80 border border-amber-200 rounded-lg"
+                >
+                  <p class="text-xs font-semibold text-amber-700 mb-1.5">📅 過載日列表</p>
+                  <ul class="space-y-1.5 max-h-32 overflow-y-auto pr-1">
+                    <li
+                      v-for="day in item.preview.workload_overload_days"
+                      :key="`overload-${item.assignee_user_id ?? 'self'}-${day.date}`"
+                      class="text-xs text-amber-700"
+                    >
+                      <span class="font-medium">{{ formatDate(day.date) || day.date }}</span>
+                      <span class="text-amber-600">：{{ day.projected_task_count }} 件（門檻 {{ day.threshold }}）</span>
+                      <p v-if="day.sample_tasks.length" class="text-[11px] text-amber-600 mt-0.5 line-clamp-1">
+                        既有任務：{{ day.sample_tasks.join('、') }}
+                      </p>
+                      <p v-else class="text-[11px] text-amber-600 mt-0.5">
+                        既有任務：{{ day.existing_task_count }} 件（僅顯示件數）
+                      </p>
+                    </li>
+                  </ul>
+                </div>
+
+                <p v-if="item.preview.suggestion" class="text-xs text-amber-600 mt-2">
+                  建議改期為 {{ item.preview.suggestion.start_date }} ~ {{ item.preview.suggestion.end_date }}
+                </p>
+                <p v-if="item.preview.ai_suggestion" class="text-xs text-amber-700 italic mt-2">
+                  💡 {{ item.preview.ai_suggestion }}
+                </p>
+              </div>
+            </div>
           </div>
           <div class="flex gap-3 pt-2">
             <button type="button" @click="showAddTaskModal = false; resetTaskForm()" class="flex-1 py-2.5 border border-gray-200 text-gray-600 font-medium rounded-xl hover:bg-gray-50 transition-colors">取消</button>
@@ -450,7 +638,7 @@
             <p class="text-gray-400 text-sm mt-2">請稍候，正在分析專案內容</p>
           </div>
           <div v-else-if="aiGeneratedTasks.length === 0" class="py-8">
-            <p class="text-gray-500 mb-4 text-center">可輸入需求情境，讓 Copilot 透過 MCP 生成更貼近專案的任務建議</p>
+            <p class="text-gray-500 mb-4 text-center">可輸入需求情境，讓 AI 透過 MCP 生成更貼近專案的任務建議</p>
             <div class="space-y-3 mb-5">
               <label class="block text-sm font-medium text-gray-700">需求描述（可選）</label>
               <textarea
@@ -462,7 +650,7 @@
               <div class="flex flex-wrap items-center gap-4 text-sm text-gray-600">
                 <label class="inline-flex items-center gap-2 cursor-pointer select-none">
                   <input v-model="useCopilotMcp" type="checkbox" class="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary" />
-                  優先使用 Copilot + MCP 工具路由
+                  優先使用 AI + MCP 工具路由
                 </label>
                 <label class="inline-flex items-center gap-2 cursor-pointer select-none">
                   <input v-model="autoCreateAfterGenerate" type="checkbox" class="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary" />
@@ -472,7 +660,7 @@
             </div>
             <div class="text-center">
               <button @click="generateTasksWithAi" class="px-6 py-3 bg-linear-to-r from-purple-500 to-indigo-500 text-white font-semibold rounded-xl hover:brightness-110 transition-all shadow-lg shadow-purple-200">
-                {{ useCopilotMcp ? '✨ Copilot 智慧生成' : '🤖 開始生成' }}
+                {{ useCopilotMcp ? '✨ AI 智慧生成' : '🤖 開始生成' }}
               </button>
             </div>
           </div>
@@ -545,6 +733,9 @@ import type {
   ApiErrorPayload,
   GenerateTasksResponse,
   CopilotMcpExecuteResponse,
+  WeeklyReportResponse,
+  ConflictCheckPayload,
+  ResourceConflictResponse,
 } from '../../types';
 
 const { confirm } = useConfirm();
@@ -603,16 +794,99 @@ const assignTask = ref<Task | null>(null);
 const taskMembersForAssign = ref<TaskMember[]>([]);
 
 const taskForm = ref<CreateTaskPayload>({ name: '', start_date: '', end_date: '', priority: 2, tags: '', task_remark: '' });
+const addTaskAssigneeIds = ref<number[]>([]);
+const addTaskConflictPreviews = ref<Array<{
+  assignee_user_id: number | null;
+  assignee_label: string;
+  preview: ResourceConflictResponse;
+}>>([]);
+const addTaskConflictSummary = computed(() => {
+  const conflicted = addTaskConflictPreviews.value.filter((item) => item.preview.has_conflict);
+  const totalSignals = conflicted.reduce((sum, item) => sum + item.preview.conflict_count, 0);
+  return {
+    hasConflict: conflicted.length > 0,
+    totalSignals,
+  };
+});
+const weeklyReport = ref<WeeklyReportResponse | null>(null);
+const weeklyReportLoading = ref(false);
+const weeklyReportError = ref('');
+const weeklyReportRange = ref<{ start_date: string; end_date: string }>({ start_date: '', end_date: '' });
+
+const toDateOnly = (value?: string | null): string | null => {
+  if (!value) return null;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+  return parsed.toISOString().split('T')[0];
+};
+
+const getTimelineMemberName = (memberId: number): string => {
+  const member = timelineMembers.value.find((item) => item.user_id === memberId);
+  return member?.username || member?.name || `使用者 #${memberId}`;
+};
+
+const buildAddTaskConflictTargets = () => {
+  const uniqueIds = Array.from(
+    new Set(addTaskAssigneeIds.value.map((id) => Number(id)).filter((id) => Number.isInteger(id) && id > 0))
+  );
+
+  if (uniqueIds.length === 0) {
+    return [{ assignee_user_id: null, assignee_label: '我自己（預設）' }];
+  }
+
+  return uniqueIds.map((memberId) => ({
+    assignee_user_id: memberId,
+    assignee_label: getTimelineMemberName(memberId),
+  }));
+};
+
+const getDefaultWeeklyReportRange = () => {
+  const end = new Date();
+  const start = new Date(end);
+  start.setDate(end.getDate() - 6);
+
+  return {
+    start_date: start.toISOString().split('T')[0],
+    end_date: end.toISOString().split('T')[0],
+  };
+};
+
+const fetchWeeklyReport = async () => {
+  if (!props.selectedTimeline) return;
+
+  weeklyReportLoading.value = true;
+  weeklyReportError.value = '';
+
+  try {
+    const { start_date, end_date } = weeklyReportRange.value;
+    const res = await timelineService.getWeeklyReport(props.selectedTimeline.id, {
+      start_date,
+      end_date,
+    });
+    weeklyReport.value = res.data;
+  } catch (err: unknown) {
+    weeklyReport.value = null;
+    weeklyReportError.value = getApiErrorMessage(err, '取得週報失敗');
+  } finally {
+    weeklyReportLoading.value = false;
+  }
+};
 
 // 每次開啟新的 selectedTimeline 時重置 remark 狀態
-watch(() => props.selectedTimeline, (val) => {
+watch(() => props.selectedTimeline, async (val) => {
   if (val) {
     isEditingRemark.value = false;
     timelineRemark.value = val.remark || '';
     localRemark.value = timelineRemark.value;
+    weeklyReportRange.value = getDefaultWeeklyReportRange();
+    await fetchWeeklyReport();
   } else {
     timelineRemark.value = '';
     localRemark.value = '';
+    weeklyReport.value = null;
+    weeklyReportError.value = '';
   }
 }, { immediate: true });
 
@@ -624,8 +898,112 @@ watch(showAiGenerateModal, (opened) => {
   }
 });
 
+watch(showAddTaskModal, async (opened) => {
+  if (opened && timelineMembers.value.length === 0) {
+    await loadMembers();
+  }
+});
+
 const resetTaskForm = () => {
   taskForm.value = { name: '', start_date: '', end_date: '', priority: 2, tags: '', task_remark: '' };
+  addTaskAssigneeIds.value = [];
+  addTaskConflictPreviews.value = [];
+};
+
+const runConflictPrecheckForAddTask = async (timelineId: number, data: CreateTaskPayload): Promise<boolean> => {
+  if (!data.end_date) {
+    addTaskConflictPreviews.value = [];
+    return true;
+  }
+
+  const targets = buildAddTaskConflictTargets();
+  const previews: Array<{
+    assignee_user_id: number | null;
+    assignee_label: string;
+    preview: ResourceConflictResponse;
+  }> = [];
+
+  for (const target of targets) {
+    const payload: ConflictCheckPayload = {
+      name: data.name,
+      start_date: data.start_date ?? null,
+      end_date: data.end_date ?? null,
+      priority: data.priority,
+    };
+
+    if (target.assignee_user_id !== null) {
+      payload.assignee_user_id = target.assignee_user_id;
+    }
+
+    const conflictRes = await timelineService.conflictCheck(timelineId, payload);
+    previews.push({
+      assignee_user_id: target.assignee_user_id,
+      assignee_label: target.assignee_label,
+      preview: conflictRes.data,
+    });
+  }
+
+  addTaskConflictPreviews.value = previews;
+  const conflictedPreviews = previews.filter((item) => item.preview.has_conflict);
+  if (conflictedPreviews.length === 0) {
+    return true;
+  }
+
+  const totalSignals = conflictedPreviews.reduce((sum, item) => sum + item.preview.conflict_count, 0);
+  const lines = conflictedPreviews
+    .slice(0, 3)
+    .map((item) => `• ${item.assignee_label}：${item.preview.conflict_count} 個訊號`)
+    .join('\n');
+
+  const firstSuggestion = conflictedPreviews.find((item) => item.preview.suggestion)?.preview.suggestion;
+  const suggestion = firstSuggestion
+    ? `\n\n建議改期：${firstSuggestion.start_date} ~ ${firstSuggestion.end_date}`
+    : '';
+
+  return await confirm({
+    title: `偵測到 ${totalSignals} 個衝突訊號，仍要新增？`,
+    message: `${lines}${suggestion}`,
+  });
+};
+
+const runConflictPrecheckForTaskMemberAssignment = async (task: Task, member: TaskMember): Promise<boolean> => {
+  if (!props.selectedTimeline) return true;
+
+  const endDate = toDateOnly(task.end_date);
+  if (!endDate) return true;
+
+  try {
+    const res = await timelineService.conflictCheck(props.selectedTimeline.id, {
+      task_id: task.task_id,
+      name: task.name,
+      start_date: toDateOnly(task.start_date) ?? endDate,
+      end_date: endDate,
+      assignee_user_id: member.user_id,
+      priority: task.priority,
+    });
+
+    if (!res.data.has_conflict) {
+      return true;
+    }
+
+    const lines = [
+      `日期衝突：${res.data.conflicts.length} 個`,
+      `跨專案衝突：${res.data.cross_project_conflict_count ?? 0} 個`,
+      `過載日：${res.data.workload_overload_count ?? 0} 天`,
+    ].join('\n');
+
+    const suggestion = res.data.suggestion
+      ? `\n\n建議改期：${res.data.suggestion.start_date} ~ ${res.data.suggestion.end_date}`
+      : '';
+
+    return await confirm({
+      title: `指派給 ${member.name} 前偵測到衝突，仍要指派？`,
+      message: `${lines}${suggestion}`,
+    });
+  } catch (err: unknown) {
+    toast.error(getApiErrorMessage(err, '檢查衝突失敗'));
+    return false;
+  }
 };
 
 // ────────────── 備註 ──────────────
@@ -648,14 +1026,26 @@ const saveRemark = async () => {
 const handleAddTask = async () => {
   if (!props.selectedTimeline) return;
   try {
+    const selectedAssigneeIds = Array.from(
+      new Set(addTaskAssigneeIds.value.map((id) => Number(id)).filter((id) => Number.isInteger(id) && id > 0))
+    );
+
     const data = mapToCreateTaskPayload({
       ...taskForm.value,
       timeline_id: props.selectedTimeline.id,
+      assignee_user_ids: selectedAssigneeIds.length > 0 ? selectedAssigneeIds : undefined,
     });
+
+    const shouldProceed = await runConflictPrecheckForAddTask(props.selectedTimeline.id, data);
+    if (!shouldProceed) {
+      return;
+    }
+
     await taskService.create(data);
     showAddTaskModal.value = false;
     resetTaskForm();
     emit('refresh-all');
+    await fetchWeeklyReport();
   } catch { toast.error('新增任務失敗'); }
 };
 
@@ -804,6 +1194,12 @@ const loadTaskMembersForAssign = async () => {
 
 const quickAssignTaskMember = async (member: TaskMember) => {
   if (!assignTask.value) return;
+
+  const canAssign = await runConflictPrecheckForTaskMemberAssignment(assignTask.value, member);
+  if (!canAssign) {
+    return;
+  }
+
   try {
     await taskService.addMember(assignTask.value.task_id, member.user_id);
     await loadTaskMembersForAssign();

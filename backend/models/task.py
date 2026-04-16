@@ -24,6 +24,7 @@ class Task(db.Model):
     created_at = db.Column(db.DateTime, default=utcnow_naive)
     start_date = db.Column(db.DateTime)
     end_date = db.Column(db.DateTime)
+    completed_at = db.Column(db.DateTime, nullable=True)
     updated_at = db.Column(db.DateTime, default=utcnow_naive, onupdate=utcnow_naive)
     
     def __repr__(self):

@@ -1,12 +1,8 @@
-from functools import wraps
 from datetime import datetime, timedelta, timezone
 import json
 import os
 import re
 import time
-
-from flask import jsonify
-from flask_jwt_extended import get_jwt_identity
 
 from models import db
 from models.notification import Notification
@@ -15,7 +11,6 @@ from models.task import Task
 from models.task_comment import TaskComment
 from models.task_user import TaskUser
 from models.timeline import TaskFile
-from models.user import User
 from werkzeug.utils import secure_filename
 from services.ai_provider import get_ai_provider
 from repositories.task_repository import (
@@ -30,6 +25,7 @@ from repositories.task_repository import (
     get_task_file,
     get_task_file_by_filename,
     get_task_member,
+    get_user_by_id,
     get_owned_active_tasks,
     get_timeline_member,
     get_timeline_ids_for_user,
@@ -54,6 +50,7 @@ TASK_CREATE_ALLOWED_FIELDS = {
     'end_date',
     'task_remark',
     'isWork',
+    'assignee_user_ids',
 }
 
 TASK_UPDATE_ALLOWED_FIELDS = {
@@ -104,6 +101,33 @@ def find_unknown_fields(payload, allowed_fields):
     return sorted(set(payload.keys()) - allowed_fields)
 
 
+def normalize_assignee_user_ids(raw_value):
+    if raw_value in (None, ''):
+        return []
+
+    if not isinstance(raw_value, list):
+        raise TaskOperationError('assignee_user_ids 必須是陣列', 400)
+
+    normalized = []
+    seen = set()
+    for item in raw_value:
+        try:
+            user_id = int(item)
+        except (TypeError, ValueError):
+            raise TaskOperationError('assignee_user_ids 只允許整數 ID', 400)
+
+        if user_id <= 0:
+            raise TaskOperationError('assignee_user_ids 只允許正整數 ID', 400)
+
+        if user_id in seen:
+            continue
+
+        seen.add(user_id)
+        normalized.append(user_id)
+
+    return normalized
+
+
 def create_notification(user_id, ntype, title, content=None, link=None):
     """建立通知的工具函式，失敗時靜默不影響主流程。"""
     try:
@@ -147,26 +171,6 @@ def can_manage_task_members(operator_user_id, task):
     return is_task_owner or is_timeline_owner
 
 
-def require_task_role(required_role='member'):
-    """Decorator：檢查當前使用者在任務中的角色。"""
-
-    def decorator(f):
-        @wraps(f)
-        def wrapper(*args, **kwargs):
-            user_id = int(get_jwt_identity())
-            task_id = kwargs.get('task_id')
-            role = get_user_task_role(user_id, task_id)
-            if role is None:
-                return jsonify({'error': '你不是此任務成員'}), 403
-            if required_role == 'owner' and role != 0:
-                return jsonify({'error': '只有負責人可執行此操作'}), 403
-            return f(*args, **kwargs)
-
-        return wrapper
-
-    return decorator
-
-
 def task_member_to_dict(task_member, user, include_contact=False):
     payload = {
         'user_id': user.id,
@@ -191,7 +195,7 @@ def build_task_member_list(task_id, viewer_user_id=None, include_contact=False):
         if viewer_user_id is not None and member.user_id == viewer_user_id:
             viewer_role = member.role
 
-        user = db.session.get(User, member.user_id)
+        user = get_user_by_id(member.user_id)
         if user:
             result.append(task_member_to_dict(member, user, include_contact=include_contact))
 
@@ -203,6 +207,7 @@ def task_list_item_to_dict(task, member_list, subtask_list, is_owner):
         'task_id': task.task_id,
         'name': task.name,
         'completed': task.completed,
+        'completed_at': task.completed_at.isoformat() + 'Z' if task.completed_at else None,
         'timeline_id': task.timeline_id,
         'priority': task.priority,
         'status': task.status,
@@ -280,6 +285,9 @@ def create_task_for_user(user_id, data):
     if status not in TASK_STATUS_VALUES:
         raise TaskOperationError('status 欄位值不合法', 400)
 
+    is_completed = status == 'completed'
+    completed_at = _utcnow_naive() if is_completed else None
+
     try:
         priority = int(data.get('priority', 2))
     except (TypeError, ValueError):
@@ -298,10 +306,21 @@ def create_task_for_user(user_id, data):
     except (TypeError, ValueError):
         raise TaskOperationError('end_date 格式錯誤', 400)
 
+    assignee_user_ids = normalize_assignee_user_ids(data.get('assignee_user_ids'))
+
+    timeline_id = data.get('timeline_id')
+    if timeline_id and assignee_user_ids:
+        timeline_member_ids = {member.user_id for member in list_timeline_members(timeline_id)}
+        invalid_assignees = [member_id for member_id in assignee_user_ids if member_id not in timeline_member_ids]
+        if invalid_assignees:
+            raise TaskOperationError('指派名單包含非專案成員', 400)
+
     new_task = Task(
         user_id=user_id,
         name=data['name'],
-        timeline_id=data.get('timeline_id'),
+        completed=is_completed,
+        completed_at=completed_at,
+        timeline_id=timeline_id,
         priority=priority,
         status=status,
         tags=data.get('tags'),
@@ -318,6 +337,23 @@ def create_task_for_user(user_id, data):
 
         task_owner = TaskUser(task_id=new_task.task_id, user_id=user_id, role=0)
         db.session.add(task_owner)
+
+        actor = get_user_by_id(user_id)
+        actor_name = actor.name if actor else '某人'
+
+        for member_id in assignee_user_ids:
+            if member_id == user_id:
+                continue
+
+            db.session.add(TaskUser(task_id=new_task.task_id, user_id=member_id, role=1))
+            create_notification(
+                user_id=member_id,
+                ntype='task_assigned',
+                title=f'你被指派到任務「{new_task.name}」',
+                content=f'{actor_name} 在建立任務時將你加入「{new_task.name}」',
+                link='/tasks',
+            )
+
         db.session.commit()
         return new_task.task_id
     except Exception as exc:
@@ -353,7 +389,13 @@ def update_task_for_member(task_id, data):
         task.timeline_id = data['timeline_id']
 
     if 'status' in data:
-        task.status = data['status']
+        next_status = data['status']
+        task.status = next_status
+        task.completed = (next_status == 'completed')
+        if task.completed:
+            task.completed_at = task.completed_at or _utcnow_naive()
+        else:
+            task.completed_at = None
 
     if 'tags' in data:
         task.tags = data['tags']
@@ -409,6 +451,7 @@ def toggle_task_for_member(task_id):
     task = _find_active_task_or_404(task_id)
     task.completed = not task.completed
     task.status = 'completed' if task.completed else 'pending'
+    task.completed_at = _utcnow_naive() if task.completed else None
 
     try:
         db.session.commit()
@@ -477,7 +520,7 @@ def add_task_member_for_operator(task_id, operator_user_id, new_user_id, role=1)
         task_member = TaskUser(task_id=task_id, user_id=new_user_id, role=role)
         db.session.add(task_member)
 
-        actor = db.session.get(User, operator_user_id)
+        actor = get_user_by_id(operator_user_id)
         actor_name = actor.name if actor else '某人'
         task_name = task.name if task else '任務'
 
@@ -550,7 +593,7 @@ def list_task_comments_for_member(task_id):
 
     result = []
     for comment in comments:
-        user = db.session.get(User, comment.user_id)
+        user = get_user_by_id(comment.user_id)
         result.append(task_comment_to_dict(comment, user))
     return result
 
@@ -568,7 +611,7 @@ def add_task_comment_for_member(task_id, user_id, data):
         )
         db.session.add(comment)
 
-        actor = db.session.get(User, user_id)
+        actor = get_user_by_id(user_id)
         task = get_task_by_id(task_id)
         actor_name = actor.name if actor else '某人'
         task_name = task.name if task else '任務'
@@ -591,7 +634,7 @@ def add_task_comment_for_member(task_id, user_id, data):
 
         db.session.commit()
 
-        user = db.session.get(User, user_id)
+        user = get_user_by_id(user_id)
         return {
             'comment_id': comment.comment_id,
             'user_id': user_id,
@@ -703,6 +746,10 @@ def update_task_status_for_member(task_id, new_status):
 
     task.status = new_status
     task.completed = (new_status == 'completed')
+    if task.completed:
+        task.completed_at = task.completed_at or _utcnow_naive()
+    else:
+        task.completed_at = None
 
     try:
         db.session.commit()
@@ -737,7 +784,7 @@ def summarize_task_comments_for_member(task_id):
 
     comment_items = []
     for comment in comments:
-        user = db.session.get(User, comment.user_id)
+        user = get_user_by_id(comment.user_id)
         comment_items.append(task_comment_to_dict(comment, user))
 
     try:
@@ -768,7 +815,7 @@ def list_task_files_for_member(task_id):
     files = list_task_files(task_id)
     result = []
     for task_file in files:
-        uploader = db.session.get(User, task_file.uploaded_by)
+        uploader = get_user_by_id(task_file.uploaded_by)
         result.append(
             {
                 'id': task_file.id,

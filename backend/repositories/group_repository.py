@@ -1,5 +1,6 @@
 from models import db
 from models.group import Group, GroupMember
+from models.group_ai_snapshot import GroupAISnapshot
 from models.message import Message
 from models.user import User
 
@@ -42,4 +43,43 @@ def list_group_messages_query(group_id):
         .filter(Message.group_id == group_id)
         .order_by(Message.created_at)
         .all()
+    )
+
+
+def count_group_messages_for_snapshot(group_id, cutoff):
+    return (
+        db.session.query(Message.message_id)
+        .filter(Message.group_id == group_id)
+        .filter(Message.created_at >= cutoff)
+        .filter(Message.is_deleted.is_(False))
+        .filter(Message.content.isnot(None))
+        .count()
+    )
+
+
+def list_group_messages_for_snapshot(group_id, cutoff):
+    return (
+        db.session.query(
+            Message.message_id,
+            Message.content,
+            Message.created_at,
+            User.name.label('sender_name'),
+        )
+        .join(User, Message.sender_id == User.id)
+        .filter(Message.group_id == group_id)
+        .filter(Message.created_at >= cutoff)
+        .filter(Message.is_deleted.is_(False))
+        .filter(Message.content.isnot(None))
+        .filter(Message.message_type != 'system')
+        .order_by(Message.created_at.asc())
+        .all()
+    )
+
+
+def get_latest_group_snapshot(group_id):
+    return (
+        GroupAISnapshot.query
+        .filter_by(group_id=group_id)
+        .order_by(GroupAISnapshot.created_at.desc())
+        .first()
     )

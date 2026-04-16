@@ -2,6 +2,10 @@ from datetime import datetime, timezone
 
 from models import db
 from models.todo import Todo
+from repositories.todo_repository import (
+    get_active_todo_by_id_for_user,
+    list_active_todos_for_user,
+)
 
 TODO_CREATE_ALLOWED_FIELDS = {'title', 'content', 'type', 'deadline', 'priority'}
 TODO_UPDATE_ALLOWED_FIELDS = {'title', 'content', 'type', 'deadline', 'priority', 'completed'}
@@ -56,7 +60,7 @@ def _parse_deadline(deadline_value):
 
 
 def _find_active_todo_or_404(todo_id, user_id):
-    todo = Todo.query.filter_by(id=todo_id, user_id=user_id).filter(Todo.deleted_at.is_(None)).first()
+    todo = get_active_todo_by_id_for_user(todo_id, user_id)
     if not todo:
         raise TodoOperationError('找不到該待辦事項', 404)
     return todo
@@ -67,13 +71,7 @@ def list_todos_for_user(user_id, todo_id=None):
         todo = _find_active_todo_or_404(todo_id, user_id)
         return [todo]
 
-    return (
-        Todo.query
-        .filter_by(user_id=user_id)
-        .filter(Todo.deleted_at.is_(None))
-        .order_by(Todo.completed, Todo.deadline)
-        .all()
-    )
+    return list_active_todos_for_user(user_id)
 
 
 def create_todo_for_user(user_id, data):

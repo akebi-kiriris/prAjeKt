@@ -2,12 +2,14 @@
 
 基於 Vue 3 + Flask 的專案管理與協作平台，整合 Google Gemini AI 實現智能任務生成。
 
-> **開發狀態**：Phase 1~5.6 已完成 ✅（前端 `85/85`、後端回歸 `153 passed`）；Phase 6.6 LangChain 遷移核心完成 ✅ 與文檔化完善（PromptTemplate 修復、舊代碼清理、統一流程驗證）；Backend CI 已啟用 pytest + coverage 報告，Phase 6 重點為「AI 產品化 + PostgreSQL 開發遷移 + Copilot MCP 整合」。
+> **開發狀態**：Phase 1~6.6 已完成 ✅；Phase 7.1（專案週報 + 排程衝突檢查 + 指派隱私遮罩）已完成 ✅；目前進入 Phase 7.2（進度風險分析）規劃。
 
 ## 功能模組
 
 - **專案管理**：卡片 / 看板 / 日曆 / 列表 四種視圖，專案進度追蹤、成員邀請
 - **任務管理**：任務 CRUD、子任務、優先級、標籤、狀態拖曳切換、留言討論、附件上傳 / 下載、任務成員指派
+- **排程協作（Phase 7.1）**：任務建立可多選指派（`assignee_user_ids`）、建立與再指派前皆可做衝突預檢（同專案/跨專案/過載日）
+- **專案週報（Phase 7.1）**：一鍵生成週報（完成項目、風險清單、近期留言、下一步建議、AI 摘要）
 - **待辦事項**：個人 Todo 列表，完成狀態管理
 - **群組協作**：群組建立 / 邀請碼加入 / 即時聊天（Socket.IO，含 REST fallback）
 - **個人資料**：個人資訊編輯、密碼變更、使用統計
@@ -20,20 +22,22 @@
 
 ## 技術架構
 
-| 層級 | 技術 |
+| 層級 | 目前採用（2026/04） |
 |------|------|
-| 前端框架 | Vue 3 + Vite（Composition API / `<script setup>`）|
-| 狀態管理 | Pinia |
-| 路由 | Vue Router |
-| HTTP | Axios（含 JWT 自動刷新攔截器）|
-| 樣式 | Tailwind CSS |
-| UI 元件 | Headless UI（ConfirmDialog）、vue-sonner（Toast）|
-| 圖表 | vue-echarts + ECharts 6 |
-| 後端 | Flask 3 + SQLAlchemy + Flask-Migrate + Flask-SocketIO |
-| 即時通訊 | Socket.IO（flask-socketio / socket.io-client） |
-| 認證 | Flask-JWT-Extended（access + refresh token）|
-| 資料庫 | PostgreSQL（Supabase + Phase 6 本地遷移主線）/ SQLite（舊環境相容） |
-| AI | Google Gemini（Provider 可切換：`gemini` / `mock`）|
+| 前端核心 | Vue 3.5.17 + TypeScript 5.9.3 + Vite 7.2.4（Composition API / script setup） |
+| 狀態管理 / 路由 | Pinia 3.0.4 + Vue Router 4.6.4 |
+| API / 認證 | Axios 1.13.2（含 JWT 自動刷新 Queue） + Flask-JWT-Extended |
+| 樣式與 UI | Tailwind CSS 4.1.18 + @tailwindcss/vite + Headless UI 1.7.23 + vue-sonner 2.0.9 |
+| 任務視圖能力 | FullCalendar 6.1.20 + vuedraggable 4.1.0 + frappe-gantt 1.2.2 |
+| 圖表 | ECharts 6.0.0 + vue-echarts 8.0.1 |
+| 即時通訊 | Flask-SocketIO 5.3.x + socket.io-client 4.8.1 |
+| 後端核心 | Flask 3.x + Flask-SQLAlchemy + Flask-Migrate + Flask-CORS |
+| AI 應用層 | LangChain + LangChain Core + LangGraph + Pydantic v2 |
+| AI 模型提供者 | Google Gemini（透過 langchain-google-genai；Provider 可切換 gemini / mock） |
+| MCP | mcp Python SDK + stdio JSON-RPC Bridge（Copilot 路由到後端工具） |
+| 資料庫 | PostgreSQL（Supabase + 本地 Docker 主線）+ pg8000 驅動；SQLite 僅保留遷移/比對用途 |
+| 測試與品質 | Vitest 4.1.2、pytest/pytest-cov/pytest-flask、Stryker 9.6.0 |
+| 部署 | Railway（Backend）+ Firebase Hosting（Frontend）+ Supabase（PostgreSQL） |
 
 ## 專案結構
 
@@ -198,6 +202,8 @@ pytest --cov=blueprints --cov=services --cov=models --cov-report=term-missing --
 | PUT | `/api/timelines/:id` | 更新專案資訊 |
 | DELETE | `/api/timelines/:id` | 刪除專案 |
 | GET | `/api/timelines/:id/tasks` | 取得專案下的任務 |
+| GET | `/api/timelines/:id/weekly-report` | 取得專案週報（完成/風險/留言/下一步/AI 摘要） |
+| POST | `/api/timelines/:id/conflict-check` | 檢查排程衝突（同專案/跨專案/過載日，含建議改期） |
 | POST | `/api/timelines/:id/generate-tasks` | AI 生成任務建議 |
 | POST | `/api/timelines/:id/batch-create-tasks` | 批次建立任務 |
 | GET | `/api/timelines/:id/members` | 取得專案成員列表 |
@@ -212,7 +218,7 @@ pytest --cov=blueprints --cov=services --cov=models --cov-report=term-missing --
 |------|------|------|
 | GET | `/api/tasks` | 取得任務列表 |
 | GET | `/api/tasks/upcoming` | 即將到期 / 進度落後的任務（3 天內 or ≥80%）|
-| POST | `/api/tasks` | 建立任務 |
+| POST | `/api/tasks` | 建立任務（支援 `assignee_user_ids` 多選指派） |
 | PUT | `/api/tasks/:id` | 更新任務 |
 | DELETE | `/api/tasks/:id` | 刪除任務（軟刪除）|
 | PATCH | `/api/tasks/:id/status` | 更新任務狀態（看板拖曳） |
@@ -318,6 +324,10 @@ pytest --cov=blueprints --cov=services --cov=models --cov-report=term-missing --
 	- 6.6：LangChain 遷移與統一路徑（PromptTemplate 修復 + 文檔化）✅
 	- **6.3+**：Copilot + MCP 整合（自然語言路由至後端工具）✅
 	- 邊界：不建立 staging、不新增雲端擴展部署
+- **Phase 7 精簡路線（進行中）**：
+	- 7.1：週報 + 衝突檢查 MVP（含過載日列表、多指派、隱私遮罩）✅
+	- 7.2：進度風險分析（critical path）⏳
+	- 7.3：知識增強規劃（來源可追溯）⏳
 
 ## 環境需求
 

@@ -2,7 +2,11 @@ from datetime import datetime
 
 from models import db
 from models.message import Message, MessageRead
-from models.user import User
+from repositories.message_repository import (
+    build_unread_messages_query,
+    count_unread_messages_for_user,
+    get_user_by_id,
+)
 
 
 class MessageOperationError(Exception):
@@ -13,17 +17,11 @@ class MessageOperationError(Exception):
 
 
 def get_unread_messages_query(user_id):
-    return db.session.query(Message).outerjoin(
-        MessageRead,
-        db.and_(
-            Message.message_id == MessageRead.message_id,
-            MessageRead.user_id == user_id,
-        ),
-    ).filter(MessageRead.message_id.is_(None))
+    return build_unread_messages_query(user_id)
 
 
 def get_unread_message_count(user_id):
-    return get_unread_messages_query(user_id).count()
+    return count_unread_messages_for_user(user_id)
 
 
 def mark_all_unread_messages_as_read(user_id):
@@ -57,7 +55,7 @@ def serialize_group_message(message, sender_name):
 
 
 def create_group_message(group_id, sender_id, content):
-    sender = db.session.get(User, sender_id)
+    sender = get_user_by_id(sender_id)
     if not sender:
         raise ValueError('使用者不存在')
 

@@ -1,11 +1,14 @@
 ﻿from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
+from blueprints.guards import require_timeline_role
 from services.timeline_service import (
     TimelineOperationError,
     TimelineAIGenerationError,
     add_timeline_member_for_owner,
     batch_create_tasks_for_timeline,
     build_timeline_member_stats_payload,
+    build_weekly_report_for_timeline,
+    check_timeline_task_conflicts,
     create_timeline_for_user,
     generate_timeline_tasks_with_ai,
     get_active_timeline_or_404,
@@ -14,7 +17,6 @@ from services.timeline_service import (
     list_timeline_tasks_detail,
     list_upcoming_timelines_for_user,
     remove_timeline_member_for_owner,
-    require_timeline_role,
     search_timeline_user_by_email,
     soft_delete_timeline_for_owner,
     update_timeline_for_member,
@@ -85,6 +87,37 @@ def delete_timeline(timeline_id):
 def get_timeline_tasks(timeline_id):
     """取得專案的所有任務（含負責人、助理資訊）"""
     return jsonify(list_timeline_tasks_detail(timeline_id)), 200
+
+
+@timelines_bp.route('/<int:timeline_id>/weekly-report', methods=['GET'])
+@jwt_required()
+@require_timeline_role('member')
+def get_timeline_weekly_report(timeline_id):
+    """取得專案週報（完成任務、風險、留言重點與下一步）。"""
+    start_date = request.args.get('start_date')
+    end_date = request.args.get('end_date')
+
+    try:
+        payload = build_weekly_report_for_timeline(timeline_id, start_date, end_date)
+        return jsonify(payload), 200
+    except TimelineOperationError as err:
+        return jsonify({'error': err.message}), err.status_code
+
+
+@timelines_bp.route('/<int:timeline_id>/conflict-check', methods=['POST'])
+@jwt_required()
+@require_timeline_role('member')
+def check_timeline_conflict(timeline_id):
+    """檢查指定任務時間區間在專案內是否與現有任務衝突。"""
+    data, error = _get_json_dict_or_400()
+    if error:
+        return error
+
+    try:
+        payload = check_timeline_task_conflicts(timeline_id, data, int(get_jwt_identity()))
+        return jsonify(payload), 200
+    except TimelineOperationError as err:
+        return jsonify({'error': err.message}), err.status_code
 
 @timelines_bp.route('/<int:timeline_id>/remark', methods=['PUT'])
 @jwt_required()

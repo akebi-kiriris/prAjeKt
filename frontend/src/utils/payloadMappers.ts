@@ -45,6 +45,12 @@ export const mapToCreateTaskPayload = (input: TaskCreateInput): CreateTaskPayloa
     name: input.name.trim(),
   };
 
+  if (hasKey(input, 'assignee_user_ids') && Array.isArray(input.assignee_user_ids)) {
+    payload.assignee_user_ids = input.assignee_user_ids
+      .map((id) => toNumberOrUndefined(id))
+      .filter((id): id is number => id !== undefined);
+  }
+
   if (hasKey(input, 'start_date')) {
     payload.start_date = toDateOnlyOrNull(input.start_date);
   }

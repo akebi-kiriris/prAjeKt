@@ -7,11 +7,12 @@
 import json
 import re
 import logging
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Mapping, Iterable
 from pydantic import ValidationError
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables import RunnableSequence
 from prompts.task_generator import TASK_GENERATOR_PROMPT
+from prompts.timeline_task_request import build_timeline_task_request
 from chains.prompt_manager import PromptManager
 from chains.schemas import Task
 
@@ -186,3 +187,27 @@ def generate_tasks(
     )
 
     return _parse_tasks(raw_text)
+
+
+def generate_timeline_tasks_from_context(
+    llm: Any,
+    project_name: str,
+    project_description: str,
+    existing_tasks_info: Iterable[Mapping[str, Any]],
+    user_name: str = "timeline_member",
+) -> List[Dict[str, Any]]:
+    """根據專案與既有任務上下文生成新任務。"""
+    user_input = build_timeline_task_request(
+        project_name=project_name,
+        project_description=project_description,
+        existing_tasks_info=existing_tasks_info,
+    )
+
+    safe_project_description = project_description if isinstance(project_description, str) else ""
+    return generate_tasks(
+        llm=llm,
+        project_name=project_name,
+        project_description=safe_project_description,
+        user_input=user_input,
+        user_name=user_name,
+    )

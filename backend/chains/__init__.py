@@ -9,6 +9,7 @@ from chains.prompt_manager import PromptManager
 from chains.task_generation_chain import (
     create_task_generation_chain,
     generate_tasks,
+    generate_timeline_tasks_from_context,
 )
 from chains.summary_chain import (
     create_task_summary_chain,
@@ -26,11 +27,18 @@ from chains.llm_factory import (
     get_default_llm,
 )
 from chains.workflows import create_tool_routing_workflow
+from chains.timeline_insight_chain import (
+    create_weekly_report_summary_chain,
+    create_conflict_suggestion_chain,
+    generate_weekly_report_summary,
+    generate_conflict_suggestion,
+)
 
 __all__ = [
     "PromptManager",
     "create_task_generation_chain",
     "generate_tasks",
+    "generate_timeline_tasks_from_context",
     "create_task_summary_chain",
     "create_group_snapshot_chain",
     "generate_task_summary",
@@ -41,4 +49,8 @@ __all__ = [
     "create_google_generative_ai",
     "get_default_llm",
     "create_tool_routing_workflow",
+    "create_weekly_report_summary_chain",
+    "create_conflict_suggestion_chain",
+    "generate_weekly_report_summary",
+    "generate_conflict_suggestion",
 ]

@@ -7,6 +7,7 @@ from models.task_comment import TaskComment
 from models.task_user import TaskUser
 from models.timeline import TaskFile
 from models.timeline_user import TimelineUser
+from models.user import User
 
 
 def get_active_task_by_id(task_id):
@@ -122,3 +123,7 @@ def get_task_file(task_id, file_id):
 
 def get_task_file_by_filename(filename):
     return TaskFile.query.filter_by(filename=filename).first()
+
+
+def get_user_by_id(user_id):
+    return db.session.get(User, user_id)

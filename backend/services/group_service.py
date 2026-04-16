@@ -11,12 +11,14 @@ from models.group import Group
 from models.group import GroupMember
 from models.group_ai_snapshot import GroupAISnapshot
 from models.message import Message
-from models.user import User
 from repositories.group_repository import (
+    count_group_messages_for_snapshot as count_group_messages_for_snapshot_query,
     get_group_by_invite_code,
     get_group_member,
+    get_latest_group_snapshot,
     list_group_members_query,
     list_group_messages_query,
+    list_group_messages_for_snapshot,
     list_groups_for_user_query,
 )
 from services.ai_provider import get_ai_provider
@@ -532,34 +534,12 @@ def merge_chunk_summaries(chunk_summaries):
 
 def count_group_messages_for_snapshot(group_id, window_days):
     cutoff = _utcnow_naive() - timedelta(days=window_days)
-    return (
-        db.session.query(Message.message_id)
-        .filter(Message.group_id == group_id)
-        .filter(Message.created_at >= cutoff)
-        .filter(Message.is_deleted.is_(False))
-        .filter(Message.content.isnot(None))
-        .count()
-    )
+    return count_group_messages_for_snapshot_query(group_id, cutoff)
 
 
 def fetch_group_messages(group_id, window_days):
     cutoff = _utcnow_naive() - timedelta(days=window_days)
-    rows = (
-        db.session.query(
-            Message.message_id,
-            Message.content,
-            Message.created_at,
-            User.name.label('sender_name'),
-        )
-        .join(User, Message.sender_id == User.id)
-        .filter(Message.group_id == group_id)
-        .filter(Message.created_at >= cutoff)
-        .filter(Message.is_deleted.is_(False))
-        .filter(Message.content.isnot(None))
-        .filter(Message.message_type != 'system')
-        .order_by(Message.created_at.asc())
-        .all()
-    )
+    rows = list_group_messages_for_snapshot(group_id, cutoff)
 
     payload = []
     for row in rows:
@@ -680,12 +660,7 @@ def get_latest_group_snapshot_for_member(group_id, user_id):
     if not is_group_member(group_id, user_id):
         raise GroupOperationError('您不是該群組成員', 403)
 
-    snapshot = (
-        GroupAISnapshot.query
-        .filter_by(group_id=group_id)
-        .order_by(GroupAISnapshot.created_at.desc())
-        .first()
-    )
+    snapshot = get_latest_group_snapshot(group_id)
     if not snapshot:
         raise GroupOperationError('尚無可用的群組快照', 404)
 

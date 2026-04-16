@@ -17,6 +17,7 @@ from models.timeline import TaskFile, Timeline
 from models.timeline_user import TimelineUser
 from models.todo import Todo
 from models.user import User
+from blueprints.guards import require_task_role, require_timeline_role
 from services.auth_service import (
     AuthOperationError,
     auth_user_to_dict,
@@ -73,6 +74,7 @@ from services.task_service import (
     add_task_member_for_operator,
     build_task_member_list,
     can_manage_task_members,
+    create_task_for_user,
     create_subtask_for_task,
     create_notification,
     delete_task_file_for_user,
@@ -83,7 +85,6 @@ from services.task_service import (
     list_task_files_for_member,
     list_task_comments_for_member,
     remove_task_member_for_owner,
-    require_task_role,
     resolve_task_file_download_for_user,
     soft_delete_task_comment_for_user,
     summarize_task_comments_for_member,
@@ -106,11 +107,13 @@ from services.trash_service import (
 )
 from services.timeline_service import (
     TimelineAIGenerationError,
+    TimelineOperationError,
+    build_weekly_report_for_timeline,
+    check_timeline_task_conflicts,
     find_unknown_fields as timeline_find_unknown_fields,
     generate_timeline_tasks_with_ai,
     get_task_access,
     get_user_timeline_role,
-    require_timeline_role,
     timeline_list_item_to_dict,
     timeline_member_item_to_dict,
     timeline_task_item_to_dict,
@@ -764,6 +767,51 @@ def test_task_service_member_management_operations(app):
     assert remove_owner_exc.value.status_code == 400
 
 
+def test_create_task_for_user_accepts_assignee_user_ids(app):
+    owner = _create_user("task-create-owner@example.com", "task_create_owner")
+    member = _create_user("task-create-member@example.com", "task_create_member")
+    outsider = _create_user("task-create-outsider@example.com", "task_create_outsider")
+
+    timeline = Timeline(user_id=owner.id, name="Task Create Timeline")
+    db.session.add(timeline)
+    db.session.flush()
+    db.session.add_all(
+        [
+            TimelineUser(timeline_id=timeline.id, user_id=owner.id, role=0),
+            TimelineUser(timeline_id=timeline.id, user_id=member.id, role=1),
+        ]
+    )
+    db.session.commit()
+
+    task_id = create_task_for_user(
+        user_id=owner.id,
+        data={
+            "name": "可直接指派的任務",
+            "timeline_id": timeline.id,
+            "end_date": "2026-04-25",
+            "assignee_user_ids": [member.id, owner.id, member.id],
+        },
+    )
+
+    task_members = TaskUser.query.filter_by(task_id=task_id).all()
+    member_roles = {item.user_id: item.role for item in task_members}
+    assert member_roles[owner.id] == 0
+    assert member_roles[member.id] == 1
+    assert len(task_members) == 2
+
+    with pytest.raises(TaskOperationError) as invalid_assignee_exc:
+        create_task_for_user(
+            user_id=owner.id,
+            data={
+                "name": "非法指派任務",
+                "timeline_id": timeline.id,
+                "end_date": "2026-04-27",
+                "assignee_user_ids": [outsider.id],
+            },
+        )
+    assert invalid_assignee_exc.value.status_code == 400
+
+
 def test_task_service_comment_operations(app):
     owner = _create_user("task-comment-op-owner@example.com", "task_comment_op_owner")
     member = _create_user("task-comment-op-member@example.com", "task_comment_op_member")
@@ -1038,17 +1086,17 @@ def test_require_task_role_decorator(app, monkeypatch):
         return {"ok": True, "task_id": task_id}, 200
 
     with app.test_request_context("/"):
-        monkeypatch.setattr("services.task_service.get_jwt_identity", lambda: "1")
-        monkeypatch.setattr("services.task_service.get_user_task_role", lambda _uid, _tid: None)
+        monkeypatch.setattr("blueprints.guards.get_jwt_identity", lambda: "1")
+        monkeypatch.setattr("blueprints.guards.get_user_task_role", lambda _uid, _tid: None)
 
         blocked = owner_only(task_id=1)
         assert blocked[1] == 403
 
-        monkeypatch.setattr("services.task_service.get_user_task_role", lambda _uid, _tid: 1)
+        monkeypatch.setattr("blueprints.guards.get_user_task_role", lambda _uid, _tid: 1)
         blocked_owner = owner_only(task_id=1)
         assert blocked_owner[1] == 403
 
-        monkeypatch.setattr("services.task_service.get_user_task_role", lambda _uid, _tid: 0)
+        monkeypatch.setattr("blueprints.guards.get_user_task_role", lambda _uid, _tid: 0)
         allowed = owner_only(task_id=1)
         assert allowed[1] == 200
         assert allowed[0]["ok"] is True
@@ -1205,16 +1253,16 @@ def test_generate_timeline_tasks_with_ai_success_and_json_decode_error(app, monk
     db.session.add(existing_task)
     db.session.commit()
 
-    # Mock successful LangChain generate_tasks response
+    # 模擬 LangChain 成功回傳任務生成結果
     from unittest.mock import MagicMock
     mock_llm = MagicMock()
     mock_generate_tasks = MagicMock(return_value=[
         {"name": "service ai task", "priority": 1, "estimated_days": 2, "task_remark": "from chain"}
     ])
 
-    # Patch both get_default_llm and generate_tasks at timeline_service module level
+    # 在 timeline_service 模組層 patch get_default_llm 與鏈路輔助函式
     monkeypatch.setattr("services.timeline_service.get_default_llm", MagicMock(return_value=mock_llm))
-    monkeypatch.setattr("services.timeline_service.generate_tasks", mock_generate_tasks)
+    monkeypatch.setattr("services.timeline_service.generate_timeline_tasks_from_context", mock_generate_tasks)
 
     payload = generate_timeline_tasks_with_ai(
         timeline_id=timeline.id,
@@ -1228,9 +1276,9 @@ def test_generate_timeline_tasks_with_ai_success_and_json_decode_error(app, monk
     assert payload["tasks"][1]["name"] == "service ai task"
     assert payload["tasks"][1]["isExisting"] is False
 
-    # Mock generate_tasks with ValueError (invalid JSON from LLM)
+    # 模擬鏈路輔助函式拋出 ValueError（LLM JSON 無效）
     mock_generate_tasks_error = MagicMock(side_effect=ValueError("Invalid JSON from LLM"))
-    monkeypatch.setattr("services.timeline_service.generate_tasks", mock_generate_tasks_error)
+    monkeypatch.setattr("services.timeline_service.generate_timeline_tasks_from_context", mock_generate_tasks_error)
 
     with pytest.raises(TimelineAIGenerationError) as excinfo:
         generate_timeline_tasks_with_ai(
@@ -1240,6 +1288,295 @@ def test_generate_timeline_tasks_with_ai_success_and_json_decode_error(app, monk
         )
 
     assert excinfo.value.code == "generation_failed"
+
+
+def test_build_weekly_report_for_timeline_includes_summary_risks_and_comments(app):
+    owner = _create_user("timeline-weekly-owner@example.com", "timeline_weekly_owner")
+    member = _create_user("timeline-weekly-member@example.com", "timeline_weekly_member")
+
+    timeline = Timeline(user_id=owner.id, name="Weekly Timeline")
+    db.session.add(timeline)
+    db.session.flush()
+    db.session.add_all(
+        [
+            TimelineUser(timeline_id=timeline.id, user_id=owner.id, role=0),
+            TimelineUser(timeline_id=timeline.id, user_id=member.id, role=1),
+        ]
+    )
+
+    completed_task = Task(
+        user_id=owner.id,
+        timeline_id=timeline.id,
+        name="完成任務",
+        completed=True,
+        status="completed",
+        tags="前端,UI",
+        end_date=datetime(2026, 4, 15),
+        completed_at=datetime(2026, 4, 15, 10, 0, 0),
+    )
+    overdue_task = Task(
+        user_id=member.id,
+        timeline_id=timeline.id,
+        name="逾期任務",
+        completed=False,
+        status="in_progress",
+        end_date=datetime(2026, 4, 13),
+    )
+    future_task = Task(
+        user_id=owner.id,
+        timeline_id=timeline.id,
+        name="下週任務",
+        completed=False,
+        status="pending",
+        end_date=datetime(2026, 4, 25),
+    )
+    db.session.add_all([completed_task, overdue_task, future_task])
+    db.session.flush()
+
+    db.session.add(
+        TaskComment(
+            task_id=overdue_task.task_id,
+            user_id=member.id,
+            task_message="需要先解決 API 權限問題",
+            created_at=datetime(2026, 4, 15, 15, 0, 0),
+        )
+    )
+    db.session.commit()
+
+    payload = build_weekly_report_for_timeline(
+        timeline_id=timeline.id,
+        start_date_raw="2026-04-14",
+        end_date_raw="2026-04-20",
+    )
+
+    assert payload["timeline_id"] == timeline.id
+    assert payload["overview"]["total_tasks"] == 3
+    assert payload["overview"]["completed_tasks"] == 1
+    assert payload["overview"]["comment_count"] == 1
+    assert payload["overview"]["at_risk_tasks"] == 1
+    assert payload["completed_tasks"][0]["task_id"] == completed_task.task_id
+    assert any(item["task_id"] == overdue_task.task_id for item in payload["risk_items"])
+    assert len(payload["next_actions"]) >= 1
+    assert payload["recent_comments"][0]["task_name"] == overdue_task.name
+    assert payload["analysis"]["weekly_goal_total"] == 1
+    assert payload["analysis"]["weekly_goal_completed"] == 1
+    assert payload["analysis"]["weekly_goal_completion_rate"] == 100.0
+    assert payload["analysis"]["progress_signal"] in {"進度領先", "進度穩定", "進度落後"}
+    assert "前端" in payload["analysis"]["top_tags"]
+
+
+def test_check_timeline_task_conflicts_detects_overlap_and_suggestion(app):
+    owner = _create_user("timeline-conflict-owner@example.com", "timeline_conflict_owner")
+
+    timeline = Timeline(user_id=owner.id, name="Conflict Timeline")
+    db.session.add(timeline)
+    db.session.flush()
+    db.session.add(TimelineUser(timeline_id=timeline.id, user_id=owner.id, role=0))
+
+    existing_task = Task(
+        user_id=owner.id,
+        timeline_id=timeline.id,
+        name="既有任務",
+        status="in_progress",
+        start_date=datetime(2026, 4, 10),
+        end_date=datetime(2026, 4, 12),
+    )
+    db.session.add(existing_task)
+    db.session.flush()
+    db.session.add(TaskUser(task_id=existing_task.task_id, user_id=owner.id, role=0))
+    db.session.commit()
+
+    conflict_payload = check_timeline_task_conflicts(
+        timeline_id=timeline.id,
+        payload={
+            "name": "新任務",
+            "start_date": "2026-04-11",
+            "end_date": "2026-04-13",
+            "assignee_user_id": owner.id,
+        },
+        actor_user_id=owner.id,
+    )
+
+    assert conflict_payload["has_conflict"] is True
+    assert conflict_payload["conflict_count"] == 1
+    assert conflict_payload["conflicts"][0]["task_id"] == existing_task.task_id
+    assert conflict_payload["conflicts"][0]["same_assignee"] is True
+    assert conflict_payload["suggestion"]["start_date"] == "2026-04-13"
+    assert conflict_payload["suggestion"]["end_date"] == "2026-04-15"
+    assert conflict_payload["cross_project_conflict_count"] == 0
+    assert conflict_payload["workload_overload_count"] == 0
+    assert conflict_payload["workload_overload_days"] == []
+
+    with pytest.raises(TimelineOperationError) as excinfo:
+        check_timeline_task_conflicts(
+            timeline_id=timeline.id,
+            payload={"name": "缺少截止日"},
+            actor_user_id=owner.id,
+        )
+    assert excinfo.value.status_code == 400
+
+
+def test_check_timeline_task_conflicts_ignores_completed_tasks_in_same_timeline(app):
+    owner = _create_user("timeline-completed-owner@example.com", "timeline_completed_owner")
+
+    timeline = Timeline(user_id=owner.id, name="Completed Conflict Timeline")
+    db.session.add(timeline)
+    db.session.flush()
+    db.session.add(TimelineUser(timeline_id=timeline.id, user_id=owner.id, role=0))
+
+    completed_task = Task(
+        user_id=owner.id,
+        timeline_id=timeline.id,
+        name="已完成任務",
+        status="completed",
+        completed=True,
+        start_date=datetime(2026, 4, 10),
+        end_date=datetime(2026, 4, 12),
+    )
+    db.session.add(completed_task)
+    db.session.flush()
+    db.session.add(TaskUser(task_id=completed_task.task_id, user_id=owner.id, role=0))
+    db.session.commit()
+
+    conflict_payload = check_timeline_task_conflicts(
+        timeline_id=timeline.id,
+        payload={
+            "name": "新任務",
+            "start_date": "2026-04-11",
+            "end_date": "2026-04-13",
+            "assignee_user_id": owner.id,
+        },
+        actor_user_id=owner.id,
+    )
+
+    assert conflict_payload["has_conflict"] is False
+    assert conflict_payload["conflict_count"] == 0
+    assert conflict_payload["conflicts"] == []
+    assert conflict_payload["workload_overload_count"] == 0
+
+
+def test_check_timeline_task_conflicts_rejects_non_timeline_member_assignee(app):
+    owner = _create_user("timeline-assignee-owner@example.com", "timeline_assignee_owner")
+    outsider = _create_user("timeline-assignee-outsider@example.com", "timeline_assignee_outsider")
+
+    timeline = Timeline(user_id=owner.id, name="Assignee Validation Timeline")
+    db.session.add(timeline)
+    db.session.flush()
+    db.session.add(TimelineUser(timeline_id=timeline.id, user_id=owner.id, role=0))
+    db.session.commit()
+
+    with pytest.raises(TimelineOperationError) as excinfo:
+        check_timeline_task_conflicts(
+            timeline_id=timeline.id,
+            payload={
+                "name": "新任務",
+                "start_date": "2026-04-11",
+                "end_date": "2026-04-12",
+                "assignee_user_id": outsider.id,
+            },
+            actor_user_id=owner.id,
+        )
+
+    assert excinfo.value.status_code == 400
+    assert 'assignee_user_id 必須是專案成員' in excinfo.value.message
+
+
+def test_check_timeline_task_conflicts_includes_cross_project_and_workload_overload(app, monkeypatch):
+    monkeypatch.setenv("ASSIGNEE_DAILY_OVERLOAD_THRESHOLD", "1")
+
+    owner = _create_user("timeline-cross-owner@example.com", "timeline_cross_owner")
+
+    main_timeline = Timeline(user_id=owner.id, name="Main Timeline")
+    legacy_timeline = Timeline(user_id=owner.id, name="Legacy Timeline")
+    db.session.add_all([main_timeline, legacy_timeline])
+    db.session.flush()
+    db.session.add_all(
+        [
+            TimelineUser(timeline_id=main_timeline.id, user_id=owner.id, role=0),
+            TimelineUser(timeline_id=legacy_timeline.id, user_id=owner.id, role=0),
+        ]
+    )
+
+    legacy_task = Task(
+        user_id=owner.id,
+        timeline_id=legacy_timeline.id,
+        name="舊專案排程",
+        status="in_progress",
+        start_date=datetime(2026, 4, 11),
+        end_date=datetime(2026, 4, 13),
+        completed=False,
+    )
+    db.session.add(legacy_task)
+    db.session.commit()
+
+    conflict_payload = check_timeline_task_conflicts(
+        timeline_id=main_timeline.id,
+        payload={
+            "name": "新專案任務",
+            "start_date": "2026-04-11",
+            "end_date": "2026-04-12",
+            "assignee_user_id": owner.id,
+        },
+        actor_user_id=owner.id,
+    )
+
+    assert conflict_payload["has_conflict"] is True
+    assert conflict_payload["cross_project_conflict_count"] >= 1
+    assert any(item.get("is_cross_project") is True for item in conflict_payload["conflicts"])
+    assert any(item.get("timeline_name") == "Legacy Timeline" for item in conflict_payload["conflicts"])
+    assert conflict_payload["workload_overload_count"] >= 1
+    assert conflict_payload["workload_overload_days"][0]["projected_task_count"] >= 2
+
+
+def test_check_timeline_task_conflicts_masks_names_for_other_assignee(app, monkeypatch):
+    monkeypatch.setenv("ASSIGNEE_DAILY_OVERLOAD_THRESHOLD", "1")
+
+    owner = _create_user("timeline-mask-owner@example.com", "timeline_mask_owner")
+    member = _create_user("timeline-mask-member@example.com", "timeline_mask_member")
+
+    timeline = Timeline(user_id=owner.id, name="Mask Timeline")
+    db.session.add(timeline)
+    db.session.flush()
+    db.session.add_all(
+        [
+            TimelineUser(timeline_id=timeline.id, user_id=owner.id, role=0),
+            TimelineUser(timeline_id=timeline.id, user_id=member.id, role=1),
+        ]
+    )
+
+    existing_task = Task(
+        user_id=owner.id,
+        timeline_id=timeline.id,
+        name="不可外露任務名稱",
+        status="in_progress",
+        start_date=datetime(2026, 4, 12),
+        end_date=datetime(2026, 4, 14),
+        completed=False,
+    )
+    db.session.add(existing_task)
+    db.session.flush()
+    db.session.add(TaskUser(task_id=existing_task.task_id, user_id=owner.id, role=0))
+    db.session.add(TaskUser(task_id=existing_task.task_id, user_id=member.id, role=1))
+    db.session.commit()
+
+    conflict_payload = check_timeline_task_conflicts(
+        timeline_id=timeline.id,
+        payload={
+            "name": "新指派任務",
+            "start_date": "2026-04-13",
+            "end_date": "2026-04-13",
+            "assignee_user_id": member.id,
+            "priority": 3,
+        },
+        actor_user_id=owner.id,
+    )
+
+    assert conflict_payload["has_conflict"] is True
+    assert conflict_payload["is_task_name_redacted"] is True
+    assert conflict_payload["assignee_name"] == member.name
+    assert all("隱私保護" in item["name"] for item in conflict_payload["conflicts"])
+    if conflict_payload["workload_overload_days"]:
+        assert all(item["sample_tasks"] == [] for item in conflict_payload["workload_overload_days"])
 
 
 def test_timeline_role_and_task_access_resolution(app):
@@ -1320,17 +1657,17 @@ def test_require_timeline_role_decorator(app, monkeypatch):
         return {"ok": True, "timeline_id": timeline_id}, 200
 
     with app.test_request_context("/"):
-        monkeypatch.setattr("services.timeline_service.get_jwt_identity", lambda: "1")
-        monkeypatch.setattr("services.timeline_service.get_user_timeline_role", lambda _uid, _tid: None)
+        monkeypatch.setattr("blueprints.guards.get_jwt_identity", lambda: "1")
+        monkeypatch.setattr("blueprints.guards.get_user_timeline_role", lambda _uid, _tid: None)
 
         blocked = owner_only(timeline_id=1)
         assert blocked[1] == 403
 
-        monkeypatch.setattr("services.timeline_service.get_user_timeline_role", lambda _uid, _tid: 1)
+        monkeypatch.setattr("blueprints.guards.get_user_timeline_role", lambda _uid, _tid: 1)
         blocked_owner = owner_only(timeline_id=1)
         assert blocked_owner[1] == 403
 
-        monkeypatch.setattr("services.timeline_service.get_user_timeline_role", lambda _uid, _tid: 0)
+        monkeypatch.setattr("blueprints.guards.get_user_timeline_role", lambda _uid, _tid: 0)
         allowed = owner_only(timeline_id=1)
         assert allowed[1] == 200
         assert allowed[0]["ok"] is True

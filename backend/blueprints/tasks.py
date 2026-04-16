@@ -1,5 +1,6 @@
 ﻿from flask import Blueprint, request, jsonify, send_from_directory
 from flask_jwt_extended import jwt_required, get_jwt_identity
+from blueprints.guards import require_task_role
 from services.task_service import (
     TaskOperationError,
     add_task_comment_for_member,
@@ -15,7 +16,6 @@ from services.task_service import (
     list_tasks_for_user,
     list_upcoming_tasks_for_user,
     remove_task_member_for_owner,
-    require_task_role,
     resolve_task_file_download_for_user,
     summarize_task_comments_for_member,
     soft_delete_task_comment_for_user,
