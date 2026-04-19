@@ -50,92 +50,302 @@
                 <p class="text-sm font-semibold text-slate-700">📊 週報預覽</p>
                 <p class="text-xs text-slate-500">完成任務、風險與下一步建議</p>
               </div>
-              <button
-                @click="fetchWeeklyReport"
-                :disabled="weeklyReportLoading"
-                class="px-3 py-1.5 text-xs font-medium rounded-lg bg-white border border-slate-200 text-slate-600 hover:bg-slate-100 transition-colors disabled:opacity-50"
-              >
-                {{ weeklyReportLoading ? '載入中...' : '重新整理' }}
-              </button>
+              <div class="flex items-center gap-2">
+                <button
+                  @click="toggleWeeklyReportExpanded"
+                  class="px-3 py-1.5 text-xs font-medium rounded-lg bg-white border border-slate-200 text-slate-600 hover:bg-slate-100 transition-colors"
+                >
+                  {{ isWeeklyReportExpanded ? '收合' : '展開' }}
+                </button>
+                <button
+                  @click="fetchWeeklyReport"
+                  :disabled="weeklyReportLoading"
+                  class="px-3 py-1.5 text-xs font-medium rounded-lg bg-white border border-slate-200 text-slate-600 hover:bg-slate-100 transition-colors disabled:opacity-50"
+                >
+                  {{ weeklyReportLoading ? '載入中...' : '重新整理' }}
+                </button>
+              </div>
             </div>
 
-            <div class="grid grid-cols-2 gap-3 mb-3">
+            <div v-show="isWeeklyReportExpanded">
+              <div class="grid grid-cols-2 gap-3 mb-3">
+                <div>
+                  <label class="block text-[11px] text-slate-500 mb-1">起始日</label>
+                  <input
+                    v-model="weeklyReportRange.start_date"
+                    type="date"
+                    class="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
+                  />
+                </div>
+                <div>
+                  <label class="block text-[11px] text-slate-500 mb-1">結束日</label>
+                  <input
+                    v-model="weeklyReportRange.end_date"
+                    type="date"
+                    class="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
+                  />
+                </div>
+              </div>
+
+              <div v-if="weeklyReportError" class="mb-3 p-2.5 text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg">
+                {{ weeklyReportError }}
+              </div>
+
+              <div v-if="weeklyReportLoading" class="text-xs text-slate-500 py-2">正在產生週報...</div>
+
+              <div v-else-if="weeklyReport" class="space-y-3">
+                <div v-if="weeklyReport.ai_summary" class="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                  <p class="text-xs font-medium text-blue-700 mb-1">📌 AI 週報摘要</p>
+                  <p class="text-xs text-blue-600">{{ weeklyReport.ai_summary }}</p>
+                </div>
+
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
+                  <div class="p-2.5 bg-white border border-slate-200 rounded-lg">
+                    <p class="text-[11px] text-slate-500">本期完成</p>
+                    <p class="text-sm font-semibold text-slate-700">{{ weeklyReport.overview.completed_tasks }}</p>
+                  </div>
+                  <div class="p-2.5 bg-white border border-slate-200 rounded-lg">
+                    <p class="text-[11px] text-slate-500">總任務數</p>
+                    <p class="text-sm font-semibold text-slate-700">{{ weeklyReport.overview.total_tasks }}</p>
+                  </div>
+                  <div class="p-2.5 bg-white border border-slate-200 rounded-lg">
+                    <p class="text-[11px] text-slate-500">完成率</p>
+                    <p class="text-sm font-semibold text-slate-700">{{ weeklyReport.overview.completion_rate }}%</p>
+                  </div>
+                  <div class="p-2.5 bg-white border border-slate-200 rounded-lg">
+                    <p class="text-[11px] text-slate-500">風險項目</p>
+                    <p class="text-sm font-semibold text-slate-700">{{ weeklyReport.overview.at_risk_tasks }}</p>
+                  </div>
+                </div>
+
+                <div class="grid md:grid-cols-2 gap-3">
+                  <div class="p-3 bg-white border border-slate-200 rounded-lg">
+                    <p class="text-xs font-medium text-slate-600 mb-2">本期完成任務</p>
+                    <div v-if="weeklyReport.completed_tasks.length === 0" class="text-xs text-slate-400">本期尚無完成任務</div>
+                    <ul v-else class="space-y-1.5">
+                      <li
+                        v-for="item in weeklyReport.completed_tasks.slice(0, 5)"
+                        :key="`weekly-done-${item.task_id}`"
+                        class="text-xs text-slate-600"
+                      >
+                        ✓ {{ item.name }}
+                        <span class="text-slate-400">（{{ formatDate(item.completed_at || item.due_date) || '未標記' }}）</span>
+                      </li>
+                    </ul>
+                  </div>
+
+                  <div class="p-3 bg-white border border-slate-200 rounded-lg flex flex-col">
+                    <p class="text-xs font-medium text-slate-600 mb-2">風險清單</p>
+                    <div v-if="weeklyReport.risk_items.length === 0" class="text-xs text-slate-400">本期無風險項目</div>
+                    <ul v-else class="space-y-1.5 overflow-y-auto max-h-48 pr-2">
+                      <li
+                        v-for="item in weeklyReport.risk_items"
+                        :key="`weekly-risk-${item.task_id}`"
+                        class="text-xs text-amber-700"
+                      >
+                        ⚠ {{ item.name }}
+                        <span class="text-amber-600">（{{ item.reason }}，截止 {{ formatDate(item.due_date) || item.due_date }}）</span>
+                      </li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 風險分析（Phase 7.2） -->
+          <div class="mb-4 p-4 bg-rose-50 border border-rose-200 rounded-xl">
+            <div class="flex items-center justify-between gap-3 mb-3">
               <div>
-                <label class="block text-[11px] text-slate-500 mb-1">起始日</label>
-                <input
-                  v-model="weeklyReportRange.start_date"
-                  type="date"
-                  class="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
-                />
+                <p class="text-sm font-semibold text-rose-700">⚠️ 風險分析（Critical Path）</p>
+                <p class="text-xs text-rose-500">關鍵路徑、延期衝擊與資料品質警示</p>
               </div>
-              <div>
-                <label class="block text-[11px] text-slate-500 mb-1">結束日</label>
-                <input
-                  v-model="weeklyReportRange.end_date"
-                  type="date"
-                  class="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
-                />
+              <div class="flex items-center gap-2">
+                <button
+                  @click="toggleRiskAnalysisExpanded"
+                  class="px-3 py-1.5 text-xs font-medium rounded-lg bg-white border border-rose-200 text-rose-600 hover:bg-rose-100 transition-colors"
+                >
+                  {{ isRiskAnalysisExpanded ? '收合' : '展開' }}
+                </button>
+                <button
+                  @click="toggleRiskGraph"
+                  :disabled="riskAnalysisLoading"
+                  class="px-3 py-1.5 text-xs font-medium rounded-lg bg-white border border-rose-200 text-rose-600 hover:bg-rose-100 transition-colors disabled:opacity-50"
+                >
+                  {{ isRiskGraphVisible ? '隱藏依賴圖' : '產生依賴圖' }}
+                </button>
+                <button
+                  @click="fetchRiskAnalysis"
+                  :disabled="riskAnalysisLoading"
+                  class="px-3 py-1.5 text-xs font-medium rounded-lg bg-white border border-rose-200 text-rose-600 hover:bg-rose-100 transition-colors disabled:opacity-50"
+                >
+                  {{ riskAnalysisLoading ? '載入中...' : '重新整理' }}
+                </button>
               </div>
             </div>
 
-            <div v-if="weeklyReportError" class="mb-3 p-2.5 text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg">
-              {{ weeklyReportError }}
-            </div>
-
-            <div v-if="weeklyReportLoading" class="text-xs text-slate-500 py-2">正在產生週報...</div>
-
-            <div v-else-if="weeklyReport" class="space-y-3">
-              <div v-if="weeklyReport.ai_summary" class="p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                <p class="text-xs font-medium text-blue-700 mb-1">📌 AI 週報摘要</p>
-                <p class="text-xs text-blue-600">{{ weeklyReport.ai_summary }}</p>
+            <div v-show="isRiskAnalysisExpanded">
+              <div v-if="riskAnalysisError" class="mb-3 p-2.5 text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg">
+                {{ riskAnalysisError }}
               </div>
 
-              <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
-                <div class="p-2.5 bg-white border border-slate-200 rounded-lg">
-                  <p class="text-[11px] text-slate-500">本期完成</p>
-                  <p class="text-sm font-semibold text-slate-700">{{ weeklyReport.overview.completed_tasks }}</p>
-                </div>
-                <div class="p-2.5 bg-white border border-slate-200 rounded-lg">
-                  <p class="text-[11px] text-slate-500">總任務數</p>
-                  <p class="text-sm font-semibold text-slate-700">{{ weeklyReport.overview.total_tasks }}</p>
-                </div>
-                <div class="p-2.5 bg-white border border-slate-200 rounded-lg">
-                  <p class="text-[11px] text-slate-500">完成率</p>
-                  <p class="text-sm font-semibold text-slate-700">{{ weeklyReport.overview.completion_rate }}%</p>
-                </div>
-                <div class="p-2.5 bg-white border border-slate-200 rounded-lg">
-                  <p class="text-[11px] text-slate-500">風險項目</p>
-                  <p class="text-sm font-semibold text-slate-700">{{ weeklyReport.overview.at_risk_tasks }}</p>
-                </div>
-              </div>
+              <div v-if="riskAnalysisLoading" class="text-xs text-rose-500 py-2">正在分析關鍵路徑...</div>
 
-              <div class="grid md:grid-cols-2 gap-3">
-                <div class="p-3 bg-white border border-slate-200 rounded-lg">
-                  <p class="text-xs font-medium text-slate-600 mb-2">本期完成任務</p>
-                  <div v-if="weeklyReport.completed_tasks.length === 0" class="text-xs text-slate-400">本期尚無完成任務</div>
-                  <ul v-else class="space-y-1.5">
-                    <li
-                      v-for="item in weeklyReport.completed_tasks.slice(0, 5)"
-                      :key="`weekly-done-${item.task_id}`"
-                      class="text-xs text-slate-600"
+              <div v-else-if="riskAnalysis" class="space-y-3">
+                <div v-if="isRiskGraphVisible" class="p-3 bg-white border border-rose-200 rounded-lg">
+                  <div class="flex items-center justify-between mb-2">
+                    <p class="text-xs font-medium text-rose-700">依賴圖（自動佈局）</p>
+                    <button
+                      type="button"
+                      @click="rebuildRiskGraph"
+                      class="px-2.5 py-1 text-[11px] rounded-md border border-rose-200 text-rose-600 hover:bg-rose-100 transition-colors"
                     >
-                      ✓ {{ item.name }}
-                      <span class="text-slate-400">（{{ formatDate(item.completed_at || item.due_date) || '未標記' }}）</span>
-                    </li>
-                  </ul>
+                      重新產生
+                    </button>
+                  </div>
+
+                  <div v-if="!riskGraphLayout" class="text-xs text-rose-400">
+                    目前沒有可視化的依賴資料（請先建立任務依賴）。
+                  </div>
+
+                  <div v-else class="overflow-x-auto border border-rose-100 rounded-lg bg-rose-50/30">
+                    <svg
+                      :key="riskGraphVersion"
+                      :width="riskGraphLayout.width"
+                      :height="riskGraphLayout.height"
+                      role="img"
+                      aria-label="risk dependency graph"
+                    >
+                      <defs>
+                        <marker
+                          id="risk-graph-arrow"
+                          markerWidth="8"
+                          markerHeight="8"
+                          refX="7"
+                          refY="4"
+                          orient="auto"
+                        >
+                          <path d="M0,0 L8,4 L0,8 z" fill="#94a3b8" />
+                        </marker>
+                      </defs>
+
+                      <line
+                        v-for="edge in riskGraphLayout.edges"
+                        :key="`risk-graph-edge-${edge.source_task_id}-${edge.target_task_id}`"
+                        :x1="edge.x1"
+                        :y1="edge.y1"
+                        :x2="edge.x2"
+                        :y2="edge.y2"
+                        :stroke="edge.is_critical ? '#e11d48' : '#94a3b8'"
+                        :stroke-width="edge.is_critical ? 2.2 : 1.4"
+                        marker-end="url(#risk-graph-arrow)"
+                      />
+
+                      <g
+                        v-for="node in riskGraphLayout.nodes"
+                        :key="`risk-graph-node-${node.task_id}`"
+                      >
+                        <rect
+                          :x="node.x"
+                          :y="node.y"
+                          :width="RISK_GRAPH_NODE_WIDTH"
+                          :height="RISK_GRAPH_NODE_HEIGHT"
+                          :rx="10"
+                          :fill="getRiskGraphNodeFill(node)"
+                          :stroke="getRiskGraphNodeStroke(node)"
+                          :stroke-width="node.is_critical ? 2.2 : 1.4"
+                        />
+                        <text
+                          :x="node.x + 10"
+                          :y="node.y + 20"
+                          font-size="11"
+                          fill="#334155"
+                        >
+                          {{ truncateRiskGraphNodeName(node.name) }}
+                        </text>
+                        <text
+                          :x="node.x + 10"
+                          :y="node.y + 36"
+                          font-size="10"
+                          fill="#64748b"
+                        >
+                          #{{ node.task_id }} · {{ node.is_critical ? 'Critical' : 'Normal' }}
+                        </text>
+                      </g>
+                    </svg>
+                  </div>
+
+                  <div class="mt-2 flex flex-wrap gap-2 text-[11px]">
+                    <span class="px-2 py-0.5 rounded-full bg-rose-100 text-rose-700 border border-rose-200">關鍵路徑</span>
+                    <span class="px-2 py-0.5 rounded-full bg-red-100 text-red-700 border border-red-200">高風險</span>
+                    <span class="px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-200">中風險</span>
+                    <span class="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200">一般任務</span>
+                  </div>
                 </div>
 
-                <div class="p-3 bg-white border border-slate-200 rounded-lg flex flex-col">
-                  <p class="text-xs font-medium text-slate-600 mb-2">風險清單</p>
-                  <div v-if="weeklyReport.risk_items.length === 0" class="text-xs text-slate-400">本期無風險項目</div>
-                  <ul v-else class="space-y-1.5 overflow-y-auto max-h-48 pr-2">
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
+                  <div class="p-2.5 bg-white border border-rose-200 rounded-lg">
+                    <p class="text-[11px] text-rose-500">預估總工期</p>
+                    <p class="text-sm font-semibold text-rose-700">{{ riskAnalysis.summary.projected_duration_days }} 天</p>
+                  </div>
+                  <div class="p-2.5 bg-white border border-rose-200 rounded-lg">
+                    <p class="text-[11px] text-rose-500">關鍵路徑任務</p>
+                    <p class="text-sm font-semibold text-rose-700">{{ riskAnalysis.summary.critical_path_task_count }} 項</p>
+                  </div>
+                  <div class="p-2.5 bg-white border border-rose-200 rounded-lg">
+                    <p class="text-[11px] text-rose-500">高風險任務</p>
+                    <p class="text-sm font-semibold text-rose-700">{{ riskAnalysis.summary.high_risk_count }} 項</p>
+                  </div>
+                  <div class="p-2.5 bg-white border border-rose-200 rounded-lg">
+                    <p class="text-[11px] text-rose-500">警示數</p>
+                    <p class="text-sm font-semibold text-rose-700">{{ riskAnalysis.summary.warning_count }} 筆</p>
+                  </div>
+                </div>
+
+                <div class="grid md:grid-cols-2 gap-3">
+                  <div class="p-3 bg-white border border-rose-200 rounded-lg">
+                    <p class="text-xs font-medium text-rose-700 mb-2">關鍵路徑</p>
+                    <div v-if="riskAnalysis.critical_path.length === 0" class="text-xs text-rose-400">目前沒有可計算的路徑</div>
+                    <ol v-else class="space-y-1.5">
+                      <li
+                        v-for="(item, idx) in riskAnalysis.critical_path"
+                        :key="`critical-path-${item.task_id}`"
+                        class="text-xs text-rose-700"
+                      >
+                        {{ idx + 1 }}. {{ item.name }}
+                        <span class="text-rose-500">（工期 {{ item.duration_days }} 天，float {{ item.float_days }}）</span>
+                      </li>
+                    </ol>
+                  </div>
+
+                  <div class="p-3 bg-white border border-rose-200 rounded-lg">
+                    <p class="text-xs font-medium text-rose-700 mb-2">風險任務</p>
+                    <div v-if="riskAnalysis.risk_items.length === 0" class="text-xs text-rose-400">目前無風險任務</div>
+                    <ul v-else class="space-y-1.5 overflow-y-auto max-h-48 pr-2">
+                      <li
+                        v-for="item in riskAnalysis.risk_items.slice(0, 8)"
+                        :key="`risk-item-${item.task_id}`"
+                        class="text-xs"
+                      >
+                        <p class="font-medium text-rose-700">
+                          {{ item.name }}
+                          <span class="text-rose-500">（{{ item.severity.toUpperCase() }}，impact {{ item.impact_days }} 天）</span>
+                        </p>
+                        <p class="text-rose-600 mt-0.5">{{ item.reasons.join('；') }}</p>
+                      </li>
+                    </ul>
+                  </div>
+                </div>
+
+                <div v-if="riskAnalysis.warnings.length > 0" class="p-3 bg-white border border-rose-200 rounded-lg">
+                  <p class="text-xs font-medium text-rose-700 mb-2">資料警示</p>
+                  <ul class="space-y-1.5 max-h-32 overflow-y-auto pr-2">
                     <li
-                      v-for="item in weeklyReport.risk_items"
-                      :key="`weekly-risk-${item.task_id}`"
-                      class="text-xs text-amber-700"
+                      v-for="(warning, index) in riskAnalysis.warnings"
+                      :key="`risk-warning-${warning.code}-${index}`"
+                      class="text-xs text-rose-600"
                     >
-                      ⚠ {{ item.name }}
-                      <span class="text-amber-600">（{{ item.reason }}，截止 {{ formatDate(item.due_date) || item.due_date }}）</span>
+                      • {{ warning.message }}
                     </li>
                   </ul>
                 </div>
@@ -147,10 +357,15 @@
           <div class="space-y-2">
             <div v-for="task in timelineTasks" :key="task.task_id" class="flex items-center gap-3 p-3 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors group">
               <input type="checkbox" :checked="task.completed" @change="$emit('toggle-task', task.task_id)" class="w-5 h-5 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer" />
-              <span :class="['flex-1 text-sm cursor-pointer', task.completed ? 'line-through text-gray-400' : 'text-gray-700']" @click="openTaskDetail(task)">{{ task.name }}</span>
+              <div class="flex-1 min-w-0">
+                <span :class="['text-sm cursor-pointer', task.completed ? 'line-through text-gray-400' : 'text-gray-700']" @click="openTaskDetail(task)">{{ task.name }}</span>
+                <p v-if="(task.depends_on_task_ids || []).length > 0" class="text-[11px] text-gray-400 mt-0.5 truncate">
+                  前置：{{ (task.depends_on_task_ids || []).map(getTaskNameById).join('、') }}
+                </p>
+              </div>
               <span v-if="task.end_date" class="text-xs text-gray-400 hidden group-hover:inline">{{ formatDate(task.end_date) }}</span>
               <span :class="['text-xs px-2 py-0.5 rounded-full font-medium', getPriorityBadgeClass(task.priority)]">{{ getPriorityLabel(task.priority) }}</span>
-              <button v-if="selectedTimeline?.role === 0" @click.stop="openTaskMemberPanel(task)" class="opacity-0 group-hover:opacity-100 text-indigo-400 hover:text-indigo-600 transition-all text-sm" title="指派成員">👥</button>
+              <button v-if="canManageTaskMembers(task)" @click.stop="openTaskMemberPanel(task)" class="opacity-100 md:opacity-0 md:group-hover:opacity-100 text-indigo-400 hover:text-indigo-600 transition-all text-sm" title="指派成員">👥</button>
               <button @click="$emit('delete-task', task.task_id)" class="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-600 transition-all text-sm">🗑️</button>
             </div>
             <div v-if="timelineTasks.length === 0" class="text-center py-10 text-gray-400">
@@ -221,6 +436,32 @@
             </div>
           </div>
           <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1.5">前置依賴任務（可多選）</label>
+            <select
+              v-model="addTaskDependencyIds"
+              multiple
+              class="w-full min-h-30 px-3 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none bg-white text-sm"
+            >
+              <option
+                v-for="taskOption in availableDependencyTasks"
+                :key="`add-dependency-${taskOption.task_id}`"
+                :value="taskOption.task_id"
+              >
+                {{ taskOption.name }}
+              </option>
+            </select>
+            <p class="text-[11px] text-gray-500 mt-1.5">僅可依賴本專案任務；會自動去重與驗證。</p>
+            <div v-if="addTaskDependencyIds.length > 0" class="mt-2 flex flex-wrap gap-1.5">
+              <span
+                v-for="dependencyId in addTaskDependencyIds"
+                :key="`add-dependency-chip-${dependencyId}`"
+                class="px-2.5 py-1 text-xs rounded-full bg-slate-100 text-slate-700 border border-slate-200"
+              >
+                {{ getTaskNameById(dependencyId) }}
+              </span>
+            </div>
+          </div>
+          <div>
             <label class="block text-sm font-medium text-gray-700 mb-1.5">標籤（逗號分隔）</label>
             <input v-model="taskForm.tags" type="text" placeholder="例如：前端, 重要, Bug" class="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none" />
           </div>
@@ -282,6 +523,14 @@
                 <p v-if="item.preview.suggestion" class="text-xs text-amber-600 mt-2">
                   建議改期為 {{ item.preview.suggestion.start_date }} ~ {{ item.preview.suggestion.end_date }}
                 </p>
+                <button
+                  type="button"
+                  @click="requestAddTaskConflictAiSuggestion(item.assignee_user_id)"
+                  :disabled="conflictAiSuggestionLoadingKey === getConflictPreviewKey(item.assignee_user_id)"
+                  class="mt-2 inline-flex items-center px-2.5 py-1 text-[11px] rounded-md border border-amber-300 text-amber-700 bg-white hover:bg-amber-50 transition-colors disabled:opacity-50"
+                >
+                  {{ conflictAiSuggestionLoadingKey === getConflictPreviewKey(item.assignee_user_id) ? 'AI 產生中...' : '✨ 產生 AI 衝突建議' }}
+                </button>
                 <p v-if="item.preview.ai_suggestion" class="text-xs text-amber-700 italic mt-2">
                   💡 {{ item.preview.ai_suggestion }}
                 </p>
@@ -436,9 +685,45 @@
             <h4 class="font-semibold text-gray-700 mb-2">📝 備註</h4>
             <p class="text-gray-600 text-sm">{{ selectedTask.task_remark }}</p>
           </div>
+          <div class="p-4 bg-slate-50 rounded-xl">
+            <h4 class="font-semibold text-gray-700 mb-2">🔗 前置依賴</h4>
+            <select
+              v-model="selectedTaskDependencyIds"
+              multiple
+              class="w-full min-h-30 px-3 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none bg-white text-sm"
+            >
+              <option
+                v-for="taskOption in selectedTaskDependencyOptions"
+                :key="`detail-dependency-option-${taskOption.task_id}`"
+                :value="taskOption.task_id"
+              >
+                {{ taskOption.name }}
+              </option>
+            </select>
+            <p class="text-[11px] text-gray-500 mt-1.5">僅可依賴本專案任務；會自動去重與驗證。</p>
+            <div v-if="selectedTaskDependencyIds.length > 0" class="mt-2 flex flex-wrap gap-1.5">
+              <span
+                v-for="dependencyId in selectedTaskDependencyIds"
+                :key="`detail-dependency-chip-${dependencyId}`"
+                class="px-2.5 py-1 text-xs rounded-full bg-slate-200 text-slate-700"
+              >
+                {{ getTaskNameById(dependencyId) }}
+              </span>
+            </div>
+            <div class="mt-3 flex justify-end">
+              <button
+                type="button"
+                @click="saveSelectedTaskDependencies"
+                :disabled="isSavingTaskDependencies"
+                class="px-3 py-1.5 text-xs font-medium rounded-lg bg-white border border-slate-300 text-slate-700 hover:bg-slate-100 transition-colors disabled:opacity-50"
+              >
+                {{ isSavingTaskDependencies ? '儲存中...' : '儲存前置依賴' }}
+              </button>
+            </div>
+          </div>
 
           <!-- ── 成員指派區 ── -->
-          <div v-if="selectedTimeline?.role === 0" class="p-4 bg-indigo-50/60 rounded-xl">
+          <div v-if="canManageTaskMembers(selectedTask)" class="p-4 bg-indigo-50/60 rounded-xl">
             <h4 class="font-semibold text-gray-700 mb-3 flex items-center gap-2">
               <span>👥</span> 指派成員
             </h4>
@@ -690,6 +975,9 @@
                       <span>📅 {{ formatDate(task.start_date) }} - {{ formatDate(task.end_date) }}</span>
                       <span v-if="task.tags">🏷️ {{ task.tags }}</span>
                     </div>
+                    <p v-if="(task.depends_on_task_refs || []).length > 0" class="text-xs text-indigo-600 mt-1">
+                      🔗 前置：{{ (task.depends_on_task_refs || []).join('、') }}
+                    </p>
                     <p v-if="task.remark" class="text-sm text-gray-500 mt-1">{{ task.remark }}</p>
                   </div>
                 </div>
@@ -730,9 +1018,11 @@ import type {
   SearchUserResult,
   AiGeneratedTask,
   CreateTaskPayload,
+  TimelineBatchTaskPayload,
   ApiErrorPayload,
   GenerateTasksResponse,
   CopilotMcpExecuteResponse,
+  CriticalPathAnalysisResponse,
   WeeklyReportResponse,
   ConflictCheckPayload,
   ResourceConflictResponse,
@@ -795,11 +1085,15 @@ const taskMembersForAssign = ref<TaskMember[]>([]);
 
 const taskForm = ref<CreateTaskPayload>({ name: '', start_date: '', end_date: '', priority: 2, tags: '', task_remark: '' });
 const addTaskAssigneeIds = ref<number[]>([]);
+const addTaskDependencyIds = ref<number[]>([]);
+const selectedTaskDependencyIds = ref<number[]>([]);
+const isSavingTaskDependencies = ref(false);
 const addTaskConflictPreviews = ref<Array<{
   assignee_user_id: number | null;
   assignee_label: string;
   preview: ResourceConflictResponse;
 }>>([]);
+const conflictAiSuggestionLoadingKey = ref<string | null>(null);
 const addTaskConflictSummary = computed(() => {
   const conflicted = addTaskConflictPreviews.value.filter((item) => item.preview.has_conflict);
   const totalSignals = conflicted.reduce((sum, item) => sum + item.preview.conflict_count, 0);
@@ -811,7 +1105,243 @@ const addTaskConflictSummary = computed(() => {
 const weeklyReport = ref<WeeklyReportResponse | null>(null);
 const weeklyReportLoading = ref(false);
 const weeklyReportError = ref('');
+const isWeeklyReportExpanded = ref(false);
 const weeklyReportRange = ref<{ start_date: string; end_date: string }>({ start_date: '', end_date: '' });
+const riskAnalysis = ref<CriticalPathAnalysisResponse | null>(null);
+const riskAnalysisLoading = ref(false);
+const riskAnalysisError = ref('');
+const isRiskAnalysisExpanded = ref(false);
+const isRiskGraphVisible = ref(false);
+const riskGraphVersion = ref(0);
+
+const RISK_GRAPH_NODE_WIDTH = 170;
+const RISK_GRAPH_NODE_HEIGHT = 50;
+const RISK_GRAPH_X_PADDING = 36;
+const RISK_GRAPH_Y_PADDING = 28;
+const RISK_GRAPH_COLUMN_GAP = 96;
+const RISK_GRAPH_ROW_GAP = 30;
+
+type RiskGraphLayoutNode = {
+  task_id: number;
+  name: string;
+  x: number;
+  y: number;
+  is_critical: boolean;
+  severity: 'high' | 'medium' | 'low' | null;
+};
+
+type RiskGraphLayoutEdge = {
+  source_task_id: number;
+  target_task_id: number;
+  is_critical: boolean;
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+};
+
+type RiskGraphLayout = {
+  width: number;
+  height: number;
+  nodes: RiskGraphLayoutNode[];
+  edges: RiskGraphLayoutEdge[];
+};
+
+const availableDependencyTasks = computed(() => {
+  return props.timelineTasks
+    .filter((task) => !task.completed)
+    .map((task) => ({
+      task_id: task.task_id,
+      name: task.name,
+    }));
+});
+
+const selectedTaskDependencyOptions = computed(() => {
+  const currentTaskId = selectedTask.value?.task_id;
+  return props.timelineTasks
+    .filter((task) => task.task_id !== currentTaskId)
+    .map((task) => ({
+      task_id: task.task_id,
+      name: task.name,
+    }));
+});
+
+const riskSeverityMap = computed(() => {
+  const entries = riskAnalysis.value?.risk_items || [];
+  const map = new Map<number, 'high' | 'medium' | 'low'>();
+
+  for (const item of entries) {
+    const taskId = Number(item.task_id);
+    const severity = String(item.severity || '').toLowerCase();
+    if (!Number.isInteger(taskId) || taskId <= 0) {
+      continue;
+    }
+    if (severity === 'high' || severity === 'medium' || severity === 'low') {
+      map.set(taskId, severity);
+    }
+  }
+
+  return map;
+});
+
+const riskGraphLayout = computed<RiskGraphLayout | null>(() => {
+  const graphNodes = riskAnalysis.value?.graph?.nodes || [];
+  const graphEdges = riskAnalysis.value?.graph?.edges || [];
+  if (graphNodes.length === 0) {
+    return null;
+  }
+
+  const nodeIds = new Set<number>(
+    graphNodes
+      .map((item) => Number(item.task_id))
+      .filter((taskId) => Number.isInteger(taskId) && taskId > 0)
+  );
+
+  const incomingCount = new Map<number, number>();
+  const adjacency = new Map<number, number[]>();
+  const levelMap = new Map<number, number>();
+
+  for (const taskId of nodeIds) {
+    incomingCount.set(taskId, 0);
+    adjacency.set(taskId, []);
+    levelMap.set(taskId, 0);
+  }
+
+  const validEdges = graphEdges
+    .map((edge) => ({
+      source_task_id: Number(edge.source_task_id),
+      target_task_id: Number(edge.target_task_id),
+      is_critical: Boolean(edge.is_critical),
+    }))
+    .filter((edge) => nodeIds.has(edge.source_task_id) && nodeIds.has(edge.target_task_id));
+
+  for (const edge of validEdges) {
+    const children = adjacency.get(edge.source_task_id) || [];
+    children.push(edge.target_task_id);
+    adjacency.set(edge.source_task_id, children);
+    incomingCount.set(edge.target_task_id, (incomingCount.get(edge.target_task_id) || 0) + 1);
+  }
+
+  const queue = Array.from(nodeIds)
+    .filter((taskId) => (incomingCount.get(taskId) || 0) === 0)
+    .sort((a, b) => a - b);
+  const visited = new Set<number>();
+
+  while (queue.length > 0) {
+    const current = queue.shift() as number;
+    visited.add(current);
+
+    const currentLevel = levelMap.get(current) || 0;
+    const children = adjacency.get(current) || [];
+    for (const next of children) {
+      const nextLevel = levelMap.get(next) || 0;
+      if (currentLevel + 1 > nextLevel) {
+        levelMap.set(next, currentLevel + 1);
+      }
+
+      const reducedIncoming = (incomingCount.get(next) || 0) - 1;
+      incomingCount.set(next, reducedIncoming);
+      if (reducedIncoming === 0) {
+        queue.push(next);
+      }
+    }
+  }
+
+  // 若圖中含循環（或降級邊緣案例），仍強制給層級避免無法渲染。
+  if (visited.size < nodeIds.size) {
+    for (const taskId of nodeIds) {
+      if (visited.has(taskId)) {
+        continue;
+      }
+      levelMap.set(taskId, Math.max(levelMap.get(taskId) || 0, 1));
+    }
+  }
+
+  const groupedByLevel = new Map<number, Array<{ task_id: number; name: string; is_critical: boolean }>>();
+  for (const item of graphNodes) {
+    const taskId = Number(item.task_id);
+    if (!nodeIds.has(taskId)) {
+      continue;
+    }
+
+    const level = levelMap.get(taskId) || 0;
+    const group = groupedByLevel.get(level) || [];
+    group.push({
+      task_id: taskId,
+      name: item.name,
+      is_critical: Boolean(item.is_critical),
+    });
+    groupedByLevel.set(level, group);
+  }
+
+  const sortedLevels = Array.from(groupedByLevel.keys()).sort((a, b) => a - b);
+  const layoutNodes: RiskGraphLayoutNode[] = [];
+  const nodePositionMap = new Map<number, { x: number; y: number }>();
+  let maxRows = 1;
+
+  for (const level of sortedLevels) {
+    const group = (groupedByLevel.get(level) || []).sort((a, b) => a.task_id - b.task_id);
+    maxRows = Math.max(maxRows, group.length);
+
+    group.forEach((node, index) => {
+      const x = RISK_GRAPH_X_PADDING + level * (RISK_GRAPH_NODE_WIDTH + RISK_GRAPH_COLUMN_GAP);
+      const y = RISK_GRAPH_Y_PADDING + index * (RISK_GRAPH_NODE_HEIGHT + RISK_GRAPH_ROW_GAP);
+      const severity = riskSeverityMap.value.get(node.task_id) || null;
+
+      layoutNodes.push({
+        task_id: node.task_id,
+        name: node.name,
+        x,
+        y,
+        is_critical: node.is_critical,
+        severity,
+      });
+
+      nodePositionMap.set(node.task_id, { x, y });
+    });
+  }
+
+  const layoutEdges: RiskGraphLayoutEdge[] = [];
+  for (const edge of validEdges) {
+    const source = nodePositionMap.get(edge.source_task_id);
+    const target = nodePositionMap.get(edge.target_task_id);
+    if (!source || !target) {
+      continue;
+    }
+
+    layoutEdges.push({
+      source_task_id: edge.source_task_id,
+      target_task_id: edge.target_task_id,
+      is_critical: edge.is_critical,
+      x1: source.x + RISK_GRAPH_NODE_WIDTH,
+      y1: source.y + RISK_GRAPH_NODE_HEIGHT / 2,
+      x2: target.x,
+      y2: target.y + RISK_GRAPH_NODE_HEIGHT / 2,
+    });
+  }
+
+  const maxLevel = sortedLevels.length > 0 ? Math.max(...sortedLevels) : 0;
+  const width =
+    RISK_GRAPH_X_PADDING * 2
+    + (maxLevel + 1) * RISK_GRAPH_NODE_WIDTH
+    + maxLevel * RISK_GRAPH_COLUMN_GAP;
+  const height =
+    RISK_GRAPH_Y_PADDING * 2
+    + maxRows * RISK_GRAPH_NODE_HEIGHT
+    + Math.max(maxRows - 1, 0) * RISK_GRAPH_ROW_GAP;
+
+  return {
+    width,
+    height,
+    nodes: layoutNodes,
+    edges: layoutEdges,
+  };
+});
+
+const getTaskNameById = (taskId: number): string => {
+  const matchedTask = props.timelineTasks.find((task) => task.task_id === taskId);
+  return matchedTask?.name || `任務 #${taskId}`;
+};
 
 const toDateOnly = (value?: string | null): string | null => {
   if (!value) return null;
@@ -825,6 +1355,62 @@ const toDateOnly = (value?: string | null): string | null => {
 const getTimelineMemberName = (memberId: number): string => {
   const member = timelineMembers.value.find((item) => item.user_id === memberId);
   return member?.username || member?.name || `使用者 #${memberId}`;
+};
+
+const normalizeIdList = (values: Array<number | string>): number[] => {
+  return Array.from(
+    new Set(
+      values
+        .map((value) => Number(value))
+        .filter((value) => Number.isInteger(value) && value > 0)
+    )
+  );
+};
+
+const normalizeStringList = (values: unknown): string[] => {
+  if (!Array.isArray(values)) {
+    return [];
+  }
+
+  return Array.from(
+    new Set(
+      values
+        .map((value) => (typeof value === 'string' ? value.trim() : ''))
+        .filter((value) => value.length > 0)
+    )
+  );
+};
+
+const canManageTaskMembers = (task: Task | null | undefined): boolean => {
+  if (!task) return false;
+  if (typeof task.can_manage_members === 'boolean') {
+    return task.can_manage_members;
+  }
+  return props.selectedTimeline?.role === 0;
+};
+
+const getConflictPreviewKey = (assigneeUserId: number | null): string => {
+  return assigneeUserId === null ? 'self' : String(assigneeUserId);
+};
+
+const buildConflictPayloadForAddTask = (
+  data: CreateTaskPayload,
+  target: { assignee_user_id: number | null },
+  includeAiSuggestion: boolean,
+): ConflictCheckPayload => {
+  const payload: ConflictCheckPayload = {
+    name: data.name,
+    start_date: data.start_date ?? null,
+    end_date: data.end_date ?? null,
+    priority: data.priority,
+    include_ai_suggestion: includeAiSuggestion,
+  };
+
+  if (target.assignee_user_id !== null) {
+    payload.assignee_user_id = target.assignee_user_id;
+  }
+
+  return payload;
 };
 
 const buildAddTaskConflictTargets = () => {
@@ -874,19 +1460,126 @@ const fetchWeeklyReport = async () => {
   }
 };
 
+const fetchRiskAnalysis = async () => {
+  if (!props.selectedTimeline) return;
+
+  riskAnalysisLoading.value = true;
+  riskAnalysisError.value = '';
+
+  try {
+    const res = await timelineService.getRiskAnalysis(props.selectedTimeline.id);
+    riskAnalysis.value = res.data;
+  } catch (err: unknown) {
+    riskAnalysis.value = null;
+    riskAnalysisError.value = getApiErrorMessage(err, '取得風險分析失敗');
+  } finally {
+    riskAnalysisLoading.value = false;
+    riskGraphVersion.value += 1;
+  }
+};
+
+const rebuildRiskGraph = () => {
+  riskGraphVersion.value += 1;
+};
+
+const toggleRiskGraph = async () => {
+  if (isRiskGraphVisible.value) {
+    isRiskGraphVisible.value = false;
+    return;
+  }
+
+  if (!isRiskAnalysisExpanded.value) {
+    isRiskAnalysisExpanded.value = true;
+  }
+
+  if (!riskAnalysis.value && props.selectedTimeline) {
+    await fetchRiskAnalysis();
+  }
+
+  if (!riskAnalysis.value) {
+    toast.warning('目前無法載入依賴圖，請稍後再試');
+    return;
+  }
+
+  isRiskGraphVisible.value = true;
+  rebuildRiskGraph();
+};
+
+const truncateRiskGraphNodeName = (name: string): string => {
+  if (!name) {
+    return '未命名任務';
+  }
+
+  if (name.length <= 12) {
+    return name;
+  }
+  return `${name.slice(0, 11)}…`;
+};
+
+const getRiskGraphNodeFill = (node: RiskGraphLayoutNode): string => {
+  if (node.severity === 'high') {
+    return '#fee2e2';
+  }
+  if (node.severity === 'medium') {
+    return '#fef3c7';
+  }
+  if (node.is_critical) {
+    return '#ffe4e6';
+  }
+  return '#f8fafc';
+};
+
+const getRiskGraphNodeStroke = (node: RiskGraphLayoutNode): string => {
+  if (node.severity === 'high') {
+    return '#ef4444';
+  }
+  if (node.severity === 'medium') {
+    return '#f59e0b';
+  }
+  if (node.is_critical) {
+    return '#e11d48';
+  }
+  return '#94a3b8';
+};
+
+const toggleWeeklyReportExpanded = async () => {
+  isWeeklyReportExpanded.value = !isWeeklyReportExpanded.value;
+  if (isWeeklyReportExpanded.value) {
+    await fetchWeeklyReport();
+  }
+};
+
+const toggleRiskAnalysisExpanded = async () => {
+  isRiskAnalysisExpanded.value = !isRiskAnalysisExpanded.value;
+  if (isRiskAnalysisExpanded.value) {
+    await fetchRiskAnalysis();
+  }
+};
+
 // 每次開啟新的 selectedTimeline 時重置 remark 狀態
 watch(() => props.selectedTimeline, async (val) => {
   if (val) {
     isEditingRemark.value = false;
     timelineRemark.value = val.remark || '';
     localRemark.value = timelineRemark.value;
+    isWeeklyReportExpanded.value = false;
+    isRiskAnalysisExpanded.value = false;
     weeklyReportRange.value = getDefaultWeeklyReportRange();
-    await fetchWeeklyReport();
+    weeklyReport.value = null;
+    weeklyReportError.value = '';
+    riskAnalysis.value = null;
+    riskAnalysisError.value = '';
+    isRiskGraphVisible.value = false;
+    riskGraphVersion.value = 0;
   } else {
     timelineRemark.value = '';
     localRemark.value = '';
     weeklyReport.value = null;
     weeklyReportError.value = '';
+    riskAnalysis.value = null;
+    riskAnalysisError.value = '';
+    isRiskGraphVisible.value = false;
+    riskGraphVersion.value = 0;
   }
 }, { immediate: true });
 
@@ -907,7 +1600,9 @@ watch(showAddTaskModal, async (opened) => {
 const resetTaskForm = () => {
   taskForm.value = { name: '', start_date: '', end_date: '', priority: 2, tags: '', task_remark: '' };
   addTaskAssigneeIds.value = [];
+  addTaskDependencyIds.value = [];
   addTaskConflictPreviews.value = [];
+  conflictAiSuggestionLoadingKey.value = null;
 };
 
 const runConflictPrecheckForAddTask = async (timelineId: number, data: CreateTaskPayload): Promise<boolean> => {
@@ -917,31 +1612,20 @@ const runConflictPrecheckForAddTask = async (timelineId: number, data: CreateTas
   }
 
   const targets = buildAddTaskConflictTargets();
-  const previews: Array<{
-    assignee_user_id: number | null;
-    assignee_label: string;
-    preview: ResourceConflictResponse;
-  }> = [];
+  const previews = await Promise.all(
+    targets.map(async (target) => {
+      const conflictRes = await timelineService.conflictCheck(
+        timelineId,
+        buildConflictPayloadForAddTask(data, target, false),
+      );
 
-  for (const target of targets) {
-    const payload: ConflictCheckPayload = {
-      name: data.name,
-      start_date: data.start_date ?? null,
-      end_date: data.end_date ?? null,
-      priority: data.priority,
-    };
-
-    if (target.assignee_user_id !== null) {
-      payload.assignee_user_id = target.assignee_user_id;
-    }
-
-    const conflictRes = await timelineService.conflictCheck(timelineId, payload);
-    previews.push({
-      assignee_user_id: target.assignee_user_id,
-      assignee_label: target.assignee_label,
-      preview: conflictRes.data,
-    });
-  }
+      return {
+        assignee_user_id: target.assignee_user_id,
+        assignee_label: target.assignee_label,
+        preview: conflictRes.data,
+      };
+    })
+  );
 
   addTaskConflictPreviews.value = previews;
   const conflictedPreviews = previews.filter((item) => item.preview.has_conflict);
@@ -966,6 +1650,57 @@ const runConflictPrecheckForAddTask = async (timelineId: number, data: CreateTas
   });
 };
 
+const requestAddTaskConflictAiSuggestion = async (assigneeUserId: number | null) => {
+  if (!props.selectedTimeline) return;
+
+  const payloadData = mapToCreateTaskPayload({
+    ...taskForm.value,
+    timeline_id: props.selectedTimeline.id,
+    assignee_user_ids: normalizeIdList(addTaskAssigneeIds.value),
+    depends_on_task_ids: normalizeIdList(addTaskDependencyIds.value),
+  });
+
+  if (!payloadData.end_date) {
+    toast.warning('請先填寫截止日期再產生 AI 衝突建議');
+    return;
+  }
+
+  const key = getConflictPreviewKey(assigneeUserId);
+  conflictAiSuggestionLoadingKey.value = key;
+
+  try {
+    const target = {
+      assignee_user_id: assigneeUserId,
+      assignee_label: assigneeUserId === null ? '我自己（預設）' : getTimelineMemberName(assigneeUserId),
+    };
+
+    const conflictRes = await timelineService.conflictCheck(
+      props.selectedTimeline.id,
+      buildConflictPayloadForAddTask(payloadData, target, true),
+    );
+
+    addTaskConflictPreviews.value = addTaskConflictPreviews.value.map((item) => {
+      if (item.assignee_user_id !== assigneeUserId) {
+        return item;
+      }
+      return {
+        ...item,
+        preview: conflictRes.data,
+      };
+    });
+
+    if (conflictRes.data.ai_suggestion) {
+      toast.success('AI 衝突建議已更新');
+    } else {
+      toast.info('目前沒有可生成的 AI 衝突建議');
+    }
+  } catch (err: unknown) {
+    toast.error(getApiErrorMessage(err, '取得 AI 衝突建議失敗'));
+  } finally {
+    conflictAiSuggestionLoadingKey.value = null;
+  }
+};
+
 const runConflictPrecheckForTaskMemberAssignment = async (task: Task, member: TaskMember): Promise<boolean> => {
   if (!props.selectedTimeline) return true;
 
@@ -980,6 +1715,7 @@ const runConflictPrecheckForTaskMemberAssignment = async (task: Task, member: Ta
       end_date: endDate,
       assignee_user_id: member.user_id,
       priority: task.priority,
+      include_ai_suggestion: false,
     });
 
     if (!res.data.has_conflict) {
@@ -1026,14 +1762,14 @@ const saveRemark = async () => {
 const handleAddTask = async () => {
   if (!props.selectedTimeline) return;
   try {
-    const selectedAssigneeIds = Array.from(
-      new Set(addTaskAssigneeIds.value.map((id) => Number(id)).filter((id) => Number.isInteger(id) && id > 0))
-    );
+    const selectedAssigneeIds = normalizeIdList(addTaskAssigneeIds.value);
+    const dependencyIds = normalizeIdList(addTaskDependencyIds.value);
 
     const data = mapToCreateTaskPayload({
       ...taskForm.value,
       timeline_id: props.selectedTimeline.id,
       assignee_user_ids: selectedAssigneeIds.length > 0 ? selectedAssigneeIds : undefined,
+      depends_on_task_ids: dependencyIds,
     });
 
     const shouldProceed = await runConflictPrecheckForAddTask(props.selectedTimeline.id, data);
@@ -1045,13 +1781,19 @@ const handleAddTask = async () => {
     showAddTaskModal.value = false;
     resetTaskForm();
     emit('refresh-all');
-    await fetchWeeklyReport();
+    if (isWeeklyReportExpanded.value) {
+      void fetchWeeklyReport();
+    }
+    if (isRiskAnalysisExpanded.value) {
+      void fetchRiskAnalysis();
+    }
   } catch { toast.error('新增任務失敗'); }
 };
 
 const openTaskDetail = async (task: Task) => {
   selectedTask.value = { ...task };
   assignTask.value = { ...task };
+  selectedTaskDependencyIds.value = normalizeIdList(task.depends_on_task_ids || []);
   taskComments.value = [];
   commentSummary.value = null;
   commentSummaryMeta.value = null;
@@ -1070,6 +1812,37 @@ const openTaskDetail = async (task: Task) => {
   }
   // 載入專案成員供快速指派
   if (timelineMembers.value.length === 0) await loadMembers();
+};
+
+const saveSelectedTaskDependencies = async () => {
+  if (!selectedTask.value) return;
+
+  const dependencyIds = normalizeIdList(selectedTaskDependencyIds.value).filter(
+    (taskId) => taskId !== selectedTask.value?.task_id,
+  );
+
+  isSavingTaskDependencies.value = true;
+  try {
+    await taskService.update(selectedTask.value.task_id, {
+      depends_on_task_ids: dependencyIds,
+    });
+
+    selectedTask.value = {
+      ...selectedTask.value,
+      depends_on_task_ids: dependencyIds,
+    };
+    selectedTaskDependencyIds.value = dependencyIds;
+
+    emit('refresh-all');
+    if (isRiskAnalysisExpanded.value) {
+      void fetchRiskAnalysis();
+    }
+    toast.success('前置依賴已更新');
+  } catch (err: unknown) {
+    toast.error(getApiErrorMessage(err, '更新前置依賴失敗'));
+  } finally {
+    isSavingTaskDependencies.value = false;
+  }
 };
 
 const addSubtask = async () => {
@@ -1171,6 +1944,11 @@ const deleteFile = async (fileId: number) => {
 
 // ────────────── 任務成員指派 ──────────────
 const openTaskMemberPanel = async (task: Task) => {
+  if (!canManageTaskMembers(task)) {
+    toast.error('你沒有管理此任務成員的權限');
+    return;
+  }
+
   assignTask.value = task;
   isTaskMemberPanelOpen.value = true;
 };
@@ -1194,6 +1972,10 @@ const loadTaskMembersForAssign = async () => {
 
 const quickAssignTaskMember = async (member: TaskMember) => {
   if (!assignTask.value) return;
+  if (!canManageTaskMembers(assignTask.value)) {
+    toast.error('你沒有管理此任務成員的權限');
+    return;
+  }
 
   const canAssign = await runConflictPrecheckForTaskMemberAssignment(assignTask.value, member);
   if (!canAssign) {
@@ -1211,6 +1993,11 @@ const quickAssignTaskMember = async (member: TaskMember) => {
 
 const kickAssignedMember = async (member: TaskMember) => {
   if (!assignTask.value) return;
+  if (!canManageTaskMembers(assignTask.value)) {
+    toast.error('你沒有管理此任務成員的權限');
+    return;
+  }
+
   if (!await confirm({ title: `確定要將「${member.name}」從此任務移除？`, danger: true })) return;
   try {
     await taskService.removeMember(assignTask.value.task_id, member.user_id);
@@ -1222,6 +2009,11 @@ const kickAssignedMember = async (member: TaskMember) => {
 
 const setAssignedTaskOwner = async (member: TaskMember) => {
   if (!assignTask.value) return;
+  if (!canManageTaskMembers(assignTask.value)) {
+    toast.error('你沒有管理此任務成員的權限');
+    return;
+  }
+
   if (!await confirm({ title: `將「${member.name}」設為主責人？`, message: '原主責人會自動改為協作者。' })) return;
 
   try {
@@ -1382,18 +2174,27 @@ const batchCreateAiTasks = async () => {
   }
   
   const timelineId = props.selectedTimeline.id;
-  const tasksToCreate: CreateTaskPayload[] = selectedAiTasks.value
+  const tasksToCreate: TimelineBatchTaskPayload[] = selectedAiTasks.value
     .map(i => aiGeneratedTasks.value[i])
     .filter((task): task is AiGeneratedTask => Boolean(task))
-    .map(task => mapToCreateTaskPayload({
-      name: task.name,
-      start_date: task.start_date ?? null,
-      end_date: task.end_date ?? null,
-      priority: task.priority,
-      tags: task.tags ?? null,
-      task_remark: task.task_remark ?? task.remark ?? null,
-      timeline_id: timelineId,
-    }));
+    .map(task => {
+      const estimatedDays = Number(task.estimated_days);
+      return {
+        task_id: task.task_id,
+        isExisting: Boolean(task.isExisting),
+        name: task.name,
+        start_date: task.start_date ?? null,
+        end_date: task.end_date ?? null,
+        priority: Number(task.priority) || 2,
+        status: task.status || 'pending',
+        estimated_days: Number.isFinite(estimatedDays) && estimatedDays > 0 ? estimatedDays : 3,
+        tags: task.tags ?? null,
+        task_remark: task.task_remark ?? task.remark ?? null,
+        timeline_id: timelineId,
+        depends_on_task_ids: normalizeIdList(task.depends_on_task_ids || []),
+        depends_on_task_refs: normalizeStringList(task.depends_on_task_refs),
+      };
+    });
   try {
     await timelineService.batchCreateTasks(timelineId, tasksToCreate);
     showAiGenerateModal.value = false;

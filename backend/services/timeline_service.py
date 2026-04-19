@@ -13,8 +13,11 @@ from chains import (
     generate_weekly_report_summary,
     generate_conflict_suggestion,
 )
+from services.critical_path_service import build_critical_path_analysis_payload
 from repositories.timeline_repository import (
+    get_active_incomplete_tasks_by_timeline_id,
     get_active_tasks_by_timeline_id,
+    get_active_tasks_by_timeline_ids,
     get_active_tasks_by_timeline_id_ordered_end_date,
     get_active_timeline_by_id,
     get_active_timelines_by_ids,
@@ -30,7 +33,6 @@ from repositories.timeline_repository import (
     list_cross_project_active_tasks_for_assignee,
     list_recent_task_comments_for_timeline_period,
     list_task_ids_by_assignee_user_id,
-    list_task_ids_by_assignee_user_id_within,
     soft_delete_tasks_by_ids,
     soft_delete_tasks_by_timeline_id,
     get_user_by_email,
@@ -94,7 +96,7 @@ def timeline_list_item_to_dict(timeline, role, total_tasks, completed_tasks):
     }
 
 
-def timeline_task_item_to_dict(task, assignee_name, assistant_list):
+def timeline_task_item_to_dict(task, assignee_name, assistant_list, can_manage_members=False):
     return {
         'task_id': task.task_id,
         'name': task.name,
@@ -110,6 +112,8 @@ def timeline_task_item_to_dict(task, assignee_name, assistant_list):
         'priority': task.priority,
         'status': task.status,
         'tags': task.tags,
+        'depends_on_task_ids': task.depends_on_task_ids or [],
+        'can_manage_members': bool(can_manage_members),
     }
 
 
@@ -125,12 +129,28 @@ def timeline_member_item_to_dict(timeline_member, user):
 
 def _build_existing_tasks_info(timeline_id):
     existing_tasks = get_active_tasks_by_timeline_id(timeline_id)
+    task_name_map = {task.task_id: task.name for task in existing_tasks}
 
     existing_tasks_info = []
     for task in existing_tasks:
         estimated_days = 3
         if task.start_date and task.end_date:
             estimated_days = (task.end_date - task.start_date).days
+
+        depends_on_task_ids = []
+        for raw_dep_id in task.depends_on_task_ids or []:
+            dep_id = _to_int(raw_dep_id)
+            if dep_id is None or dep_id <= 0:
+                continue
+            if dep_id in depends_on_task_ids:
+                continue
+            depends_on_task_ids.append(dep_id)
+
+        depends_on_task_refs = []
+        for dep_id in depends_on_task_ids:
+            dep_name = task_name_map.get(dep_id)
+            if dep_name:
+                depends_on_task_refs.append(dep_name)
 
         existing_tasks_info.append(
             {
@@ -139,11 +159,47 @@ def _build_existing_tasks_info(timeline_id):
                 'priority': task.priority,
                 'estimated_days': estimated_days,
                 'task_remark': task.task_remark or '',
+                'depends_on_task_ids': depends_on_task_ids,
+                'depends_on_task_refs': depends_on_task_refs,
                 'isExisting': True,
             }
         )
 
     return existing_tasks_info
+
+
+def _normalize_dependency_ids(raw_values):
+    if not isinstance(raw_values, list):
+        return []
+
+    normalized = []
+    seen = set()
+    for item in raw_values:
+        task_id = _to_int(item)
+        if task_id is None or task_id <= 0 or task_id in seen:
+            continue
+        seen.add(task_id)
+        normalized.append(task_id)
+
+    return normalized
+
+
+def _normalize_dependency_refs(raw_values):
+    if not isinstance(raw_values, list):
+        return []
+
+    normalized = []
+    seen = set()
+    for item in raw_values:
+        if not isinstance(item, str):
+            continue
+        value = item.strip()
+        if not value or value in seen:
+            continue
+        seen.add(value)
+        normalized.append(value)
+
+    return normalized
 
 
 def _normalize_generated_tasks(generated_tasks, timeline_id):
@@ -155,6 +211,15 @@ def _normalize_generated_tasks(generated_tasks, timeline_id):
         if not isinstance(task, dict):
             raise TimelineAIGenerationError('invalid_payload', 'AI 回傳格式錯誤')
 
+        depends_on_task_ids = _normalize_dependency_ids(task.get('depends_on_task_ids'))
+        depends_on_task_refs = _normalize_dependency_refs(task.get('depends_on_task_refs'))
+
+        # 若 AI 沒明確給依賴，預設以生成順序串成鏈，避免全為空依賴。
+        if len(depends_on_task_ids) == 0 and len(depends_on_task_refs) == 0 and len(normalized_tasks) > 0:
+            previous_task_name = str(normalized_tasks[-1].get('name') or '').strip()
+            if previous_task_name:
+                depends_on_task_refs = [previous_task_name]
+
         normalized = {
             'timeline_id': timeline_id,
             'status': 'pending',
@@ -164,6 +229,8 @@ def _normalize_generated_tasks(generated_tasks, timeline_id):
             'priority': task.get('priority', 2),
             'estimated_days': task.get('estimated_days', 3),
             'task_remark': task.get('task_remark', ''),
+            'depends_on_task_ids': depends_on_task_ids,
+            'depends_on_task_refs': depends_on_task_refs,
         }
         normalized_tasks.append(normalized)
 
@@ -213,11 +280,19 @@ def get_active_timeline_or_404(timeline_id):
 
 def list_timeline_items_for_user(user_id):
     memberships = get_timeline_memberships_for_user_ordered_desc(user_id)
+    timeline_ids = [timeline.id for timeline, _role in memberships]
+    tasks = get_active_tasks_by_timeline_ids(timeline_ids)
+
+    task_count_map = defaultdict(lambda: {'total': 0, 'completed': 0})
+    for task in tasks:
+        task_count_map[task.timeline_id]['total'] += 1
+        if task.completed:
+            task_count_map[task.timeline_id]['completed'] += 1
+
     result = []
     for timeline, role in memberships:
-        tasks = get_active_tasks_by_timeline_id(timeline.id)
-        total_tasks = len(tasks)
-        completed_tasks = len([task for task in tasks if task.completed])
+        total_tasks = task_count_map[timeline.id]['total']
+        completed_tasks = task_count_map[timeline.id]['completed']
         result.append(timeline_list_item_to_dict(timeline, role, total_tasks, completed_tasks))
     return result
 
@@ -327,10 +402,16 @@ def soft_delete_timeline_for_owner(timeline_id):
         raise TimelineOperationError('專案刪除失敗，請稍後再試', 500) from exc
 
 
-def list_timeline_tasks_detail(timeline_id):
+def list_timeline_tasks_detail(timeline_id, viewer_user_id=None):
     tasks = get_active_tasks_by_timeline_id_ordered_end_date(timeline_id)
     task_ids = [task.task_id for task in tasks]
     task_users = get_task_users_by_task_ids(task_ids)
+    viewer_id = _to_int(viewer_user_id)
+
+    viewer_is_timeline_owner = False
+    if viewer_id is not None:
+        timeline = get_active_timeline_by_id(timeline_id)
+        viewer_is_timeline_owner = bool(timeline and timeline.user_id == viewer_id)
 
     users_map = {
         user.id: user
@@ -345,6 +426,9 @@ def list_timeline_tasks_detail(timeline_id):
     for task in tasks:
         assignee_name = None
         assistant_list = []
+        viewer_is_task_owner = viewer_id is not None and task.user_id == viewer_id
+        viewer_is_task_lead = False
+
         for task_user in task_user_map.get(task.task_id, []):
             user = users_map.get(task_user.user_id)
             if not user:
@@ -354,7 +438,19 @@ def list_timeline_tasks_detail(timeline_id):
             elif task_user.role == 1:
                 assistant_list.append(user.name)
 
-        result.append(timeline_task_item_to_dict(task, assignee_name, assistant_list))
+            if viewer_id is not None and task_user.user_id == viewer_id and task_user.role == 0:
+                viewer_is_task_lead = True
+
+        can_manage_members = viewer_is_timeline_owner or viewer_is_task_owner or viewer_is_task_lead
+
+        result.append(
+            timeline_task_item_to_dict(
+                task,
+                assignee_name,
+                assistant_list,
+                can_manage_members=can_manage_members,
+            )
+        )
 
     return result
 
@@ -370,6 +466,26 @@ def _to_int(value):
         return int(value)
     except (TypeError, ValueError):
         return None
+
+
+def _to_bool(value, default=False):
+    if value is None:
+        return default
+
+    if isinstance(value, bool):
+        return value
+
+    if isinstance(value, (int, float)):
+        return value != 0
+
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {'1', 'true', 'yes', 'on'}:
+            return True
+        if normalized in {'0', 'false', 'no', 'off'}:
+            return False
+
+    return default
 
 
 def _normalize_task_priority(value, default=2):
@@ -449,6 +565,159 @@ def _parse_task_tags(raw_tags):
         return []
 
     return [tag.strip() for tag in raw_tags.split(',') if tag.strip()]
+
+
+def _build_conflict_risk_context_text(timeline, conflicts):
+    if not conflicts:
+        return '無'
+
+    timeline_conflict_task_ids = []
+    seen = set()
+    for item in conflicts:
+        if item.get('is_cross_project'):
+            continue
+        task_id = _to_int(item.get('task_id'))
+        if task_id is None or task_id in seen:
+            continue
+        seen.add(task_id)
+        timeline_conflict_task_ids.append(task_id)
+
+    if not timeline_conflict_task_ids:
+        return '目前衝突以跨專案任務為主，暫無可對應的專案內風險分析項目。'
+
+    try:
+        analysis = build_critical_path_analysis_payload(
+            timeline=timeline,
+            tasks=get_active_tasks_by_timeline_id(timeline.id),
+        )
+    except Exception:
+        return '風險分析暫時不可用，請先依衝突明細調整排程。'
+
+    critical_path_task_ids = {
+        _to_int(item.get('task_id'))
+        for item in analysis.get('critical_path', [])
+        if _to_int(item.get('task_id')) is not None
+    }
+
+    risk_item_map = {}
+    for risk_item in analysis.get('risk_items', []):
+        task_id = _to_int(risk_item.get('task_id'))
+        if task_id is None:
+            continue
+        risk_item_map[task_id] = risk_item
+
+    lines = []
+    for task_id in timeline_conflict_task_ids[:5]:
+        matched_conflict = next(
+            (
+                item
+                for item in conflicts
+                if (not item.get('is_cross_project')) and _to_int(item.get('task_id')) == task_id
+            ),
+            None,
+        )
+        display_name = matched_conflict.get('name') if matched_conflict else f'任務#{task_id}'
+
+        risk_item = risk_item_map.get(task_id) or {}
+        severity = str(risk_item.get('severity') or 'low').upper()
+        impact_days = _to_int(risk_item.get('impact_days')) or 0
+        is_critical = '是' if task_id in critical_path_task_ids else '否'
+
+        lines.append(
+            f"- {display_name}（task_id={task_id}）：critical_path={is_critical}；severity={severity}；impact_days={impact_days}"
+        )
+
+    summary = analysis.get('summary') or {}
+    return (
+        f"專案風險摘要：高風險 {summary.get('high_risk_count', 0)} 項，"
+        f"關鍵路徑 {summary.get('critical_path_task_count', 0)} 項，"
+        f"預估總工期 {summary.get('projected_duration_days', 0)} 天。\n"
+        f"衝突任務風險：\n{'\\n'.join(lines)}"
+    )
+
+
+def build_timeline_risk_analysis(timeline_id):
+    timeline = get_active_timeline_or_404(timeline_id)
+    tasks = get_active_tasks_by_timeline_id(timeline_id)
+
+    payload = build_critical_path_analysis_payload(
+        timeline=timeline,
+        tasks=tasks,
+    )
+    payload['message'] = '風險分析完成'
+    return payload
+
+
+def trigger_timeline_risk_notifications(timeline_id):
+    timeline = get_active_timeline_or_404(timeline_id)
+    analysis = build_timeline_risk_analysis(timeline_id)
+
+    risk_items = analysis.get('risk_items', [])
+    high_risk_items = [item for item in risk_items if item.get('severity') == 'high']
+    warning_count = len(analysis.get('warnings', []))
+
+    if len(risk_items) == 0:
+        return {
+            'message': '目前無風險項目，未發送通知',
+            'timeline_id': timeline_id,
+            'risk_item_count': 0,
+            'high_risk_count': 0,
+            'warning_count': warning_count,
+            'notified_user_count': 0,
+        }
+
+    members = get_timeline_members(timeline_id)
+    notified_user_ids = sorted({member.user_id for member in members})
+
+    if len(notified_user_ids) == 0:
+        return {
+            'message': '專案目前無成員，未發送通知',
+            'timeline_id': timeline_id,
+            'risk_item_count': len(risk_items),
+            'high_risk_count': len(high_risk_items),
+            'warning_count': warning_count,
+            'notified_user_count': 0,
+        }
+
+    preview_names = [item.get('name') for item in high_risk_items[:3] if item.get('name')]
+    if len(preview_names) == 0:
+        preview_names = [item.get('name') for item in risk_items[:3] if item.get('name')]
+    preview_text = '、'.join(preview_names) if preview_names else '請查看風險分析面板'
+
+    if len(high_risk_items) > 0:
+        title = f'「{timeline.name}」有 {len(high_risk_items)} 項高風險任務'
+    else:
+        title = f'「{timeline.name}」有 {len(risk_items)} 項排程風險'
+
+    content = (
+        f'重點任務：{preview_text}。'
+        f'請至專案風險分析確認 impact 與建議動作。'
+    )
+
+    try:
+        for user_id in notified_user_ids:
+            db.session.add(
+                Notification(
+                    user_id=user_id,
+                    type='risk_alert',
+                    title=title,
+                    content=content,
+                    link='/timelines',
+                )
+            )
+        db.session.commit()
+    except Exception as exc:
+        db.session.rollback()
+        raise TimelineOperationError('風險通知發送失敗，請稍後再試', 500) from exc
+
+    return {
+        'message': '風險通知已發送',
+        'timeline_id': timeline_id,
+        'risk_item_count': len(risk_items),
+        'high_risk_count': len(high_risk_items),
+        'warning_count': warning_count,
+        'notified_user_count': len(notified_user_ids),
+    }
 
 
 def build_weekly_report_for_timeline(timeline_id, start_date_raw=None, end_date_raw=None):
@@ -681,6 +950,9 @@ def check_timeline_task_conflicts(timeline_id, payload, actor_user_id):
     if start_date > end_date:
         raise TimelineOperationError('start_date 不可晚於 end_date', 400)
 
+    window_start_dt = datetime.combine(start_date, datetime.min.time())
+    window_end_dt = datetime.combine(end_date, datetime.max.time())
+
     assignee_user_id = _to_int(payload.get('assignee_user_id')) or actor_user_id
     excluded_task_id = _to_int(payload.get('task_id'))
     task_name = str(payload.get('name') or '').strip() or None
@@ -697,17 +969,13 @@ def check_timeline_task_conflicts(timeline_id, payload, actor_user_id):
 
     assignee_task_id_set = set(list_task_ids_by_assignee_user_id(assignee_user_id))
 
-    all_tasks = [task for task in get_active_tasks_by_timeline_id(timeline_id) if not task.completed]
+    all_tasks = get_active_incomplete_tasks_by_timeline_id(timeline_id)
     candidates = [
         task for task in all_tasks if excluded_task_id is None or task.task_id != excluded_task_id
     ]
 
-    candidate_task_ids = [task.task_id for task in candidates]
-    assignee_task_ids = set()
-    if candidate_task_ids:
-        assignee_task_ids = set(
-            list_task_ids_by_assignee_user_id_within(assignee_user_id, candidate_task_ids)
-        )
+    candidate_task_id_set = {task.task_id for task in candidates}
+    assignee_task_ids = assignee_task_id_set.intersection(candidate_task_id_set)
 
     users_map = {
         user.id: user.name
@@ -719,6 +987,8 @@ def check_timeline_task_conflicts(timeline_id, payload, actor_user_id):
         current_timeline_id=timeline_id,
         assignee_task_id_set=assignee_task_id_set,
         excluded_task_id=excluded_task_id,
+        window_start=window_start_dt,
+        window_end=window_end_dt,
     )
 
     cross_timeline_ids = {task.timeline_id for task in cross_project_tasks if task.timeline_id is not None}
@@ -731,12 +1001,14 @@ def check_timeline_task_conflicts(timeline_id, payload, actor_user_id):
             }
         )
 
-    users_map.update(
-        {
-            user.id: user.name
-            for user in get_users_by_ids({task.user_id for task in cross_project_tasks})
-        }
-    )
+    cross_project_owner_ids = {task.user_id for task in cross_project_tasks}
+    if cross_project_owner_ids:
+        users_map.update(
+            {
+                user.id: user.name
+                for user in get_users_by_ids(cross_project_owner_ids)
+            }
+        )
 
     conflicts = []
     max_conflict_end = None
@@ -804,6 +1076,8 @@ def check_timeline_task_conflicts(timeline_id, payload, actor_user_id):
         assignee_user_id=assignee_user_id,
         assignee_task_id_set=assignee_task_id_set,
         excluded_task_id=excluded_task_id,
+        window_start=window_start_dt,
+        window_end=window_end_dt,
     )
 
     overload_threshold = _to_int(os.getenv('ASSIGNEE_DAILY_OVERLOAD_THRESHOLD')) or 3
@@ -872,10 +1146,17 @@ def check_timeline_task_conflicts(timeline_id, payload, actor_user_id):
 
     has_conflict = total_signal_count > 0
     assignee_conflict_count = len([item for item in conflicts if item['same_assignee']])
+    env_ai_suggestion_enabled = str(
+        os.getenv('CONFLICT_CHECK_ENABLE_AI_SUGGESTION', 'false')
+    ).strip().lower() in {'1', 'true', 'yes', 'on'}
+    include_ai_suggestion = _to_bool(
+        payload.get('include_ai_suggestion'),
+        default=env_ai_suggestion_enabled,
+    )
 
     # Phase 7.1：使用 chains 層的 LangChain 生成 AI 衝突建議
     ai_suggestion_text = ""
-    if has_conflict and suggestion:
+    if has_conflict and suggestion and include_ai_suggestion:
         cross_conflicts_preview = [
             f"{item['name']}（{item.get('timeline_name') or '未知專案'}）"
             for item in conflicts
@@ -895,6 +1176,7 @@ def check_timeline_task_conflicts(timeline_id, payload, actor_user_id):
             f"過載日期案例: {'；'.join(overload_preview) if overload_preview else '無'}"
         )
         suggestion_range = f"{suggestion['start_date']} 至 {suggestion['end_date']}"
+        risk_context_text = _build_conflict_risk_context_text(timeline, conflicts)
         try:
             provider = os.getenv('LLM_PROVIDER', 'google-generativeai')
             llm = get_default_llm(provider=provider)
@@ -902,6 +1184,7 @@ def check_timeline_task_conflicts(timeline_id, payload, actor_user_id):
                 llm=llm,
                 conflict_text=conflict_summary,
                 suggestion_date_range=suggestion_range,
+                risk_context_text=risk_context_text,
             )
         except Exception:
             ai_suggestion_text = ""
@@ -931,6 +1214,7 @@ def check_timeline_task_conflicts(timeline_id, payload, actor_user_id):
         'conflicts': conflicts,
         'suggestion': suggestion if has_conflict else None,
         'ai_suggestion': ai_suggestion_text,
+        'include_ai_suggestion': include_ai_suggestion,
     }
 
 
@@ -1024,18 +1308,32 @@ def batch_create_tasks_for_timeline(timeline_id, user_id, task_payloads):
         raise TimelineOperationError('請提供至少一個任務', 400)
 
     try:
-        all_existing_task_ids = [task.task_id for task in get_active_tasks_by_timeline_id(timeline_id)]
-        selected_existing_task_ids = [
-            task['task_id']
-            for task in task_payloads
-            if task.get('isExisting') and task.get('task_id')
-        ]
+        existing_tasks = get_active_tasks_by_timeline_id(timeline_id)
+        all_existing_task_ids = [task.task_id for task in existing_tasks]
+        existing_task_id_set = set(all_existing_task_ids)
+
+        selected_existing_task_ids = []
+        for task_data in task_payloads:
+            if not isinstance(task_data, dict):
+                raise TimelineOperationError('tasks 格式錯誤，項目必須是物件', 400)
+
+            task_id = _to_int(task_data.get('task_id'))
+            if not task_data.get('isExisting') or task_id is None:
+                continue
+            if task_id not in existing_task_id_set:
+                continue
+            if task_id not in selected_existing_task_ids:
+                selected_existing_task_ids.append(task_id)
 
         tasks_to_delete = set(all_existing_task_ids) - set(selected_existing_task_ids)
         if tasks_to_delete:
             soft_delete_tasks_by_ids(list(tasks_to_delete), _utcnow_naive())
 
-        created_tasks = []
+        retained_existing_tasks = [task for task in existing_tasks if task.task_id in selected_existing_task_ids]
+        valid_dependency_ids = {task.task_id for task in retained_existing_tasks}
+
+        created_task_names = []
+        pending_dependency_records = []
         start_date = timeline.start_date or datetime.now()
         current_date = start_date
 
@@ -1043,7 +1341,9 @@ def batch_create_tasks_for_timeline(timeline_id, user_id, task_payloads):
             if task_data.get('isExisting'):
                 continue
 
-            estimated_days = task_data.get('estimated_days', 3)
+            estimated_days = _to_int(task_data.get('estimated_days'))
+            if estimated_days is None or estimated_days <= 0:
+                estimated_days = 3
             end_date = current_date + timedelta(days=estimated_days)
 
             new_task = Task(
@@ -1059,19 +1359,77 @@ def batch_create_tasks_for_timeline(timeline_id, user_id, task_payloads):
                 isWork=1,
             )
             db.session.add(new_task)
-            created_tasks.append(new_task.name)
+            created_task_names.append(new_task.name)
+            pending_dependency_records.append(
+                {
+                    'task': new_task,
+                    'depends_on_task_ids': _normalize_dependency_ids(task_data.get('depends_on_task_ids')),
+                    'depends_on_task_refs': _normalize_dependency_refs(task_data.get('depends_on_task_refs')),
+                }
+            )
             current_date = end_date
 
+        db.session.flush()
+
+        name_to_task_ids = defaultdict(list)
+        for task in retained_existing_tasks:
+            task_name = (task.name or '').strip()
+            if task_name:
+                name_to_task_ids[task_name].append(task.task_id)
+
+        for record in pending_dependency_records:
+            task = record['task']
+            valid_dependency_ids.add(task.task_id)
+
+            task_name = (task.name or '').strip()
+            if task_name:
+                name_to_task_ids[task_name].append(task.task_id)
+
+        ignored_dependency_ref_count = 0
+        for record in pending_dependency_records:
+            task = record['task']
+            dependency_ids = list(record['depends_on_task_ids'])
+
+            for dependency_ref in record['depends_on_task_refs']:
+                candidate_ids = name_to_task_ids.get(dependency_ref, [])
+                resolved_id = next((cid for cid in reversed(candidate_ids) if cid != task.task_id), None)
+                if resolved_id is None:
+                    ignored_dependency_ref_count += 1
+                    continue
+                dependency_ids.append(resolved_id)
+
+            normalized_dependency_ids = []
+            seen_dependency_ids = set()
+            for dependency_id in dependency_ids:
+                if dependency_id in seen_dependency_ids:
+                    continue
+                if dependency_id == task.task_id:
+                    continue
+                if dependency_id not in valid_dependency_ids:
+                    continue
+                seen_dependency_ids.add(dependency_id)
+                normalized_dependency_ids.append(dependency_id)
+
+            task.depends_on_task_ids = normalized_dependency_ids
+
         db.session.commit()
+        message = (
+            f'保留 {len(selected_existing_task_ids)} 個舊任務，'
+            f'刪除 {len(tasks_to_delete)} 個舊任務，新增 {len(created_task_names)} 個任務'
+        )
+        if ignored_dependency_ref_count > 0:
+            message += f'，忽略 {ignored_dependency_ref_count} 個無法解析的前置依賴'
+
         return {
-            'message': (
-                f'保留 {len(selected_existing_task_ids)} 個舊任務，'
-                f'刪除 {len(tasks_to_delete)} 個舊任務，新增 {len(created_tasks)} 個任務'
-            ),
+            'message': message,
             'kept': len(selected_existing_task_ids),
             'deleted': len(tasks_to_delete),
-            'created': len(created_tasks),
+            'created': len(created_task_names),
+            'ignored_dependency_refs': ignored_dependency_ref_count,
         }
+    except TimelineOperationError:
+        db.session.rollback()
+        raise
     except Exception as exc:
         db.session.rollback()
         raise TimelineOperationError('批次建立任務失敗，請稍後再試', 500) from exc

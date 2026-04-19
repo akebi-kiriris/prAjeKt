@@ -25,16 +25,27 @@ def get_unread_message_count(user_id):
 
 
 def mark_all_unread_messages_as_read(user_id):
-    unread_messages = get_unread_messages_query(user_id).all()
+    unread_message_ids = [
+        message_id
+        for (message_id,) in get_unread_messages_query(user_id)
+        .with_entities(Message.message_id)
+        .all()
+    ]
 
-    for message in unread_messages:
-        db.session.add(
+    if not unread_message_ids:
+        return
+
+    now = datetime.now()
+    db.session.bulk_save_objects(
+        [
             MessageRead(
-                message_id=message.message_id,
+                message_id=message_id,
                 user_id=user_id,
-                read_at=datetime.now(),
+                read_at=now,
             )
-        )
+            for message_id in unread_message_ids
+        ]
+    )
 
     try:
         db.session.commit()

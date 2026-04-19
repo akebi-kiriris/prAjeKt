@@ -7,6 +7,7 @@ from services.timeline_service import (
     add_timeline_member_for_owner,
     batch_create_tasks_for_timeline,
     build_timeline_member_stats_payload,
+    build_timeline_risk_analysis,
     build_weekly_report_for_timeline,
     check_timeline_task_conflicts,
     create_timeline_for_user,
@@ -19,6 +20,7 @@ from services.timeline_service import (
     remove_timeline_member_for_owner,
     search_timeline_user_by_email,
     soft_delete_timeline_for_owner,
+    trigger_timeline_risk_notifications,
     update_timeline_for_member,
     update_timeline_remark_for_member,
 )
@@ -86,7 +88,8 @@ def delete_timeline(timeline_id):
 @require_timeline_role('member')
 def get_timeline_tasks(timeline_id):
     """取得專案的所有任務（含負責人、助理資訊）"""
-    return jsonify(list_timeline_tasks_detail(timeline_id)), 200
+    user_id = get_jwt_identity()
+    return jsonify(list_timeline_tasks_detail(timeline_id, viewer_user_id=user_id)), 200
 
 
 @timelines_bp.route('/<int:timeline_id>/weekly-report', methods=['GET'])
@@ -99,6 +102,30 @@ def get_timeline_weekly_report(timeline_id):
 
     try:
         payload = build_weekly_report_for_timeline(timeline_id, start_date, end_date)
+        return jsonify(payload), 200
+    except TimelineOperationError as err:
+        return jsonify({'error': err.message}), err.status_code
+
+
+@timelines_bp.route('/<int:timeline_id>/risk-analysis', methods=['GET'])
+@jwt_required()
+@require_timeline_role('member')
+def get_timeline_risk_analysis(timeline_id):
+    """取得專案關鍵路徑與風險分析"""
+    try:
+        payload = build_timeline_risk_analysis(timeline_id)
+        return jsonify(payload), 200
+    except TimelineOperationError as err:
+        return jsonify({'error': err.message}), err.status_code
+
+
+@timelines_bp.route('/<int:timeline_id>/risk-analysis/notify', methods=['POST'])
+@jwt_required()
+@require_timeline_role('owner')
+def notify_timeline_risk_analysis(timeline_id):
+    """手動觸發專案風險通知"""
+    try:
+        payload = trigger_timeline_risk_notifications(timeline_id)
         return jsonify(payload), 200
     except TimelineOperationError as err:
         return jsonify({'error': err.message}), err.status_code

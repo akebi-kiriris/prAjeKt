@@ -18,6 +18,10 @@ type FailedQueueItem = {
   reject: (err: unknown) => void;
 };
 
+type JwtErrorPayload = {
+  msg?: string;
+};
+
 const api = axios.create({
   baseURL: BASE_URL,
   timeout: 30000,
@@ -27,6 +31,66 @@ const api = axios.create({
 // Token 刷新相關變數
 let isRefreshing = false;
 let failedQueue: FailedQueueItem[] = [];
+
+const normalizeStoredToken = (rawToken: string | null): string | null => {
+  if (!rawToken) return null;
+
+  let token = rawToken.trim();
+  if (!token) return null;
+
+  if (token.toLowerCase().startsWith('bearer ')) {
+    token = token.slice(7).trim();
+  }
+
+  const isWrappedByDoubleQuotes = token.startsWith('"') && token.endsWith('"');
+  const isWrappedBySingleQuotes = token.startsWith("'") && token.endsWith("'");
+  if (isWrappedByDoubleQuotes || isWrappedBySingleQuotes) {
+    token = token.slice(1, -1).trim();
+  }
+
+  return token || null;
+};
+
+const clearAuthTokens = (): void => {
+  localStorage.removeItem('access_token');
+  localStorage.removeItem('refresh_token');
+};
+
+const redirectToLogin = (): void => {
+  if (router.currentRoute.value.path !== '/login') {
+    router.push('/login');
+  }
+};
+
+const isJwtErrorMessage = (message: string): boolean => {
+  const normalized = message.toLowerCase();
+  const patterns = [
+    'signature verification failed',
+    'token has expired',
+    'not enough segments',
+    'invalid header string',
+    'bad authorization header',
+    'missing authorization header',
+    'invalid token',
+    'only non-refresh tokens are allowed',
+    'only refresh tokens are allowed',
+  ];
+
+  return patterns.some((pattern) => normalized.includes(pattern));
+};
+
+const shouldHandleJwtAuthFailure = (
+  statusCode: number | undefined,
+  message: string,
+  requestHadAuthHeader: boolean,
+): boolean => {
+  if (!requestHadAuthHeader || !statusCode) return false;
+
+  if (statusCode === 401) return true;
+  if (statusCode === 422) return isJwtErrorMessage(message);
+
+  return false;
+};
 
 // 處理佇列中的請求
 const processQueue = (error: unknown, token: string | null = null): void => {
@@ -43,7 +107,7 @@ const processQueue = (error: unknown, token: string | null = null): void => {
 // Request 攔截器：自動加上 JWT token
 api.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('access_token');
+    const token = normalizeStoredToken(localStorage.getItem('access_token'));
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -57,14 +121,18 @@ api.interceptors.response.use(
   (response: AxiosResponse) => response,
   async (error) => {
     const originalRequest = error.config as RetryableAxiosRequestConfig;
+    const statusCode: number | undefined = error.response?.status;
+    const message = String((error.response?.data as JwtErrorPayload | undefined)?.msg || '');
+    const requestHadAuthHeader = Boolean(originalRequest?.headers?.Authorization);
 
-    // 如果是 401 錯誤且還沒重試過
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    const shouldHandle = shouldHandleJwtAuthFailure(statusCode, message, requestHadAuthHeader);
+
+    // 如果是 JWT 驗證錯誤且還沒重試過
+    if (shouldHandle && !originalRequest._retry) {
       // 避免 refresh endpoint 本身失敗時無限循環
       if (originalRequest.url?.includes('/auth/refresh')) {
-        localStorage.removeItem('access_token');
-        localStorage.removeItem('refresh_token');
-        router.push('/login');
+        clearAuthTokens();
+        redirectToLogin();
         return Promise.reject(error);
       }
 
@@ -83,15 +151,14 @@ api.interceptors.response.use(
       originalRequest._retry = true;
       isRefreshing = true;
 
-      const refreshToken = localStorage.getItem('refresh_token');
+      const refreshToken = normalizeStoredToken(localStorage.getItem('refresh_token'));
 
       // 沒有 refresh_token，直接跳轉登入
       if (!refreshToken) {
         processQueue(error, null);
         isRefreshing = false;
-        localStorage.removeItem('access_token');
-        localStorage.removeItem('refresh_token');
-        router.push('/login');
+        clearAuthTokens();
+        redirectToLogin();
         return Promise.reject(error);
       }
 
@@ -117,9 +184,8 @@ api.interceptors.response.use(
       } catch (refreshError) {
         // refresh_token 也過期了，清除所有 token 並跳轉登入
         processQueue(refreshError, null);
-        localStorage.removeItem('access_token');
-        localStorage.removeItem('refresh_token');
-        router.push('/login');
+        clearAuthTokens();
+        redirectToLogin();
         return Promise.reject(refreshError);
       } finally {
         isRefreshing = false;

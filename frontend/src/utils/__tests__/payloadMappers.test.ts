@@ -16,6 +16,7 @@ describe('payloadMappers', () => {
       priority: '2',
       tags: ['x'],
       timeline_id: 9,
+      depends_on_task_ids: ['11', 12, 'bad', 12],
     } as never);
 
     expect(payload).toEqual({
@@ -26,6 +27,7 @@ describe('payloadMappers', () => {
       priority: 2,
       tags: ['x'],
       timeline_id: 9,
+      depends_on_task_ids: [11, 12],
     });
   });
 
@@ -48,6 +50,7 @@ describe('payloadMappers', () => {
       actual_hours: 6,
       task_remark: undefined,
       isWork: true,
+      depends_on_task_ids: [1, '2', 'bad'],
       start_date: '',
       end_date: '2026-03-08T12:00:00',
     } as never);
@@ -62,6 +65,7 @@ describe('payloadMappers', () => {
       actual_hours: 6,
       task_remark: null,
       isWork: true,
+      depends_on_task_ids: [1, 2],
       start_date: null,
       end_date: '2026-03-08',
     });

@@ -35,12 +35,16 @@ CONFLICT_SUGGESTION_PROMPT = PromptTemplate.from_template(
 2. 若有工作量過載日，要指出過載程度（例如某幾天任務過密）。
 3. 若有建議改期區間，請自然提及。
 4. 結尾需有明確動作建議（例如先調整哪類任務）。
+5. 若提供風險分析上下文，需優先考慮 critical_path=是 或 impact_days 較高的任務，避免建議把高衝擊任務往後延。
 
 衝突資訊:
 {conflict_text}
 
 建議改期區間:
 {suggestion_date_range}
+
+風險分析上下文:
+{risk_context_text}
 
 建議:
 """.strip()

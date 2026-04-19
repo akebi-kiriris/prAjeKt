@@ -33,10 +33,15 @@ TASK_GENERATOR_PROMPT = PromptTemplate.from_template("""
     "name": "任務名稱",
     "priority": 1 | 2 | 3,
     "estimated_days": 整數,
-    "task_remark": "備註（可選，例如相依性或風險）"
+    "task_remark": "備註（可選，例如相依性或風險）",
+    "depends_on_task_refs": ["前置任務名稱A", "前置任務名稱B"]
   }},
   ...
 ]
+
+補充規則：
+- `depends_on_task_refs` 使用「任務名稱」參照前置任務，可參照現有任務或同次生成任務名稱
+- 沒有前置依賴時請回傳空陣列 `[]`
 
 立即開始生成並輸出 JSON 陣列。
 """)

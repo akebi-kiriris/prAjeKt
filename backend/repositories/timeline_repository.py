@@ -36,6 +36,27 @@ def get_active_tasks_by_timeline_id(timeline_id):
     return Task.query.filter_by(timeline_id=timeline_id).filter(Task.deleted_at.is_(None)).all()
 
 
+def get_active_tasks_by_timeline_ids(timeline_ids):
+    if not timeline_ids:
+        return []
+
+    return Task.query.filter(
+        Task.timeline_id.in_(timeline_ids),
+        Task.deleted_at.is_(None),
+    ).all()
+
+
+def get_active_incomplete_tasks_by_timeline_id(timeline_id):
+    return (
+        Task.query.filter_by(timeline_id=timeline_id)
+        .filter(
+            Task.deleted_at.is_(None),
+            Task.completed.is_(False),
+        )
+        .all()
+    )
+
+
 def get_active_tasks_by_timeline_id_ordered_end_date(timeline_id):
     return (
         Task.query.filter_by(timeline_id=timeline_id)
@@ -150,6 +171,8 @@ def list_cross_project_active_tasks_for_assignee(
     current_timeline_id,
     assignee_task_id_set,
     excluded_task_id=None,
+    window_start=None,
+    window_end=None,
 ):
     query = Task.query.filter(
         Task.deleted_at.is_(None),
@@ -157,6 +180,14 @@ def list_cross_project_active_tasks_for_assignee(
         Task.timeline_id.isnot(None),
         Task.timeline_id != current_timeline_id,
     )
+
+    if window_start is not None and window_end is not None:
+        query = query.filter(
+            Task.start_date.isnot(None),
+            Task.end_date.isnot(None),
+            Task.start_date <= window_end,
+            Task.end_date >= window_start,
+        )
 
     if assignee_task_id_set:
         query = query.filter(
@@ -174,12 +205,26 @@ def list_cross_project_active_tasks_for_assignee(
     return query.all()
 
 
-def list_active_tasks_for_assignee(assignee_user_id, assignee_task_id_set, excluded_task_id=None):
+def list_active_tasks_for_assignee(
+    assignee_user_id,
+    assignee_task_id_set,
+    excluded_task_id=None,
+    window_start=None,
+    window_end=None,
+):
     query = Task.query.filter(
         Task.deleted_at.is_(None),
         Task.completed == False,
         Task.timeline_id.isnot(None),
     )
+
+    if window_start is not None and window_end is not None:
+        query = query.filter(
+            Task.start_date.isnot(None),
+            Task.end_date.isnot(None),
+            Task.start_date <= window_end,
+            Task.end_date >= window_start,
+        )
 
     if assignee_task_id_set:
         query = query.filter(

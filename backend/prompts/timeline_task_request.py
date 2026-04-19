@@ -27,6 +27,7 @@ TIMELINE_TASK_REQUEST_PROMPT = PromptTemplate.from_template(
 2. priority（integer）：優先級，1=高，2=中，3=低
 3. estimated_days（integer）：預估完成天數，根據任務複雜度合理估計
 4. task_remark（string）：任務備註，20-50字，繁體中文
+5. depends_on_task_refs（array[string]）：前置依賴任務名稱列表（可參照現有任務或同次生成任務，無依賴請回 []）
 
 不要使用 task_name、priority: "高" 這種格式，請嚴格依照上方欄位與型別。
 按照邏輯順序排列（從準備、進行、到完成）
@@ -42,8 +43,10 @@ def build_timeline_task_request(
     """組裝 timeline 任務生成請求內容。"""
     existing_lines = []
     for idx, task in enumerate(existing_tasks_info, 1):
+        dependency_refs = task.get('depends_on_task_refs') or []
+        dependency_text = f", 前置:{'、'.join(dependency_refs)}" if dependency_refs else ''
         existing_lines.append(
-            f"{idx}. {task.get('name', '未命名任務')} (優先級:{task.get('priority', 2)}, 預估:{task.get('estimated_days', 3)}天)"
+            f"{idx}. {task.get('name', '未命名任務')} (優先級:{task.get('priority', 2)}, 預估:{task.get('estimated_days', 3)}天{dependency_text})"
         )
 
     existing_tasks_text = (

@@ -106,6 +106,89 @@ export interface WeeklyReportResponse {
   analysis?: WeeklyReportAnalysis;
 }
 
+export type RiskSeverity = 'high' | 'medium' | 'low';
+
+export interface RiskWarning {
+  code: string;
+  message: string;
+  task_id?: number;
+  dependency_task_id?: number | string;
+  source_task_id?: number;
+  target_task_id?: number;
+  task_ids?: number[];
+}
+
+export interface CriticalPathTask {
+  task_id: number;
+  name: string;
+  start_date: string | null;
+  end_date: string | null;
+  duration_days: number;
+  earliest_start: number;
+  earliest_finish: number;
+  latest_start: number;
+  latest_finish: number;
+  float_days: number;
+  is_completed: boolean;
+  depends_on_task_ids: number[];
+}
+
+export interface RiskItem {
+  task_id: number;
+  name: string;
+  severity: RiskSeverity;
+  impact_days: number;
+  reasons: string[];
+  suggested_actions: string[];
+  due_date: string | null;
+  depends_on_task_ids: number[];
+  float_days: number;
+  is_critical: boolean;
+}
+
+export interface RiskAnalysisGraphNode {
+  task_id: number;
+  name: string;
+  status: TaskStatus | string;
+  start_date: string | null;
+  end_date: string | null;
+  duration_days: number;
+  float_days: number;
+  is_critical: boolean;
+  depends_on_task_ids: number[];
+}
+
+export interface RiskAnalysisGraphEdge {
+  source_task_id: number;
+  target_task_id: number;
+  is_critical: boolean;
+}
+
+export interface CriticalPathSummary {
+  total_tasks: number;
+  projected_duration_days: number;
+  critical_path_task_count: number;
+  critical_path_duration_days: number;
+  risk_item_count: number;
+  high_risk_count: number;
+  warning_count: number;
+}
+
+export interface CriticalPathAnalysisResponse {
+  message: string;
+  timeline_id: number;
+  timeline_name: string;
+  generated_at: string;
+  summary: CriticalPathSummary;
+  critical_path: CriticalPathTask[];
+  risk_items: RiskItem[];
+  warnings: RiskWarning[];
+  graph: {
+    nodes: RiskAnalysisGraphNode[];
+    edges: RiskAnalysisGraphEdge[];
+  };
+}
+
 export interface ConflictCheckPayload {
   task_id?: number;
   name?: string;
@@ -113,6 +196,7 @@ export interface ConflictCheckPayload {
   end_date?: string | null;
   assignee_user_id?: number;
   priority?: number;
+  include_ai_suggestion?: boolean;
 }
 
 export interface ResourceConflictItem {
@@ -159,4 +243,5 @@ export interface ResourceConflictResponse {
   conflicts: ResourceConflictItem[];
   suggestion: ResourceConflictSuggestion | null;
   ai_suggestion: string;
+  include_ai_suggestion?: boolean;
 }

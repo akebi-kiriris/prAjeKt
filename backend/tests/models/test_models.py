@@ -68,6 +68,7 @@ def test_task_default_values(app):
 
     assert task.completed is False
     assert task.completed_at is None
+    assert task.depends_on_task_ids in (None, [])
     assert task.priority == 2
     assert task.status == "pending"
     assert task.created_at is not None

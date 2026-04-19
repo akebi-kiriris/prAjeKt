@@ -51,6 +51,7 @@ TASK_CREATE_ALLOWED_FIELDS = {
     'task_remark',
     'isWork',
     'assignee_user_ids',
+    'depends_on_task_ids',
 }
 
 TASK_UPDATE_ALLOWED_FIELDS = {
@@ -65,6 +66,7 @@ TASK_UPDATE_ALLOWED_FIELDS = {
     'end_date',
     'task_remark',
     'isWork',
+    'depends_on_task_ids',
 }
 
 TASK_STATUS_VALUES = {'pending', 'in_progress', 'review', 'completed', 'cancelled'}
@@ -126,6 +128,56 @@ def normalize_assignee_user_ids(raw_value):
         normalized.append(user_id)
 
     return normalized
+
+
+def normalize_depends_on_task_ids(raw_value):
+    if raw_value in (None, ''):
+        return []
+
+    if not isinstance(raw_value, list):
+        raise TaskOperationError('depends_on_task_ids 必須是陣列', 400)
+
+    normalized = []
+    seen = set()
+    for item in raw_value:
+        try:
+            task_id = int(item)
+        except (TypeError, ValueError):
+            raise TaskOperationError('depends_on_task_ids 只允許整數 ID', 400)
+
+        if task_id <= 0:
+            raise TaskOperationError('depends_on_task_ids 只允許正整數 ID', 400)
+
+        if task_id in seen:
+            continue
+
+        seen.add(task_id)
+        normalized.append(task_id)
+
+    return normalized
+
+
+def validate_dependency_task_ids(timeline_id, depends_on_task_ids, current_task_id=None):
+    if not depends_on_task_ids:
+        return
+
+    if timeline_id in (None, ''):
+        raise TaskOperationError('設定 depends_on_task_ids 前需先指定 timeline_id', 400)
+
+    if current_task_id is not None and current_task_id in depends_on_task_ids:
+        raise TaskOperationError('depends_on_task_ids 不可包含自己', 400)
+
+    active_task_ids = {
+        task.task_id
+        for task in Task.query.filter(
+            Task.timeline_id == timeline_id,
+            Task.deleted_at.is_(None),
+        ).all()
+    }
+
+    invalid_ids = sorted(task_id for task_id in depends_on_task_ids if task_id not in active_task_ids)
+    if invalid_ids:
+        raise TaskOperationError('depends_on_task_ids 包含非同專案任務', 400)
 
 
 def create_notification(user_id, ntype, title, content=None, link=None):
@@ -222,6 +274,7 @@ def task_list_item_to_dict(task, member_list, subtask_list, is_owner):
         'updated_at': task.updated_at.isoformat() + 'Z' if task.updated_at else None,
         'task_remark': task.task_remark,
         'isWork': task.isWork,
+        'depends_on_task_ids': task.depends_on_task_ids or [],
         'is_owner': is_owner,
     }
 
@@ -307,6 +360,7 @@ def create_task_for_user(user_id, data):
         raise TaskOperationError('end_date 格式錯誤', 400)
 
     assignee_user_ids = normalize_assignee_user_ids(data.get('assignee_user_ids'))
+    depends_on_task_ids = normalize_depends_on_task_ids(data.get('depends_on_task_ids'))
 
     timeline_id = data.get('timeline_id')
     if timeline_id and assignee_user_ids:
@@ -314,6 +368,8 @@ def create_task_for_user(user_id, data):
         invalid_assignees = [member_id for member_id in assignee_user_ids if member_id not in timeline_member_ids]
         if invalid_assignees:
             raise TaskOperationError('指派名單包含非專案成員', 400)
+
+    validate_dependency_task_ids(timeline_id, depends_on_task_ids)
 
     new_task = Task(
         user_id=user_id,
@@ -329,6 +385,7 @@ def create_task_for_user(user_id, data):
         end_date=end_date,
         task_remark=data.get('task_remark'),
         isWork=data.get('isWork', 0),
+        depends_on_task_ids=depends_on_task_ids,
     )
 
     try:
@@ -385,8 +442,28 @@ def update_task_for_member(task_id, data):
             raise TaskOperationError('name 不可為空', 400)
         task.name = str(data['name']).strip()
 
+    target_timeline_id = task.timeline_id
     if 'timeline_id' in data:
-        task.timeline_id = data['timeline_id']
+        target_timeline_id = data['timeline_id']
+        task.timeline_id = target_timeline_id
+
+    if 'depends_on_task_ids' in data:
+        depends_on_task_ids = normalize_depends_on_task_ids(data.get('depends_on_task_ids'))
+        validate_dependency_task_ids(
+            target_timeline_id,
+            depends_on_task_ids,
+            current_task_id=task.task_id,
+        )
+        task.depends_on_task_ids = depends_on_task_ids
+    elif 'timeline_id' in data:
+        if target_timeline_id in (None, ''):
+            task.depends_on_task_ids = []
+        else:
+            validate_dependency_task_ids(
+                target_timeline_id,
+                task.depends_on_task_ids or [],
+                current_task_id=task.task_id,
+            )
 
     if 'status' in data:
         next_status = data['status']

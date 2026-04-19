@@ -16,13 +16,19 @@ export interface SearchUserResult {
 }
 
 export interface AiGeneratedTask {
+  task_id?: number;
+  isExisting?: boolean;
   name: string;
   start_date?: string | null;
   end_date?: string | null;
   priority: number;
+  status?: TaskStatus | string;
+  estimated_days?: number;
   tags?: string | null;
   remark?: string | null;
   task_remark?: string | null;
+  depends_on_task_ids?: number[];
+  depends_on_task_refs?: string[];
 }
 
 export interface GenerateTasksRequest {
@@ -102,6 +108,8 @@ export interface Task {
   updated_at: string | null;
   task_remark: string | null;
   isWork: number;
+  depends_on_task_ids?: number[];
+  can_manage_members?: boolean;
   is_owner: boolean;
 }
 
@@ -114,6 +122,23 @@ export interface CreateTaskPayload {
   tags?: string | null;
   timeline_id?: number;
   assignee_user_ids?: number[];
+  depends_on_task_ids?: number[];
+}
+
+export interface TimelineBatchTaskPayload {
+  task_id?: number;
+  isExisting?: boolean;
+  name?: string;
+  start_date?: string | null;
+  end_date?: string | null;
+  priority?: number;
+  status?: TaskStatus | string;
+  estimated_days?: number;
+  tags?: string | null;
+  task_remark?: string | null;
+  timeline_id?: number;
+  depends_on_task_ids?: number[];
+  depends_on_task_refs?: string[];
 }
 
 export type TaskUpdatePayload = Partial<Pick<
@@ -129,4 +154,5 @@ export type TaskUpdatePayload = Partial<Pick<
   | 'end_date'
   | 'task_remark'
   | 'isWork'
+  | 'depends_on_task_ids'
 >>;

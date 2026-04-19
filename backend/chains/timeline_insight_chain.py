@@ -45,12 +45,14 @@ def generate_conflict_suggestion(
     llm: Any,
     conflict_text: str,
     suggestion_date_range: str,
+    risk_context_text: str = "無",
 ) -> str:
     chain = create_conflict_suggestion_chain(llm)
     result = chain.invoke(
         {
             "conflict_text": conflict_text,
             "suggestion_date_range": suggestion_date_range,
+            "risk_context_text": risk_context_text,
         }
     )
     return str(result).strip()

@@ -25,6 +25,7 @@ class Task(db.Model):
     start_date = db.Column(db.DateTime)
     end_date = db.Column(db.DateTime)
     completed_at = db.Column(db.DateTime, nullable=True)
+    depends_on_task_ids = db.Column(db.JSON, nullable=True)
     updated_at = db.Column(db.DateTime, default=utcnow_naive, onupdate=utcnow_naive)
     
     def __repr__(self):

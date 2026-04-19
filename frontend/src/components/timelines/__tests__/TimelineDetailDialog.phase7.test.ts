@@ -4,6 +4,7 @@ import { mount, flushPromises } from '@vue/test-utils';
 const phase7Mocks = vi.hoisted(() => ({
   confirm: vi.fn(),
   getWeeklyReport: vi.fn(),
+  getRiskAnalysis: vi.fn(),
   conflictCheck: vi.fn(),
   updateRemark: vi.fn(),
   getMembers: vi.fn(),
@@ -40,6 +41,7 @@ const phase7Mocks = vi.hoisted(() => ({
 vi.mock('../../../services/timelineService', () => ({
   timelineService: {
     getWeeklyReport: phase7Mocks.getWeeklyReport,
+    getRiskAnalysis: phase7Mocks.getRiskAnalysis,
     conflictCheck: phase7Mocks.conflictCheck,
     updateRemark: phase7Mocks.updateRemark,
     getMembers: phase7Mocks.getMembers,
@@ -155,6 +157,66 @@ describe('TimelineDetailDialog Phase 7.1', () => {
       },
     });
 
+    phase7Mocks.getRiskAnalysis.mockResolvedValue({
+      data: {
+        message: '風險分析完成',
+        timeline_id: 99,
+        timeline_name: 'Phase7 專案',
+        generated_at: '2026-04-19T00:00:00Z',
+        summary: {
+          total_tasks: 6,
+          projected_duration_days: 18,
+          critical_path_task_count: 3,
+          critical_path_duration_days: 9,
+          risk_item_count: 2,
+          high_risk_count: 1,
+          warning_count: 1,
+        },
+        critical_path: [
+          {
+            task_id: 1001,
+            name: '完成 API 合約',
+            start_date: '2026-04-14',
+            end_date: '2026-04-16',
+            duration_days: 3,
+            earliest_start: 0,
+            earliest_finish: 3,
+            latest_start: 0,
+            latest_finish: 3,
+            float_days: 0,
+            is_completed: false,
+            depends_on_task_ids: [],
+          },
+        ],
+        risk_items: [
+          {
+            task_id: 1002,
+            name: '部署驗證',
+            severity: 'high',
+            impact_days: 2,
+            reasons: ['位於關鍵路徑'],
+            suggested_actions: ['每日追蹤'],
+            due_date: '2026-04-18',
+            depends_on_task_ids: [1001],
+            float_days: 0,
+            is_critical: true,
+          },
+        ],
+        warnings: [
+          {
+            code: 'missing_dependency',
+            message: '依賴任務不存在、已刪除或不在同一專案，已忽略',
+            task_id: 1002,
+            dependency_task_id: 9999,
+          },
+        ],
+        graph: {
+          nodes: [],
+          edges: [],
+        },
+      },
+    });
+
     phase7Mocks.confirm.mockResolvedValue(true);
     phase7Mocks.conflictCheck.mockResolvedValue({
       data: {
@@ -184,10 +246,24 @@ describe('TimelineDetailDialog Phase 7.1', () => {
 
     await flushPromises();
 
+    expect(phase7Mocks.getWeeklyReport).not.toHaveBeenCalled();
+    expect(phase7Mocks.getRiskAnalysis).not.toHaveBeenCalled();
+
+    const expandButtons = wrapper.findAll('button').filter((button) => button.text().trim() === '展開');
+    expect(expandButtons.length).toBeGreaterThanOrEqual(2);
+
+    await expandButtons[0].trigger('click');
+    await flushPromises();
+    await expandButtons[1].trigger('click');
+    await flushPromises();
+
     expect(phase7Mocks.getWeeklyReport).toHaveBeenCalled();
+    expect(phase7Mocks.getRiskAnalysis).toHaveBeenCalled();
     expect(wrapper.text()).toContain('週報預覽');
     expect(wrapper.text()).toContain('完成 API 合約');
     expect(wrapper.text()).toContain('部署驗證');
+    expect(wrapper.text()).toContain('風險分析（Critical Path）');
+    expect(wrapper.text()).toContain('高風險任務');
   });
 
   it('新增任務時若有衝突會顯示提示且可取消送出', async () => {

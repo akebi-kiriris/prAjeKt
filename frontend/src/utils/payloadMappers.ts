@@ -40,6 +40,16 @@ const toNumberOrUndefined = (value: unknown): number | undefined => {
   return undefined;
 };
 
+const toNumberArrayOrUndefined = (value: unknown): number[] | undefined => {
+  if (!Array.isArray(value)) return undefined;
+
+  const mapped = value
+    .map((item) => toNumberOrUndefined(item))
+    .filter((item): item is number => item !== undefined);
+
+  return Array.from(new Set(mapped));
+};
+
 export const mapToCreateTaskPayload = (input: TaskCreateInput): CreateTaskPayload => {
   const payload: CreateTaskPayload = {
     name: input.name.trim(),
@@ -49,6 +59,10 @@ export const mapToCreateTaskPayload = (input: TaskCreateInput): CreateTaskPayloa
     payload.assignee_user_ids = input.assignee_user_ids
       .map((id) => toNumberOrUndefined(id))
       .filter((id): id is number => id !== undefined);
+  }
+
+  if (hasKey(input, 'depends_on_task_ids')) {
+    payload.depends_on_task_ids = toNumberArrayOrUndefined(input.depends_on_task_ids);
   }
 
   if (hasKey(input, 'start_date')) {
@@ -92,6 +106,10 @@ export const mapToUpdateTaskPayload = (input: TaskUpdateInput): TaskUpdatePayloa
   if (hasKey(input, 'actual_hours')) payload.actual_hours = input.actual_hours;
   if (hasKey(input, 'task_remark')) payload.task_remark = input.task_remark ?? null;
   if (hasKey(input, 'isWork')) payload.isWork = input.isWork;
+
+  if (hasKey(input, 'depends_on_task_ids')) {
+    payload.depends_on_task_ids = toNumberArrayOrUndefined(input.depends_on_task_ids);
+  }
 
   if (hasKey(input, 'start_date')) {
     payload.start_date = toDateOnlyOrNull(input.start_date);

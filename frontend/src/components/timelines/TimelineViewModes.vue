@@ -365,7 +365,7 @@
                 <span class="w-8 h-8 bg-white rounded-lg shadow-sm flex items-center justify-center">📈</span>
                 任務甘特圖（frappe-gantt）
               </h3>
-              <p class="text-xs text-gray-500 mt-1">支援拖曳調整日期；依賴關係為同專案任務自動串接（基礎版）。</p>
+              <p class="text-xs text-gray-500 mt-1">支援拖曳調整日期；依賴關係使用任務 depends_on_task_ids </p>
             </div>
             <div class="flex flex-wrap items-center gap-3 text-xs text-gray-600">
               <div>
@@ -657,6 +657,7 @@ type GanttRenderableTask = {
   start_date: string;
   end_date: string;
   progress: number;
+  depends_on_task_ids: number[];
 };
 
 type FrappeTask = {
@@ -763,7 +764,8 @@ const ganttRenderableTasks = computed<GanttRenderableTask[]>(() => {
         timeline_id: task.timeline_id,
         start_date: dayToIso(start),
         end_date: dayToIso(safeEnd),
-        progress: task.completed ? 100 : task.status === 'in_progress' ? 50 : 0
+        progress: task.completed ? 100 : task.status === 'in_progress' ? 50 : 0,
+        depends_on_task_ids: task.depends_on_task_ids || [],
       };
     })
     .filter((task): task is GanttRenderableTask => task !== null)
@@ -787,21 +789,17 @@ const getTaskStatusLabel = (status: Task['status']): string => {
 };
 
 const buildDependencies = (tasks: GanttRenderableTask[]): Map<number, string> => {
-  const grouped = new Map<number, GanttRenderableTask[]>();
-
-  tasks.forEach(task => {
-    if (!task.timeline_id) return;
-    const group = grouped.get(task.timeline_id) ?? [];
-    group.push(task);
-    grouped.set(task.timeline_id, group);
-  });
-
+  const renderableTaskIds = new Set(tasks.map((task) => task.task_id));
   const dependencyMap = new Map<number, string>();
-  grouped.forEach(group => {
-    group.sort((a, b) => new Date(a.start_date).getTime() - new Date(b.start_date).getTime());
-    group.forEach((task, index) => {
-      if (index > 0) dependencyMap.set(task.task_id, String(group[index - 1].task_id));
-    });
+
+  tasks.forEach((task) => {
+    const validDependencies = (task.depends_on_task_ids || [])
+      .filter((dependencyTaskId) => dependencyTaskId !== task.task_id)
+      .filter((dependencyTaskId) => renderableTaskIds.has(dependencyTaskId));
+
+    if (validDependencies.length > 0) {
+      dependencyMap.set(task.task_id, validDependencies.join(','));
+    }
   });
 
   return dependencyMap;
@@ -862,6 +860,9 @@ const renderGantt = async () => {
       const statusLabel = hit ? getTaskStatusLabel(hit.status) : '待辦';
       const progress = `${Math.round(task.progress ?? 0)}%`;
       const fullName = (task as FrappeTask).full_name || hit?.name || task.name;
+      const dependencyNames = (hit?.depends_on_task_ids || [])
+        .map((dependencyTaskId) => props.allTasks.find((item) => item.task_id === dependencyTaskId)?.name || `#${dependencyTaskId}`)
+        .join('、');
       return `
         <div class="details-container">
           <h5>${fullName}</h5>
@@ -869,6 +870,7 @@ const renderGantt = async () => {
           <p>狀態：${statusLabel}</p>
           <p>日期：${task.start} ~ ${task.end}</p>
           <p>進度：${progress}</p>
+          <p>依賴：${dependencyNames || '無'}</p>
         </div>
       `;
     },

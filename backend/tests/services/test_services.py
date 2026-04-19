@@ -95,6 +95,7 @@ from services.task_service import (
     upload_task_file_for_member,
     update_subtask_for_task,
     update_task_member_role_for_operator,
+    update_task_for_member,
     update_task_status_for_member,
 )
 from services.trash_service import (
@@ -108,6 +109,7 @@ from services.trash_service import (
 from services.timeline_service import (
     TimelineAIGenerationError,
     TimelineOperationError,
+    build_timeline_risk_analysis,
     build_weekly_report_for_timeline,
     check_timeline_task_conflicts,
     find_unknown_fields as timeline_find_unknown_fields,
@@ -117,6 +119,7 @@ from services.timeline_service import (
     timeline_list_item_to_dict,
     timeline_member_item_to_dict,
     timeline_task_item_to_dict,
+    trigger_timeline_risk_notifications,
 )
 import services.timeline_service as timeline_service_module
 from services.todo_service import (
@@ -812,6 +815,81 @@ def test_create_task_for_user_accepts_assignee_user_ids(app):
     assert invalid_assignee_exc.value.status_code == 400
 
 
+def test_task_service_validates_depends_on_task_ids(app):
+    owner = _create_user("task-depends-owner@example.com", "task_depends_owner")
+
+    main_timeline = Timeline(user_id=owner.id, name="Task Depends Timeline")
+    other_timeline = Timeline(user_id=owner.id, name="Task Depends Other Timeline")
+    db.session.add_all([main_timeline, other_timeline])
+    db.session.flush()
+    db.session.add_all(
+        [
+            TimelineUser(timeline_id=main_timeline.id, user_id=owner.id, role=0),
+            TimelineUser(timeline_id=other_timeline.id, user_id=owner.id, role=0),
+        ]
+    )
+
+    base_task = Task(
+        user_id=owner.id,
+        timeline_id=main_timeline.id,
+        name="既有前置任務",
+        end_date=datetime(2026, 4, 20),
+    )
+    foreign_task = Task(
+        user_id=owner.id,
+        timeline_id=other_timeline.id,
+        name="其他專案任務",
+        end_date=datetime(2026, 4, 20),
+    )
+    db.session.add_all([base_task, foreign_task])
+    db.session.commit()
+
+    task_id = create_task_for_user(
+        user_id=owner.id,
+        data={
+            "name": "需前置依賴的任務",
+            "timeline_id": main_timeline.id,
+            "end_date": "2026-04-25",
+            "depends_on_task_ids": [base_task.task_id, base_task.task_id],
+        },
+    )
+    created_task = db.session.get(Task, task_id)
+    assert created_task is not None
+    assert created_task.depends_on_task_ids == [base_task.task_id]
+
+    with pytest.raises(TaskOperationError) as missing_timeline_exc:
+        create_task_for_user(
+            user_id=owner.id,
+            data={
+                "name": "沒有專案但有依賴",
+                "end_date": "2026-04-26",
+                "depends_on_task_ids": [base_task.task_id],
+            },
+        )
+    assert missing_timeline_exc.value.status_code == 400
+
+    with pytest.raises(TaskOperationError) as cross_timeline_exc:
+        create_task_for_user(
+            user_id=owner.id,
+            data={
+                "name": "跨專案依賴",
+                "timeline_id": main_timeline.id,
+                "end_date": "2026-04-26",
+                "depends_on_task_ids": [foreign_task.task_id],
+            },
+        )
+    assert cross_timeline_exc.value.status_code == 400
+
+    with pytest.raises(TaskOperationError) as self_dependency_exc:
+        update_task_for_member(task_id, {"depends_on_task_ids": [task_id]})
+    assert self_dependency_exc.value.status_code == 400
+
+    update_task_for_member(task_id, {"depends_on_task_ids": [base_task.task_id]})
+    refreshed_task = db.session.get(Task, task_id)
+    assert refreshed_task is not None
+    assert refreshed_task.depends_on_task_ids == [base_task.task_id]
+
+
 def test_task_service_comment_operations(app):
     owner = _create_user("task-comment-op-owner@example.com", "task_comment_op_owner")
     member = _create_user("task-comment-op-member@example.com", "task_comment_op_member")
@@ -1257,7 +1335,13 @@ def test_generate_timeline_tasks_with_ai_success_and_json_decode_error(app, monk
     from unittest.mock import MagicMock
     mock_llm = MagicMock()
     mock_generate_tasks = MagicMock(return_value=[
-        {"name": "service ai task", "priority": 1, "estimated_days": 2, "task_remark": "from chain"}
+        {
+            "name": "service ai task",
+            "priority": 1,
+            "estimated_days": 2,
+            "task_remark": "from chain",
+            "depends_on_task_refs": ["existing service task"],
+        }
     ])
 
     # 在 timeline_service 模組層 patch get_default_llm 與鏈路輔助函式
@@ -1275,6 +1359,7 @@ def test_generate_timeline_tasks_with_ai_success_and_json_decode_error(app, monk
     assert len(payload["tasks"]) == 2
     assert payload["tasks"][1]["name"] == "service ai task"
     assert payload["tasks"][1]["isExisting"] is False
+    assert payload["tasks"][1]["depends_on_task_refs"] == ["existing service task"]
 
     # 模擬鏈路輔助函式拋出 ValueError（LLM JSON 無效）
     mock_generate_tasks_error = MagicMock(side_effect=ValueError("Invalid JSON from LLM"))
@@ -1288,6 +1373,39 @@ def test_generate_timeline_tasks_with_ai_success_and_json_decode_error(app, monk
         )
 
     assert excinfo.value.code == "generation_failed"
+
+
+def test_generate_timeline_tasks_with_ai_auto_fallback_dependency_chain(app, monkeypatch):
+    owner = _create_user("timeline-ai-service-chain@example.com", "timeline_ai_service_chain")
+    timeline = Timeline(user_id=owner.id, name="AI Service Chain Timeline")
+    db.session.add(timeline)
+    db.session.commit()
+
+    from unittest.mock import MagicMock
+
+    mock_llm = MagicMock()
+    mock_generate_tasks = MagicMock(
+        return_value=[
+            {"name": "需求釐清", "priority": 1, "estimated_days": 1, "task_remark": "step1"},
+            {"name": "API 開發", "priority": 1, "estimated_days": 2, "task_remark": "step2"},
+            {"name": "前端串接", "priority": 2, "estimated_days": 2, "task_remark": "step3"},
+        ]
+    )
+
+    monkeypatch.setattr("services.timeline_service.get_default_llm", MagicMock(return_value=mock_llm))
+    monkeypatch.setattr("services.timeline_service.generate_timeline_tasks_from_context", mock_generate_tasks)
+
+    payload = generate_timeline_tasks_with_ai(
+        timeline_id=timeline.id,
+        project_name="AI Service Chain Project",
+        description="service layer prompt",
+    )
+
+    generated_tasks = [task for task in payload["tasks"] if not task.get("isExisting")]
+    assert len(generated_tasks) == 3
+    assert generated_tasks[0]["depends_on_task_refs"] == []
+    assert generated_tasks[1]["depends_on_task_refs"] == ["需求釐清"]
+    assert generated_tasks[2]["depends_on_task_refs"] == ["API 開發"]
 
 
 def test_build_weekly_report_for_timeline_includes_summary_risks_and_comments(app):
@@ -1365,6 +1483,117 @@ def test_build_weekly_report_for_timeline_includes_summary_risks_and_comments(ap
     assert "前端" in payload["analysis"]["top_tags"]
 
 
+def test_build_timeline_risk_analysis_detects_cycle_and_missing_dependency(app):
+    owner = _create_user("timeline-risk-owner@example.com", "timeline_risk_owner")
+
+    timeline = Timeline(user_id=owner.id, name="Risk Timeline")
+    db.session.add(timeline)
+    db.session.flush()
+    db.session.add(TimelineUser(timeline_id=timeline.id, user_id=owner.id, role=0))
+
+    task_a = Task(
+        user_id=owner.id,
+        timeline_id=timeline.id,
+        name="A",
+        start_date=datetime(2026, 4, 10),
+        end_date=datetime(2026, 4, 11),
+        completed=False,
+    )
+    task_b = Task(
+        user_id=owner.id,
+        timeline_id=timeline.id,
+        name="B",
+        start_date=datetime(2026, 4, 12),
+        end_date=datetime(2026, 4, 13),
+        completed=False,
+    )
+    task_c = Task(
+        user_id=owner.id,
+        timeline_id=timeline.id,
+        name="C",
+        start_date=datetime(2026, 4, 14),
+        end_date=datetime(2026, 4, 15),
+        completed=False,
+    )
+    task_d = Task(
+        user_id=owner.id,
+        timeline_id=timeline.id,
+        name="D",
+        completed=False,
+    )
+
+    db.session.add_all([task_a, task_b, task_c, task_d])
+    db.session.flush()
+
+    task_a.depends_on_task_ids = [task_c.task_id]
+    task_b.depends_on_task_ids = [task_a.task_id]
+    task_c.depends_on_task_ids = [task_b.task_id, 999999]
+    task_d.depends_on_task_ids = [task_b.task_id]
+    db.session.commit()
+
+    payload = build_timeline_risk_analysis(timeline.id)
+
+    assert payload["message"] == "風險分析完成"
+    assert payload["timeline_id"] == timeline.id
+    assert payload["summary"]["total_tasks"] == 4
+    assert payload["summary"]["critical_path_task_count"] >= 1
+    assert len(payload["graph"]["nodes"]) == 4
+    assert len(payload["critical_path"]) >= 1
+    assert any(item["task_id"] == task_d.task_id for item in payload["risk_items"])
+
+    warning_codes = {item["code"] for item in payload["warnings"]}
+    assert "cycle_detected" in warning_codes
+    assert "missing_dependency" in warning_codes
+
+
+def test_trigger_timeline_risk_notifications_creates_notifications(app):
+    owner = _create_user("timeline-risk-notify-owner@example.com", "timeline_risk_notify_owner")
+    member = _create_user("timeline-risk-notify-member@example.com", "timeline_risk_notify_member")
+
+    timeline = Timeline(user_id=owner.id, name="Risk Notify Timeline")
+    db.session.add(timeline)
+    db.session.flush()
+    db.session.add_all(
+        [
+            TimelineUser(timeline_id=timeline.id, user_id=owner.id, role=0),
+            TimelineUser(timeline_id=timeline.id, user_id=member.id, role=1),
+        ]
+    )
+
+    blocker = Task(
+        user_id=owner.id,
+        timeline_id=timeline.id,
+        name="關鍵阻塞任務",
+        status="in_progress",
+        start_date=datetime(2026, 4, 10),
+        end_date=datetime(2026, 4, 11),
+        completed=False,
+    )
+    follower = Task(
+        user_id=member.id,
+        timeline_id=timeline.id,
+        name="後續驗收",
+        status="pending",
+        start_date=datetime(2026, 4, 12),
+        end_date=datetime(2026, 4, 13),
+        completed=False,
+        depends_on_task_ids=[],
+    )
+    db.session.add_all([blocker, follower])
+    db.session.flush()
+    follower.depends_on_task_ids = [blocker.task_id]
+    db.session.commit()
+
+    payload = trigger_timeline_risk_notifications(timeline.id)
+
+    assert payload["timeline_id"] == timeline.id
+    assert payload["notified_user_count"] == 2
+    assert payload["risk_item_count"] >= 1
+
+    notifications = Notification.query.filter(Notification.type == "risk_alert").all()
+    assert len(notifications) >= 2
+
+
 def test_check_timeline_task_conflicts_detects_overlap_and_suggestion(app):
     owner = _create_user("timeline-conflict-owner@example.com", "timeline_conflict_owner")
 
@@ -1414,6 +1643,125 @@ def test_check_timeline_task_conflicts_detects_overlap_and_suggestion(app):
             actor_user_id=owner.id,
         )
     assert excinfo.value.status_code == 400
+
+
+def test_check_timeline_task_conflicts_skips_ai_suggestion_when_not_enabled(app, monkeypatch):
+    monkeypatch.delenv("CONFLICT_CHECK_ENABLE_AI_SUGGESTION", raising=False)
+
+    owner = _create_user("timeline-conflict-ai-off-owner@example.com", "timeline_conflict_ai_off_owner")
+
+    timeline = Timeline(user_id=owner.id, name="Conflict AI Off Timeline")
+    db.session.add(timeline)
+    db.session.flush()
+    db.session.add(TimelineUser(timeline_id=timeline.id, user_id=owner.id, role=0))
+
+    existing_task = Task(
+        user_id=owner.id,
+        timeline_id=timeline.id,
+        name="既有任務",
+        status="in_progress",
+        start_date=datetime(2026, 4, 10),
+        end_date=datetime(2026, 4, 12),
+    )
+    db.session.add(existing_task)
+    db.session.flush()
+    db.session.add(TaskUser(task_id=existing_task.task_id, user_id=owner.id, role=0))
+    db.session.commit()
+
+    called = {"value": False}
+
+    def _fake_generate_conflict_suggestion(**kwargs):
+        called["value"] = True
+        return "AI 建議"
+
+    monkeypatch.setattr(
+        timeline_service_module,
+        "generate_conflict_suggestion",
+        _fake_generate_conflict_suggestion,
+    )
+    monkeypatch.setattr(
+        timeline_service_module,
+        "get_default_llm",
+        lambda **kwargs: object(),
+    )
+
+    conflict_payload = check_timeline_task_conflicts(
+        timeline_id=timeline.id,
+        payload={
+            "name": "新任務",
+            "start_date": "2026-04-11",
+            "end_date": "2026-04-13",
+            "assignee_user_id": owner.id,
+        },
+        actor_user_id=owner.id,
+    )
+
+    assert conflict_payload["has_conflict"] is True
+    assert conflict_payload["ai_suggestion"] == ""
+    assert called["value"] is False
+
+
+def test_check_timeline_task_conflicts_allows_ai_suggestion_when_payload_enables_it(app, monkeypatch):
+    monkeypatch.delenv("CONFLICT_CHECK_ENABLE_AI_SUGGESTION", raising=False)
+
+    owner = _create_user("timeline-conflict-ai-on-owner@example.com", "timeline_conflict_ai_on_owner")
+
+    timeline = Timeline(user_id=owner.id, name="Conflict AI On Timeline")
+    db.session.add(timeline)
+    db.session.flush()
+    db.session.add(TimelineUser(timeline_id=timeline.id, user_id=owner.id, role=0))
+
+    existing_task = Task(
+        user_id=owner.id,
+        timeline_id=timeline.id,
+        name="既有任務",
+        status="in_progress",
+        start_date=datetime(2026, 4, 10),
+        end_date=datetime(2026, 4, 12),
+    )
+    db.session.add(existing_task)
+    db.session.flush()
+    db.session.add(TaskUser(task_id=existing_task.task_id, user_id=owner.id, role=0))
+    db.session.commit()
+
+    called = {"value": False}
+    captured_kwargs = {}
+
+    def _fake_generate_conflict_suggestion(**kwargs):
+        called["value"] = True
+        captured_kwargs.update(kwargs)
+        return "AI 建議"
+
+    monkeypatch.setattr(
+        timeline_service_module,
+        "generate_conflict_suggestion",
+        _fake_generate_conflict_suggestion,
+    )
+    monkeypatch.setattr(
+        timeline_service_module,
+        "get_default_llm",
+        lambda **kwargs: object(),
+    )
+
+    conflict_payload = check_timeline_task_conflicts(
+        timeline_id=timeline.id,
+        payload={
+            "name": "新任務",
+            "start_date": "2026-04-11",
+            "end_date": "2026-04-13",
+            "assignee_user_id": owner.id,
+            "include_ai_suggestion": True,
+        },
+        actor_user_id=owner.id,
+    )
+
+    assert conflict_payload["has_conflict"] is True
+    assert conflict_payload["ai_suggestion"] == "AI 建議"
+    assert conflict_payload["include_ai_suggestion"] is True
+    assert called["value"] is True
+    assert isinstance(captured_kwargs.get("risk_context_text"), str)
+    assert "critical_path" in captured_kwargs["risk_context_text"]
+    assert "impact_days" in captured_kwargs["risk_context_text"]
 
 
 def test_check_timeline_task_conflicts_ignores_completed_tasks_in_same_timeline(app):
@@ -1647,6 +1995,8 @@ def test_timeline_serializers(app):
     assert timeline_payload["id"] == timeline.id
     assert timeline_payload["startDate"].endswith("Z")
     assert task_payload["assignee"] == "Owner"
+    assert task_payload["depends_on_task_ids"] == []
+    assert task_payload["can_manage_members"] is False
     assert task_payload["start_date"].endswith("Z")
     assert member_payload["email"] == owner.email
 

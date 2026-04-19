@@ -65,6 +65,24 @@
               </div>
             </div>
 
+            <div v-if="editingTask?.timeline_id">
+              <label class="block text-sm font-semibold text-gray-600 mb-2">前置依賴任務（可多選）</label>
+              <select
+                v-model="taskForm.depends_on_task_ids"
+                multiple
+                class="w-full min-h-30 px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all bg-white text-sm"
+              >
+                <option
+                  v-for="candidate in dependencyCandidateTasks"
+                  :key="`task-dependency-${candidate.task_id}`"
+                  :value="candidate.task_id"
+                >
+                  {{ candidate.name }}
+                </option>
+              </select>
+              <p class="text-xs text-gray-500 mt-1.5">僅限同專案任務，會在後端再次驗證。</p>
+            </div>
+
             <div>
               <label class="block text-sm font-semibold text-gray-600 mb-2">備註</label>
               <textarea
@@ -287,6 +305,10 @@
                   <span>👥</span>
                   成員: {{ task.members.map(m => m.name || 'User').join(', ') }}
                 </span>
+                <span v-if="(task.depends_on_task_ids || []).length" class="flex items-center gap-1">
+                  <span>🔗</span>
+                  前置: {{ (task.depends_on_task_ids || []).map(getTaskNameById).join('、') }}
+                </span>
                 <span class="flex items-center gap-1">
                   <span>📅</span>
                   {{ formatDate(task.end_date) }}
@@ -369,6 +391,18 @@
             <div v-if="detailTask.task_remark" class="p-4 bg-yellow-50 rounded-xl">
               <h4 class="font-semibold text-gray-700 mb-2">📝 備註</h4>
               <p class="text-gray-600 text-sm">{{ detailTask.task_remark }}</p>
+            </div>
+            <div v-if="(detailTask.depends_on_task_ids || []).length" class="p-4 bg-slate-50 rounded-xl">
+              <h4 class="font-semibold text-gray-700 mb-2">🔗 前置依賴</h4>
+              <div class="flex flex-wrap gap-2">
+                <span
+                  v-for="dependencyId in detailTask.depends_on_task_ids"
+                  :key="`task-detail-dependency-${dependencyId}`"
+                  class="px-2.5 py-1 text-xs rounded-full bg-slate-200 text-slate-700"
+                >
+                  {{ getTaskNameById(dependencyId) }}
+                </span>
+              </div>
             </div>
 
             <!-- ── 子任務區 ── -->
@@ -546,9 +580,34 @@ const taskForm = ref({
   name: '',
   start_date: '',
   end_date: '',
-  task_remark: ''
+  task_remark: '',
+  depends_on_task_ids: [] as number[],
 });
 const taskConflictPreview = ref<ResourceConflictResponse | null>(null);
+
+const normalizeIdList = (values: Array<number | string>): number[] => {
+  return Array.from(
+    new Set(
+      values
+        .map((value) => Number(value))
+        .filter((value) => Number.isInteger(value) && value > 0)
+    )
+  );
+};
+
+const dependencyCandidateTasks = computed(() => {
+  if (!editingTask.value?.timeline_id) return [];
+
+  return tasks.value.filter((task) => {
+    if (task.timeline_id !== editingTask.value?.timeline_id) return false;
+    return task.task_id !== editingTask.value?.task_id;
+  });
+});
+
+const getTaskNameById = (taskId: number): string => {
+  const matchedTask = tasks.value.find((task) => task.task_id === taskId);
+  return matchedTask?.name || `任務 #${taskId}`;
+};
 
 const toDateOnly = (value?: string | null): string | null => {
   if (!value) return null;
@@ -578,6 +637,7 @@ const runConflictPrecheckForSubmit = async (): Promise<boolean> => {
       name: taskForm.value.name,
       start_date: taskForm.value.start_date || null,
       end_date: taskForm.value.end_date || null,
+      include_ai_suggestion: false,
     });
     taskConflictPreview.value = res.data;
 
@@ -625,6 +685,7 @@ const runConflictPrecheckForMemberAssignment = async (
       end_date: endDate,
       assignee_user_id: member.user_id,
       priority: task.priority,
+      include_ai_suggestion: false,
     });
 
     if (!res.data.has_conflict) {
@@ -658,10 +719,15 @@ const handleSubmit = async () => {
       return;
     }
 
+    const payload = {
+      ...taskForm.value,
+      depends_on_task_ids: normalizeIdList(taskForm.value.depends_on_task_ids),
+    };
+
     if (editingTask.value) {
-      await store.updateTask(editingTask.value.task_id, taskForm.value);
+      await store.updateTask(editingTask.value.task_id, payload);
     } else {
-      await store.addTask(taskForm.value);
+      await store.addTask(payload);
     }
     resetForm();
   } catch (error) {
@@ -676,7 +742,8 @@ const editTask = (task: Task) => {
     name: task.name,
     start_date: task.start_date ? task.start_date.slice(0, 10) : '',
     end_date: task.end_date ? task.end_date.slice(0, 10) : '',
-    task_remark: task.task_remark || ''
+    task_remark: task.task_remark || '',
+    depends_on_task_ids: normalizeIdList(task.depends_on_task_ids || []),
   };
   showForm.value = true;
 };
@@ -704,7 +771,7 @@ const resetForm = () => {
   editingTask.value = null;
   showForm.value = false;
   taskConflictPreview.value = null;
-  taskForm.value = { name: '', start_date: '', end_date: '', task_remark: '' };
+  taskForm.value = { name: '', start_date: '', end_date: '', task_remark: '', depends_on_task_ids: [] };
 };
 
 // ── 任務詳情 Modal ──

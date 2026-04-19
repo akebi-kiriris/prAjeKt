@@ -259,6 +259,7 @@ def test_get_timeline_tasks_and_remark_update(client):
     assert len(payload) == 1
     assert payload[0]["assignee"] == owner.name
     assert assistant.name in payload[0]["assistant"]
+    assert payload[0]["can_manage_members"] is True
 
     invalid_remark = client.put(
         f"/api/timelines/{timeline_id}/remark",
@@ -273,6 +274,55 @@ def test_get_timeline_tasks_and_remark_update(client):
         json={"remark": "remark updated"},
     )
     assert valid_remark.status_code == 200
+
+
+def test_get_timeline_tasks_can_manage_members_for_task_owner_member(client):
+    timeline_owner = _create_user(
+        email="timeline-manage-owner@example.com",
+        password="Password123!",
+        username="timeline_manage_owner",
+    )
+    collaborator = _create_user(
+        email="timeline-manage-collaborator@example.com",
+        password="Password123!",
+        username="timeline_manage_collaborator",
+    )
+
+    owner_headers = _get_auth_headers(client, "timeline-manage-owner@example.com", "Password123!")
+    collaborator_headers = _get_auth_headers(client, "timeline-manage-collaborator@example.com", "Password123!")
+    timeline_id = _create_timeline(client, owner_headers, name="Task manage permission timeline")
+
+    db.session.add(TimelineUser(timeline_id=timeline_id, user_id=collaborator.id, role=1))
+
+    task_owned_by_collaborator = Task(
+        user_id=collaborator.id,
+        timeline_id=timeline_id,
+        name="Collaborator owned task",
+    )
+    task_only_collaborator = Task(
+        user_id=timeline_owner.id,
+        timeline_id=timeline_id,
+        name="Collaborator non-owner task",
+    )
+    db.session.add_all([task_owned_by_collaborator, task_only_collaborator])
+    db.session.flush()
+
+    db.session.add_all(
+        [
+            TaskUser(task_id=task_owned_by_collaborator.task_id, user_id=collaborator.id, role=0),
+            TaskUser(task_id=task_only_collaborator.task_id, user_id=timeline_owner.id, role=0),
+            TaskUser(task_id=task_only_collaborator.task_id, user_id=collaborator.id, role=1),
+        ]
+    )
+    db.session.commit()
+
+    response = client.get(f"/api/timelines/{timeline_id}/tasks", headers=collaborator_headers)
+    assert response.status_code == 200
+
+    payload = response.get_json()
+    manage_map = {item["name"]: item["can_manage_members"] for item in payload}
+    assert manage_map["Collaborator owned task"] is True
+    assert manage_map["Collaborator non-owner task"] is False
 
 
 def test_search_user_by_email_flow(client):
@@ -498,6 +548,8 @@ def test_batch_create_tasks_validation_and_success(client):
                     "status": "pending",
                     "estimated_days": 2,
                     "task_remark": "created",
+                    "depends_on_task_ids": [keep_task.task_id],
+                    "depends_on_task_refs": ["keep me", "不存在任務"],
                 },
             ]
         },
@@ -507,6 +559,7 @@ def test_batch_create_tasks_validation_and_success(client):
     assert payload["kept"] == 1
     assert payload["deleted"] == 1
     assert payload["created"] == 1
+    assert payload["ignored_dependency_refs"] == 1
 
     refreshed_keep = db.session.get(Task, keep_task.task_id)
     refreshed_delete = db.session.get(Task, delete_task.task_id)
@@ -517,6 +570,7 @@ def test_batch_create_tasks_validation_and_success(client):
     assert refreshed_delete is not None
     assert refreshed_delete.deleted_at is not None
     assert new_task is not None
+    assert new_task.depends_on_task_ids == [keep_task.task_id]
 
 
 def test_get_timeline_weekly_report_returns_completed_and_risk_items(client):
@@ -580,6 +634,103 @@ def test_get_timeline_weekly_report_returns_completed_and_risk_items(client):
     assert payload["analysis"]["weekly_goal_total"] == 2
     assert payload["analysis"]["weekly_goal_completed"] == 1
     assert payload["analysis"]["progress_signal"] in {"進度領先", "進度穩定", "進度落後"}
+
+
+def test_get_timeline_risk_analysis_returns_summary_and_warnings(client):
+    owner = _create_user(
+        email="timeline-risk-api-owner@example.com",
+        password="Password123!",
+        username="timeline_risk_api_owner",
+    )
+
+    headers = _get_auth_headers(client, "timeline-risk-api-owner@example.com", "Password123!")
+    timeline_id = _create_timeline(client, headers, name="Risk API Timeline")
+
+    task_a = Task(
+        user_id=owner.id,
+        timeline_id=timeline_id,
+        name="風險任務 A",
+        start_date=datetime(2026, 4, 10),
+        end_date=datetime(2026, 4, 11),
+        completed=False,
+    )
+    task_b = Task(
+        user_id=owner.id,
+        timeline_id=timeline_id,
+        name="風險任務 B",
+        start_date=datetime(2026, 4, 12),
+        end_date=datetime(2026, 4, 13),
+        completed=False,
+    )
+    db.session.add_all([task_a, task_b])
+    db.session.flush()
+    task_b.depends_on_task_ids = [task_a.task_id, 999999]
+    db.session.commit()
+
+    response = client.get(f"/api/timelines/{timeline_id}/risk-analysis", headers=headers)
+    assert response.status_code == 200
+
+    payload = response.get_json()
+    assert payload["timeline_id"] == timeline_id
+    assert payload["summary"]["total_tasks"] == 2
+    assert "critical_path" in payload
+    assert "risk_items" in payload
+    assert "warnings" in payload
+
+    warning_codes = {item["code"] for item in payload["warnings"]}
+    assert "missing_dependency" in warning_codes
+
+
+def test_post_timeline_risk_analysis_notify_owner_only(client):
+    owner = _create_user(
+        email="timeline-risk-notify-api-owner@example.com",
+        password="Password123!",
+        username="timeline_risk_notify_api_owner",
+    )
+    member = _create_user(
+        email="timeline-risk-notify-api-member@example.com",
+        password="Password123!",
+        username="timeline_risk_notify_api_member",
+    )
+
+    owner_headers = _get_auth_headers(client, "timeline-risk-notify-api-owner@example.com", "Password123!")
+    member_headers = _get_auth_headers(client, "timeline-risk-notify-api-member@example.com", "Password123!")
+    timeline_id = _create_timeline(client, owner_headers, name="Risk Notify API Timeline")
+
+    db.session.add(TimelineUser(timeline_id=timeline_id, user_id=member.id, role=1))
+
+    blocker = Task(
+        user_id=owner.id,
+        timeline_id=timeline_id,
+        name="關鍵阻塞任務",
+        start_date=datetime(2026, 4, 10),
+        end_date=datetime(2026, 4, 11),
+        status="in_progress",
+        completed=False,
+    )
+    follower = Task(
+        user_id=member.id,
+        timeline_id=timeline_id,
+        name="後續驗收",
+        start_date=datetime(2026, 4, 12),
+        end_date=datetime(2026, 4, 13),
+        status="pending",
+        completed=False,
+    )
+    db.session.add_all([blocker, follower])
+    db.session.flush()
+    follower.depends_on_task_ids = [blocker.task_id]
+    db.session.commit()
+
+    forbidden = client.post(f"/api/timelines/{timeline_id}/risk-analysis/notify", headers=member_headers)
+    assert forbidden.status_code == 403
+
+    allowed = client.post(f"/api/timelines/{timeline_id}/risk-analysis/notify", headers=owner_headers)
+    assert allowed.status_code == 200
+
+    payload = allowed.get_json()
+    assert payload["timeline_id"] == timeline_id
+    assert payload["notified_user_count"] >= 1
 
 
 def test_timeline_conflict_check_api_detects_overlap_and_validates_payload(client):

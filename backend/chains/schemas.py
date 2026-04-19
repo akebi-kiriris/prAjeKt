@@ -36,7 +36,8 @@ class Task(BaseModel):
                 "name": "API 端點實現",
                 "priority": "HIGH",
                 "estimated_days": 5,
-                "task_remark": "實現 RESTful API 端點用於任務管理"
+                "task_remark": "實現 RESTful API 端點用於任務管理",
+                "depends_on_task_refs": ["需求確認", "資料庫 schema 設計"]
             }
         }
     )
@@ -45,6 +46,7 @@ class Task(BaseModel):
     priority: str = Field(..., description="優先級 (CRITICAL/HIGH/MEDIUM/LOW)")
     estimated_days: int = Field(..., ge=1, le=365, description="預估天數")
     task_remark: str = Field(..., min_length=1, max_length=500, description="任務描述")
+    depends_on_task_refs: List[str] = Field(default_factory=list, description="前置依賴任務名稱列表")
     
     @field_validator('priority')
     @classmethod
@@ -54,6 +56,22 @@ class Task(BaseModel):
         if v.upper() not in valid_priorities:
             raise ValueError(f"優先級必須是 {valid_priorities} 之一，得到: {v}")
         return v.upper()
+
+    @field_validator('depends_on_task_refs')
+    @classmethod
+    def validate_dependency_refs(cls, values: List[str]) -> List[str]:
+        """清理前置依賴名稱並移除重複項。"""
+        normalized: List[str] = []
+        seen = set()
+        for value in values:
+            if not isinstance(value, str):
+                continue
+            item = value.strip()
+            if not item or item in seen:
+                continue
+            seen.add(item)
+            normalized.append(item)
+        return normalized
 
 
 class ToolSelection(BaseModel):

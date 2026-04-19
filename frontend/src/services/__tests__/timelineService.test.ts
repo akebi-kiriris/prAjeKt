@@ -60,6 +60,7 @@ describe('timelineService', () => {
     timelineService.upcoming();
     timelineService.getMemberStats(5);
     timelineService.getWeeklyReport(5, { start_date: '2026-04-14', end_date: '2026-04-20' });
+    timelineService.getRiskAnalysis(5);
     timelineService.conflictCheck(5, {
       name: '新增任務',
       start_date: '2026-04-16',
@@ -75,6 +76,7 @@ describe('timelineService', () => {
     expect(mockedApi.get).toHaveBeenCalledWith('/timelines/5/weekly-report', {
       params: { start_date: '2026-04-14', end_date: '2026-04-20' },
     });
+    expect(mockedApi.get).toHaveBeenCalledWith('/timelines/5/risk-analysis');
     expect(mockedApi.post).toHaveBeenCalledWith('/timelines/5/conflict-check', {
       name: '新增任務',
       start_date: '2026-04-16',
