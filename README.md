@@ -2,7 +2,7 @@
 
 基於 Vue 3 + Flask 的專案管理與協作平台，整合 Google Gemini AI 實現智能任務生成。
 
-> **開發狀態**：Phase 1~6.6 已完成 ✅；Phase 7.1（專案週報 + 排程衝突檢查 + 指派隱私遮罩）已完成 ✅；目前進入 Phase 7.2（進度風險分析）規劃。
+> **開發狀態**：Phase 1~6.6+ 已完成 ✅；Phase 7.1（專案週報 + 排程衝突檢查 + 指派隱私遮罩）已完成 ✅；Phase 7.2（進度風險分析）MVP 核心已上線 🟡（Critical Path、依賴管理、風險視圖/依賴圖）。
 
 ## 功能模組
 
@@ -10,11 +10,13 @@
 - **任務管理**：任務 CRUD、子任務、優先級、標籤、狀態拖曳切換、留言討論、附件上傳 / 下載、任務成員指派
 - **排程協作（Phase 7.1）**：任務建立可多選指派（`assignee_user_ids`）、建立與再指派前皆可做衝突預檢（同專案/跨專案/過載日）
 - **專案週報（Phase 7.1）**：一鍵生成週報（完成項目、風險清單、近期留言、下一步建議、AI 摘要）
+- **進度風險分析（Phase 7.2）**：專案 Critical Path 分析、風險分級（high/medium/low）、資料品質警示（循環依賴/缺漏排程）
+- **任務依賴管理（Phase 7.2）**：支援 `depends_on_task_ids` 編輯、任務詳情維護前置依賴、風險面板可視化依賴圖（SVG 自動佈局 + 關鍵路徑標記）
 - **待辦事項**：個人 Todo 列表，完成狀態管理
 - **群組協作**：群組建立 / 邀請碼加入 / 即時聊天（Socket.IO，含 REST fallback）
 - **個人資料**：個人資訊編輯、密碼變更、使用統計
 - **數據分析儀表板**：整合於個人資料頁，Level 1 個人圖表（30 天完成趨勢、任務狀態分布、各專案任務量）+ Level 2 專案圖表（成員貢獻、任務狀態，負責人限定）
-- **AI 任務生成**：自然語言輸入 → AI 工具路由 → MCP 執行，支援批次創建與自動化（MCP Copilot 整合）
+- **AI 任務生成**：自然語言輸入 → AI 工具路由 → MCP 執行，支援批次創建與自動化（MCP Copilot 整合）；生成任務可帶入依賴欄位，缺漏時會套用順序鏈 fallback
 - **AI 群組快照（RAG-B 核心）**：群組聊天可生成「行動導向 Digest」（一句重點 / 你現在要做什麼 / 阻塞風險 / 精簡決議）
 - **Copilot + MCP 整合**：自然語言 AI 路由至後端工具，無需 Inspector；支援任務知識摘要、群組快照、自動化創建
 - **垃圾桶回收機制**：已刪任務 / 專案暫存，支援還原或永久刪除；非建立者唯讀
@@ -169,7 +171,7 @@ npm run test:run
 
 ### 後端測試（pytest + coverage）
 
-- 結果：最新回歸 `136 passed`（coverage 基線 `80.59%`）
+- 結果：最新全量回歸 `162 passed`（coverage 基線 `80.59%`）
 - 覆蓋範圍：`blueprints`、`services`、`models`
 - 指令：
 
@@ -203,6 +205,8 @@ pytest --cov=blueprints --cov=services --cov=models --cov-report=term-missing --
 | DELETE | `/api/timelines/:id` | 刪除專案 |
 | GET | `/api/timelines/:id/tasks` | 取得專案下的任務 |
 | GET | `/api/timelines/:id/weekly-report` | 取得專案週報（完成/風險/留言/下一步/AI 摘要） |
+| GET | `/api/timelines/:id/risk-analysis` | 取得專案風險分析（critical path、風險清單、依賴圖資料） |
+| POST | `/api/timelines/:id/risk-analysis/notify` | 發送風險通知給專案成員（負責人限定） |
 | POST | `/api/timelines/:id/conflict-check` | 檢查排程衝突（同專案/跨專案/過載日，含建議改期） |
 | POST | `/api/timelines/:id/generate-tasks` | AI 生成任務建議 |
 | POST | `/api/timelines/:id/batch-create-tasks` | 批次建立任務 |
@@ -218,7 +222,7 @@ pytest --cov=blueprints --cov=services --cov=models --cov-report=term-missing --
 |------|------|------|
 | GET | `/api/tasks` | 取得任務列表 |
 | GET | `/api/tasks/upcoming` | 即將到期 / 進度落後的任務（3 天內 or ≥80%）|
-| POST | `/api/tasks` | 建立任務（支援 `assignee_user_ids` 多選指派） |
+| POST | `/api/tasks` | 建立任務（支援 `assignee_user_ids` 多選指派與 `depends_on_task_ids` 前置依賴） |
 | PUT | `/api/tasks/:id` | 更新任務 |
 | DELETE | `/api/tasks/:id` | 刪除任務（軟刪除）|
 | PATCH | `/api/tasks/:id/status` | 更新任務狀態（看板拖曳） |
@@ -326,7 +330,7 @@ pytest --cov=blueprints --cov=services --cov=models --cov-report=term-missing --
 	- 邊界：不建立 staging、不新增雲端擴展部署
 - **Phase 7 精簡路線（進行中）**：
 	- 7.1：週報 + 衝突檢查 MVP（含過載日列表、多指派、隱私遮罩）✅
-	- 7.2：進度風險分析（critical path）⏳
+	- 7.2：進度風險分析 MVP 核心（critical path + 依賴管理 + 依賴圖）🟡
 	- 7.3：知識增強規劃（來源可追溯）⏳
 
 ## 環境需求
