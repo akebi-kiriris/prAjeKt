@@ -628,11 +628,12 @@ def _build_conflict_risk_context_text(timeline, conflicts):
         )
 
     summary = analysis.get('summary') or {}
+    risk_lines = '\n'.join(lines)
     return (
         f"專案風險摘要：高風險 {summary.get('high_risk_count', 0)} 項，"
         f"關鍵路徑 {summary.get('critical_path_task_count', 0)} 項，"
         f"預估總工期 {summary.get('projected_duration_days', 0)} 天。\n"
-        f"衝突任務風險：\n{'\\n'.join(lines)}"
+        f"衝突任務風險：\n{risk_lines}"
     )
 
 

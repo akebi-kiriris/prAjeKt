@@ -57,7 +57,8 @@ const clearAuthTokens = (): void => {
 };
 
 const redirectToLogin = (): void => {
-  if (router.currentRoute.value.path !== '/login') {
+  const currentPath = router.currentRoute?.value?.path;
+  if (currentPath !== '/login') {
     router.push('/login');
   }
 };
@@ -82,9 +83,8 @@ const isJwtErrorMessage = (message: string): boolean => {
 const shouldHandleJwtAuthFailure = (
   statusCode: number | undefined,
   message: string,
-  requestHadAuthHeader: boolean,
 ): boolean => {
-  if (!requestHadAuthHeader || !statusCode) return false;
+  if (!statusCode) return false;
 
   if (statusCode === 401) return true;
   if (statusCode === 422) return isJwtErrorMessage(message);
@@ -123,9 +123,8 @@ api.interceptors.response.use(
     const originalRequest = error.config as RetryableAxiosRequestConfig;
     const statusCode: number | undefined = error.response?.status;
     const message = String((error.response?.data as JwtErrorPayload | undefined)?.msg || '');
-    const requestHadAuthHeader = Boolean(originalRequest?.headers?.Authorization);
 
-    const shouldHandle = shouldHandleJwtAuthFailure(statusCode, message, requestHadAuthHeader);
+    const shouldHandle = shouldHandleJwtAuthFailure(statusCode, message);
 
     // 如果是 JWT 驗證錯誤且還沒重試過
     if (shouldHandle && !originalRequest._retry) {
