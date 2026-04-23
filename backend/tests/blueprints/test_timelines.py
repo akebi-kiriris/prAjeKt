@@ -573,6 +573,84 @@ def test_batch_create_tasks_validation_and_success(client):
     assert new_task.depends_on_task_ids == [keep_task.task_id]
 
 
+def test_batch_create_tasks_partial_selection_keeps_resolvable_dependencies(client):
+    owner = _create_user(
+        email="timeline-batch-partial-owner@example.com",
+        password="Password123!",
+        username="timeline_batch_partial_owner",
+    )
+    headers = _get_auth_headers(client, "timeline-batch-partial-owner@example.com", "Password123!")
+    timeline_id = _create_timeline(client, headers, name="Batch partial chain timeline", start_date="", end_date="")
+
+    response = client.post(
+        f"/api/timelines/{timeline_id}/batch-create-tasks",
+        headers=headers,
+        json={
+            "tasks": [
+                {
+                    "isExisting": False,
+                    "name": "任務1",
+                    "priority": 2,
+                    "status": "pending",
+                    "estimated_days": 1,
+                    "task_remark": "chain 1",
+                    "depends_on_task_refs": [],
+                },
+                {
+                    "isExisting": False,
+                    "name": "任務2",
+                    "priority": 2,
+                    "status": "pending",
+                    "estimated_days": 1,
+                    "task_remark": "chain 2",
+                    "depends_on_task_refs": ["任務1"],
+                },
+                {
+                    "isExisting": False,
+                    "name": "任務4",
+                    "priority": 2,
+                    "status": "pending",
+                    "estimated_days": 1,
+                    "task_remark": "chain 4",
+                    "depends_on_task_refs": ["任務3"],
+                },
+                {
+                    "isExisting": False,
+                    "name": "任務5",
+                    "priority": 2,
+                    "status": "pending",
+                    "estimated_days": 1,
+                    "task_remark": "chain 5",
+                    "depends_on_task_refs": ["任務4"],
+                },
+            ]
+        },
+    )
+
+    assert response.status_code == 201
+    payload = response.get_json()
+    assert payload["created"] == 4
+    assert payload["ignored_dependency_refs"] == 1
+
+    task_1 = Task.query.filter_by(timeline_id=timeline_id, name="任務1").first()
+    task_2 = Task.query.filter_by(timeline_id=timeline_id, name="任務2").first()
+    task_4 = Task.query.filter_by(timeline_id=timeline_id, name="任務4").first()
+    task_5 = Task.query.filter_by(timeline_id=timeline_id, name="任務5").first()
+
+    assert task_1 is not None
+    assert task_2 is not None
+    assert task_4 is not None
+    assert task_5 is not None
+
+    # 可解析依賴要保留（任務2 -> 任務1、任務5 -> 任務4）
+    assert task_1.depends_on_task_ids == []
+    assert task_2.depends_on_task_ids == [task_1.task_id]
+    assert task_5.depends_on_task_ids == [task_4.task_id]
+
+    # 缺失前置依賴（任務4 -> 任務3）應降級為無依賴，不阻塞建立
+    assert task_4.depends_on_task_ids == []
+
+
 def test_get_timeline_weekly_report_returns_completed_and_risk_items(client):
     owner = _create_user(
         email="timeline-weekly-api-owner@example.com",

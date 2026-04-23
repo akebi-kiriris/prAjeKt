@@ -6,6 +6,7 @@ import type {
   CreateTimelinePayload,
   UpdateTimelinePayload,
   TimelineBatchTaskPayload,
+  TimelineBatchCreateTasksResponse,
   Task,
   TaskMember,
   ProjectStats,
@@ -28,7 +29,8 @@ export const timelineService = {
   searchUser:       (email: string): Promise<AxiosResponse<SearchUserResult>> => api.post('/timelines/search_user', { email }),
   addMember:        (id: number, userId: number): Promise<AxiosResponse<TaskMember>>             => api.post(`/timelines/${id}/members`, { user_id: userId, role: 1 }),
   generateTasks:    (id: number, payload: GenerateTasksRequest = {}): Promise<AxiosResponse<GenerateTasksResponse>> => api.post(`/timelines/${id}/generate-tasks`, payload),
-  batchCreateTasks: (id: number, tasks: TimelineBatchTaskPayload[]): Promise<AxiosResponse<Task[]>> => api.post(`/timelines/${id}/batch-create-tasks`, { tasks }),
+  batchCreateTasks: (id: number, tasks: TimelineBatchTaskPayload[]): Promise<AxiosResponse<TimelineBatchCreateTasksResponse>> =>
+    api.post(`/timelines/${id}/batch-create-tasks`, { tasks }),
   getMembers:       (id: number): Promise<AxiosResponse<TaskMember[]>>                           => api.get(`/timelines/${id}/members`),
   removeMember:     (id: number, userId: number): Promise<AxiosResponse<void>>                   => api.delete(`/timelines/${id}/members/${userId}`),
   upcoming:         (): Promise<AxiosResponse<Timeline[]>>                                       => api.get('/timelines/upcoming'),
@@ -36,7 +38,10 @@ export const timelineService = {
   getWeeklyReport:  (
     id: number,
     params?: { start_date?: string; end_date?: string }
-  ): Promise<AxiosResponse<WeeklyReportResponse>> => api.get(`/timelines/${id}/weekly-report`, { params }),
+  ): Promise<AxiosResponse<WeeklyReportResponse>> => api.get(`/timelines/${id}/weekly-report`, {
+    params,
+    timeout: 45000,
+  }),
   getRiskAnalysis:  (id: number): Promise<AxiosResponse<CriticalPathAnalysisResponse>> =>
     api.get(`/timelines/${id}/risk-analysis`),
   conflictCheck:    (id: number, payload: ConflictCheckPayload): Promise<AxiosResponse<ResourceConflictResponse>> =>

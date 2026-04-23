@@ -355,4 +355,86 @@ describe('TimelineDetailDialog Phase 7.1', () => {
     expect(wrapper.text()).toContain('既有排程任務');
     expect(phase7Mocks.createTask).not.toHaveBeenCalled();
   });
+
+  it('批次建立任務時若有未帶入前置依賴，會以 toast 顯示受影響任務名稱', async () => {
+    phase7Mocks.executeMcp.mockResolvedValue({
+      data: {
+        result: {
+          tasks: [
+            { name: '任務1', priority: 2, estimated_days: 1, depends_on_task_refs: [] },
+            { name: '任務2', priority: 2, estimated_days: 1, depends_on_task_refs: ['任務1'] },
+            { name: '任務4', priority: 2, estimated_days: 1, depends_on_task_refs: ['任務3'] },
+          ],
+        },
+      },
+    });
+    phase7Mocks.batchCreateTasks.mockResolvedValue({
+      data: {
+        message: '新增成功',
+        kept: 0,
+        deleted: 0,
+        created: 3,
+        ignored_dependency_refs: 1,
+        ignored_dependency_ids: 0,
+      },
+    });
+
+    const wrapper = mount(TimelineDetailDialog, {
+      props: {
+        selectedTimeline: baseTimeline,
+        timelineTasks: [],
+        apiBaseUrl: 'http://localhost:5000/api',
+      },
+    });
+
+    await flushPromises();
+
+    const openAiModalButton = wrapper
+      .findAll('button')
+      .find((button) => button.text().includes('AI 生成任務'));
+
+    expect(openAiModalButton).toBeTruthy();
+    if (!openAiModalButton) {
+      throw new Error('找不到 AI 生成任務按鈕');
+    }
+    await openAiModalButton.trigger('click');
+    await flushPromises();
+
+    const generateButton = wrapper
+      .findAll('button')
+      .find((button) => button.text().includes('AI 智慧生成'));
+
+    expect(generateButton).toBeTruthy();
+    if (!generateButton) {
+      throw new Error('找不到 AI 智慧生成按鈕');
+    }
+    await generateButton.trigger('click');
+    await flushPromises();
+
+    const selectAllButton = wrapper
+      .findAll('button')
+      .find((button) => button.text().includes('全部選取'));
+
+    expect(selectAllButton).toBeTruthy();
+    if (!selectAllButton) {
+      throw new Error('找不到全部選取按鈕');
+    }
+    await selectAllButton.trigger('click');
+    await flushPromises();
+
+    const batchCreateButton = wrapper
+      .findAll('button')
+      .find((button) => button.text().includes('新增選取任務'));
+
+    expect(batchCreateButton).toBeTruthy();
+    if (!batchCreateButton) {
+      throw new Error('找不到新增選取任務按鈕');
+    }
+    await batchCreateButton.trigger('click');
+    await flushPromises();
+
+    expect(phase7Mocks.batchCreateTasks).toHaveBeenCalledTimes(1);
+    expect(phase7Mocks.toastInfo).toHaveBeenCalled();
+    expect(phase7Mocks.toastInfo).toHaveBeenCalledWith(expect.stringContaining('任務4'));
+  });
 });

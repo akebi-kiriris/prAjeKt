@@ -75,6 +75,7 @@ describe('timelineService', () => {
     expect(mockedApi.get).toHaveBeenCalledWith('/timelines/5/member-stats');
     expect(mockedApi.get).toHaveBeenCalledWith('/timelines/5/weekly-report', {
       params: { start_date: '2026-04-14', end_date: '2026-04-20' },
+      timeout: 45000,
     });
     expect(mockedApi.get).toHaveBeenCalledWith('/timelines/5/risk-analysis');
     expect(mockedApi.post).toHaveBeenCalledWith('/timelines/5/conflict-check', {

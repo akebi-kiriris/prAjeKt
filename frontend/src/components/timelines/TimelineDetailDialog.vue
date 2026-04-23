@@ -97,6 +97,7 @@
                 <div v-if="weeklyReport.ai_summary" class="p-3 bg-blue-50 border border-blue-200 rounded-lg">
                   <p class="text-xs font-medium text-blue-700 mb-1">📌 AI 週報摘要</p>
                   <p class="text-xs text-blue-600">{{ weeklyReport.ai_summary }}</p>
+                  <p class="mt-1 text-[11px] text-blue-500">來源：{{ getWeeklyReportAiSummarySourceLabel(weeklyReport.ai_summary_source) }}</p>
                 </div>
 
                 <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
@@ -1018,11 +1019,13 @@ import type {
   SearchUserResult,
   AiGeneratedTask,
   CreateTaskPayload,
+  TimelineBatchCreateTasksResponse,
   TimelineBatchTaskPayload,
   ApiErrorPayload,
   GenerateTasksResponse,
   CopilotMcpExecuteResponse,
   CriticalPathAnalysisResponse,
+  WeeklyReportAiSummarySource,
   WeeklyReportResponse,
   ConflictCheckPayload,
   ResourceConflictResponse,
@@ -1034,6 +1037,12 @@ const props = defineProps<TimelineDetailDialogProps>();
 
 const getApiErrorMessage = (error: unknown, fallback: string) => {
   if (isAxiosError<ApiErrorPayload>(error)) {
+    if (error.code === 'ECONNABORTED') {
+      return '請求逾時，請稍後再試';
+    }
+    if (!error.response) {
+      return error.message || '網路連線異常，請稍後再試';
+    }
     return error.response?.data?.error || fallback;
   }
   return fallback;
@@ -1381,6 +1390,58 @@ const normalizeStringList = (values: unknown): string[] => {
   );
 };
 
+const collectTasksWithPotentiallyDroppedDependencies = (tasks: TimelineBatchTaskPayload[]): string[] => {
+  const selectedTaskNames = new Set<string>();
+  const selectedExistingTaskIds = new Set<number>();
+
+  for (const task of tasks) {
+    const name = String(task.name ?? '').trim();
+    if (name) {
+      selectedTaskNames.add(name);
+    }
+
+    if (task.isExisting) {
+      const taskId = Number(task.task_id);
+      if (Number.isInteger(taskId) && taskId > 0) {
+        selectedExistingTaskIds.add(taskId);
+      }
+    }
+  }
+
+  const affectedTaskNames = new Set<string>();
+
+  for (const task of tasks) {
+    if (task.isExisting) {
+      continue;
+    }
+
+    const taskName = String(task.name ?? '').trim();
+    if (!taskName) {
+      continue;
+    }
+
+    const dependencyRefs = normalizeStringList(task.depends_on_task_refs);
+    const dependencyIds = normalizeIdList(task.depends_on_task_ids || []);
+
+    const hasMissingRef = dependencyRefs.some((ref) => !selectedTaskNames.has(ref));
+
+    const currentTaskId = Number(task.task_id);
+    const hasCurrentTaskId = Number.isInteger(currentTaskId) && currentTaskId > 0;
+    const hasMissingId = dependencyIds.some((dependencyId) => {
+      if (hasCurrentTaskId && dependencyId === currentTaskId) {
+        return true;
+      }
+      return !selectedExistingTaskIds.has(dependencyId);
+    });
+
+    if (hasMissingRef || hasMissingId) {
+      affectedTaskNames.add(taskName);
+    }
+  }
+
+  return Array.from(affectedTaskNames);
+};
+
 const canManageTaskMembers = (task: Task | null | undefined): boolean => {
   if (!task) return false;
   if (typeof task.can_manage_members === 'boolean') {
@@ -1437,6 +1498,23 @@ const getDefaultWeeklyReportRange = () => {
     start_date: start.toISOString().split('T')[0],
     end_date: end.toISOString().split('T')[0],
   };
+};
+
+const getWeeklyReportAiSummarySourceLabel = (source?: WeeklyReportAiSummarySource | string) => {
+  switch (source) {
+    case 'llm':
+      return 'AI 直接生成';
+    case 'cache':
+      return 'AI 快取結果';
+    case 'fallback-timeout':
+      return '模板回退（AI 逾時）';
+    case 'fallback-error':
+      return '模板回退（AI 錯誤）';
+    case 'fallback-empty':
+      return '模板回退（AI 回傳空內容）';
+    default:
+      return '未標記';
+  }
 };
 
 const fetchWeeklyReport = async () => {
@@ -2195,8 +2273,27 @@ const batchCreateAiTasks = async () => {
         depends_on_task_refs: normalizeStringList(task.depends_on_task_refs),
       };
     });
+
+  const affectedTaskNames = collectTasksWithPotentiallyDroppedDependencies(tasksToCreate);
+
   try {
-    await timelineService.batchCreateTasks(timelineId, tasksToCreate);
+    const res = await timelineService.batchCreateTasks(timelineId, tasksToCreate);
+    const payload: TimelineBatchCreateTasksResponse = res.data;
+    const ignoredDependencyRefs = Number(payload.ignored_dependency_refs || 0);
+    const ignoredDependencyIds = Number(payload.ignored_dependency_ids || 0);
+
+    if (ignoredDependencyRefs + ignoredDependencyIds > 0) {
+      const previewNames = affectedTaskNames.slice(0, 5);
+      const remainingCount = Math.max(0, affectedTaskNames.length - previewNames.length);
+
+      if (previewNames.length > 0) {
+        const remainingText = remainingCount > 0 ? `（另 ${remainingCount} 項）` : '';
+        toast.info(`小提示：以下任務有前置依賴未帶入，可於任務介面補設定：${previewNames.join('、')}${remainingText}`);
+      } else {
+        toast.info('小提示：部分任務前置依賴未帶入，可於任務介面補設定。');
+      }
+    }
+
     showAiGenerateModal.value = false;
     aiGeneratedTasks.value = []; selectedAiTasks.value = [];
     emit('refresh-all');

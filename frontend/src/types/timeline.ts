@@ -80,6 +80,13 @@ export interface WeeklyReportCommentItem {
   created_at: string | null;
 }
 
+export type WeeklyReportAiSummarySource =
+  | 'llm'
+  | 'cache'
+  | 'fallback-empty'
+  | 'fallback-timeout'
+  | 'fallback-error';
+
 export interface WeeklyReportAnalysis {
   weekly_goal_total: number;
   weekly_goal_completed: number;
@@ -90,6 +97,7 @@ export interface WeeklyReportAnalysis {
   top_owner: string | null;
   top_tags: string[];
   blocking_comment_count: number;
+  ai_summary_source?: WeeklyReportAiSummarySource;
 }
 
 export interface WeeklyReportResponse {
@@ -103,6 +111,7 @@ export interface WeeklyReportResponse {
   recent_comments: WeeklyReportCommentItem[];
   next_actions: string[];
   ai_summary: string;
+  ai_summary_source?: WeeklyReportAiSummarySource;
   analysis?: WeeklyReportAnalysis;
 }
 

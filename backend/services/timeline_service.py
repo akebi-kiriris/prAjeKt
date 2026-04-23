@@ -1,6 +1,9 @@
 from datetime import datetime, timedelta, timezone
 from collections import Counter, defaultdict
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
+import hashlib
 import os
+import time
 
 from models import db
 from models.notification import Notification
@@ -41,6 +44,9 @@ from repositories.timeline_repository import (
 )
 
 TIMELINE_UPDATE_ALLOWED_FIELDS = {'name', 'start_date', 'end_date', 'remark'}
+WEEKLY_REPORT_AI_TIMEOUT_SEC = float(os.getenv('WEEKLY_REPORT_AI_TIMEOUT_SEC', '35'))
+WEEKLY_REPORT_AI_CACHE_TTL_SEC = int(os.getenv('WEEKLY_REPORT_AI_CACHE_TTL_SEC', '300'))
+_WEEKLY_REPORT_AI_SUMMARY_CACHE = {}
 
 
 class TimelineAIGenerationError(Exception):
@@ -536,6 +542,64 @@ def _normalize_report_period(start_date_raw, end_date_raw):
     return start_date, end_date
 
 
+def _build_weekly_report_ai_cache_key(timeline_id, start_date, end_date, status_text):
+    digest = hashlib.sha1(status_text.encode('utf-8')).hexdigest()[:12]
+    return f"{timeline_id}:{start_date.isoformat()}:{end_date.isoformat()}:{digest}"
+
+
+def _get_cached_weekly_report_ai_summary(cache_key):
+    cached = _WEEKLY_REPORT_AI_SUMMARY_CACHE.get(cache_key)
+    if not cached:
+        return None
+
+    expires_at, summary = cached
+    if time.time() >= expires_at:
+        _WEEKLY_REPORT_AI_SUMMARY_CACHE.pop(cache_key, None)
+        return None
+
+    return summary
+
+
+def _set_cached_weekly_report_ai_summary(cache_key, summary):
+    if not summary:
+        return
+
+    _WEEKLY_REPORT_AI_SUMMARY_CACHE[cache_key] = (
+        time.time() + WEEKLY_REPORT_AI_CACHE_TTL_SEC,
+        summary,
+    )
+
+
+def _invoke_weekly_report_ai_summary(provider, status_text):
+    llm = get_default_llm(provider=provider)
+    return generate_weekly_report_summary(llm=llm, status_text=status_text)
+
+
+def _safe_generate_weekly_report_ai_summary(timeline_id, start_date, end_date, status_text, fallback):
+    cache_key = _build_weekly_report_ai_cache_key(timeline_id, start_date, end_date, status_text)
+    cached = _get_cached_weekly_report_ai_summary(cache_key)
+    if cached:
+        return cached, 'cache'
+
+    provider = os.getenv('LLM_PROVIDER', 'google-generativeai')
+    executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix='weekly-report-ai')
+    future = executor.submit(_invoke_weekly_report_ai_summary, provider, status_text)
+
+    try:
+        generated = str(future.result(timeout=WEEKLY_REPORT_AI_TIMEOUT_SEC)).strip()
+        if generated:
+            _set_cached_weekly_report_ai_summary(cache_key, generated)
+            return generated, 'llm'
+        return fallback, 'fallback-empty'
+    except FutureTimeoutError:
+        future.cancel()
+        return fallback, 'fallback-timeout'
+    except Exception:
+        return fallback, 'fallback-error'
+    finally:
+        executor.shutdown(wait=False, cancel_futures=True)
+
+
 def _resolve_task_window(task):
     start_date = task.start_date.date() if task.start_date else None
     end_date = task.end_date.date() if task.end_date else None
@@ -616,6 +680,7 @@ def _build_conflict_risk_context_text(timeline, conflicts):
             ),
             None,
         )
+
         display_name = matched_conflict.get('name') if matched_conflict else f'任務#{task_id}'
 
         risk_item = risk_item_map.get(task_id) or {}
@@ -894,14 +959,13 @@ def build_weekly_report_for_timeline(timeline_id, start_date_raw=None, end_date_
         f"主要推進動能來自 {top_owner_text}。"
         f"目前風險項目 {len(risk_items)} 項，建議優先處理到期任務並降低阻塞。"
     )
-    try:
-        provider = os.getenv('LLM_PROVIDER', 'google-generativeai')
-        llm = get_default_llm(provider=provider)
-        generated = generate_weekly_report_summary(llm=llm, status_text=status_text)
-        if generated:
-            ai_summary = generated
-    except Exception:
-        pass
+    ai_summary, ai_summary_source = _safe_generate_weekly_report_ai_summary(
+        timeline_id=timeline.id,
+        start_date=start_date,
+        end_date=end_date,
+        status_text=status_text,
+        fallback=ai_summary,
+    )
 
     return {
         'message': '週報生成成功',
@@ -923,6 +987,7 @@ def build_weekly_report_for_timeline(timeline_id, start_date_raw=None, end_date_
         'recent_comments': recent_comments_payload,
         'next_actions': next_actions,
         'ai_summary': ai_summary,
+        'ai_summary_source': ai_summary_source,
         'analysis': {
             'weekly_goal_total': weekly_goal_total,
             'weekly_goal_completed': weekly_goal_completed,
@@ -933,6 +998,7 @@ def build_weekly_report_for_timeline(timeline_id, start_date_raw=None, end_date_
             'top_owner': top_owner_name if owner_counter else None,
             'top_tags': top_tags,
             'blocking_comment_count': blocking_comment_count,
+            'ai_summary_source': ai_summary_source,
         },
     }
 
@@ -1387,6 +1453,7 @@ def batch_create_tasks_for_timeline(timeline_id, user_id, task_payloads):
                 name_to_task_ids[task_name].append(task.task_id)
 
         ignored_dependency_ref_count = 0
+        ignored_dependency_id_count = 0
         for record in pending_dependency_records:
             task = record['task']
             dependency_ids = list(record['depends_on_task_ids'])
@@ -1405,8 +1472,10 @@ def batch_create_tasks_for_timeline(timeline_id, user_id, task_payloads):
                 if dependency_id in seen_dependency_ids:
                     continue
                 if dependency_id == task.task_id:
+                    ignored_dependency_id_count += 1
                     continue
                 if dependency_id not in valid_dependency_ids:
+                    ignored_dependency_id_count += 1
                     continue
                 seen_dependency_ids.add(dependency_id)
                 normalized_dependency_ids.append(dependency_id)
@@ -1420,6 +1489,8 @@ def batch_create_tasks_for_timeline(timeline_id, user_id, task_payloads):
         )
         if ignored_dependency_ref_count > 0:
             message += f'，忽略 {ignored_dependency_ref_count} 個無法解析的前置依賴'
+        if ignored_dependency_id_count > 0:
+            message += f'，忽略 {ignored_dependency_id_count} 個無效的前置依賴 ID'
 
         return {
             'message': message,
@@ -1427,6 +1498,7 @@ def batch_create_tasks_for_timeline(timeline_id, user_id, task_payloads):
             'deleted': len(tasks_to_delete),
             'created': len(created_task_names),
             'ignored_dependency_refs': ignored_dependency_ref_count,
+            'ignored_dependency_ids': ignored_dependency_id_count,
         }
     except TimelineOperationError:
         db.session.rollback()

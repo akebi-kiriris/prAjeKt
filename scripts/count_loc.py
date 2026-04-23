@@ -3,7 +3,14 @@ import os
 from collections import defaultdict
 
 EXTS = {'.py', '.ts', '.js', '.vue', '.html', '.css', '.scss', '.jsx', '.tsx'}
-EXCLUDE_DIRS = {'.git', 'node_modules', 'frontend/dist', 'backend/venv', 'venv', '__pycache__', 'coverage', 'uploads', 'Image', 'frontend/coverage', 'dist'}
+EXCLUDE_DIRS = {
+    '.git', 'node_modules', 'frontend/dist', 'backend/venv', 'venv', 
+    '__pycache__', 'coverage', 'uploads', 'Image', 'frontend/coverage', 
+    'dist', 
+    'migrations',  # 排除自動生成的資料庫遷移檔
+    'tests',       # (選配) 如果你不想把測試代碼算進核心邏輯
+    'assets'       # (選配) 排除純靜態資源
+}
 
 stats = defaultdict(lambda: {'files':0,'lines':0})
 

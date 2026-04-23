@@ -109,6 +109,7 @@ from services.trash_service import (
 from services.timeline_service import (
     TimelineAIGenerationError,
     TimelineOperationError,
+    batch_create_tasks_for_timeline,
     build_timeline_risk_analysis,
     build_weekly_report_for_timeline,
     check_timeline_task_conflicts,
@@ -1406,6 +1407,116 @@ def test_generate_timeline_tasks_with_ai_auto_fallback_dependency_chain(app, mon
     assert generated_tasks[0]["depends_on_task_refs"] == []
     assert generated_tasks[1]["depends_on_task_refs"] == ["需求釐清"]
     assert generated_tasks[2]["depends_on_task_refs"] == ["API 開發"]
+
+
+def test_batch_create_tasks_for_timeline_partial_selection_dependency_fallback(app):
+    owner = _create_user("timeline-service-batch-partial@example.com", "timeline_service_batch_partial")
+
+    timeline = Timeline(user_id=owner.id, name="Service batch partial timeline")
+    db.session.add(timeline)
+    db.session.commit()
+
+    payload = batch_create_tasks_for_timeline(
+        timeline_id=timeline.id,
+        user_id=owner.id,
+        task_payloads=[
+            {
+                "isExisting": False,
+                "name": "任務1",
+                "priority": 2,
+                "status": "pending",
+                "estimated_days": 1,
+                "task_remark": "chain 1",
+                "depends_on_task_refs": [],
+            },
+            {
+                "isExisting": False,
+                "name": "任務2",
+                "priority": 2,
+                "status": "pending",
+                "estimated_days": 1,
+                "task_remark": "chain 2",
+                "depends_on_task_refs": ["任務1"],
+            },
+            {
+                "isExisting": False,
+                "name": "任務4",
+                "priority": 2,
+                "status": "pending",
+                "estimated_days": 1,
+                "task_remark": "chain 4",
+                "depends_on_task_refs": ["任務3"],
+            },
+            {
+                "isExisting": False,
+                "name": "任務5",
+                "priority": 2,
+                "status": "pending",
+                "estimated_days": 1,
+                "task_remark": "chain 5",
+                "depends_on_task_refs": ["任務4"],
+            },
+        ],
+    )
+
+    assert payload["created"] == 4
+    assert payload["ignored_dependency_refs"] == 1
+    assert payload["ignored_dependency_ids"] == 0
+
+    task_1 = Task.query.filter_by(timeline_id=timeline.id, name="任務1").first()
+    task_2 = Task.query.filter_by(timeline_id=timeline.id, name="任務2").first()
+    task_4 = Task.query.filter_by(timeline_id=timeline.id, name="任務4").first()
+    task_5 = Task.query.filter_by(timeline_id=timeline.id, name="任務5").first()
+
+    assert task_1 is not None
+    assert task_2 is not None
+    assert task_4 is not None
+    assert task_5 is not None
+
+    assert task_1.depends_on_task_ids == []
+    assert task_2.depends_on_task_ids == [task_1.task_id]
+    assert task_4.depends_on_task_ids == []
+    assert task_5.depends_on_task_ids == [task_4.task_id]
+
+
+def test_batch_create_tasks_for_timeline_ignores_unresolvable_dependency_ids(app):
+    owner = _create_user("timeline-service-batch-ids@example.com", "timeline_service_batch_ids")
+
+    timeline = Timeline(user_id=owner.id, name="Service batch ids timeline")
+    db.session.add(timeline)
+    db.session.flush()
+
+    keep_task = Task(user_id=owner.id, timeline_id=timeline.id, name="keep task")
+    db.session.add(keep_task)
+    db.session.commit()
+
+    payload = batch_create_tasks_for_timeline(
+        timeline_id=timeline.id,
+        user_id=owner.id,
+        task_payloads=[
+            {
+                "task_id": keep_task.task_id,
+                "isExisting": True,
+                "name": "keep task",
+            },
+            {
+                "isExisting": False,
+                "name": "new task with mixed deps",
+                "priority": 1,
+                "status": "pending",
+                "estimated_days": 2,
+                "task_remark": "mixed dep ids",
+                "depends_on_task_ids": [keep_task.task_id, 999999],
+            },
+        ],
+    )
+
+    created = Task.query.filter_by(timeline_id=timeline.id, name="new task with mixed deps").first()
+
+    assert created is not None
+    assert created.depends_on_task_ids == [keep_task.task_id]
+    assert payload["ignored_dependency_refs"] == 0
+    assert payload["ignored_dependency_ids"] == 1
 
 
 def test_build_weekly_report_for_timeline_includes_summary_risks_and_comments(app):

@@ -141,6 +141,15 @@ export interface TimelineBatchTaskPayload {
   depends_on_task_refs?: string[];
 }
 
+export interface TimelineBatchCreateTasksResponse {
+  message: string;
+  kept: number;
+  deleted: number;
+  created: number;
+  ignored_dependency_refs?: number;
+  ignored_dependency_ids?: number;
+}
+
 export type TaskUpdatePayload = Partial<Pick<
   Task,
   | 'name'
