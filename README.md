@@ -2,7 +2,7 @@
 
 基於 Vue 3 + Flask 的專案管理與協作平台，整合 Google Gemini AI 實現智能任務生成。
 
-> **開發狀態**：Phase 1~6.6+ 已完成 ✅；Phase 7.1（專案週報 + 排程衝突檢查 + 指派隱私遮罩）已完成 ✅；Phase 7.2（進度風險分析）MVP 核心已上線 🟡（Critical Path、依賴管理、風險視圖/依賴圖）。
+> **開發狀態**：Phase 1~6.6+ 已完成 ✅；Phase 7.1、7.2 已完成核心功能 ✅；Phase 7.3 後端核心已完成 🟡（知識文件索引 + RAG 規劃 API，前端整合中）。
 
 ## 功能模組
 
@@ -18,6 +18,8 @@
 - **數據分析儀表板**：整合於個人資料頁，Level 1 個人圖表（30 天完成趨勢、任務狀態分布、各專案任務量）+ Level 2 專案圖表（成員貢獻、任務狀態，負責人限定）
 - **AI 任務生成**：自然語言輸入 → AI 工具路由 → MCP 執行，支援批次創建與自動化（MCP Copilot 整合）；生成任務可帶入依賴欄位，缺漏時會套用順序鏈 fallback
 - **AI 群組快照（RAG-B 核心）**：群組聊天可生成「行動導向 Digest」（一句重點 / 你現在要做什麼 / 阻塞風險 / 精簡決議）
+- **知識文件索引（Phase 7.3）**：支援 md/txt/pdf 上傳、切塊、向量化與 per-user 隔離檢索（含重建索引）
+- **AI 規劃建議（Phase 7.3）**：`/api/timelines/ai-suggest-plan` 會整合歷史任務與個人知識來源，回傳可追溯 `source_references`
 - **Copilot + MCP 整合**：自然語言 AI 路由至後端工具，無需 Inspector；支援任務知識摘要、群組快照、自動化創建
 - **垃圾桶回收機制**：已刪任務 / 專案暫存，支援還原或永久刪除；非建立者唯讀
 - **通知系統**：任務指派 / 專案邀請通知、鈴鐺 30 秒輪詢更新、主頁即將到期提醒區塊（3 天內截止或進度 ≥80%）
@@ -35,7 +37,7 @@
 | 即時通訊 | Flask-SocketIO 5.3.x + socket.io-client 4.8.1 |
 | 後端核心 | Flask 3.x + Flask-SQLAlchemy + Flask-Migrate + Flask-CORS |
 | AI 應用層 | LangChain + LangChain Core + LangGraph + Pydantic v2 |
-| AI 模型提供者 | Google Gemini（透過 langchain-google-genai；Provider 可切換 gemini / mock） |
+| AI 模型提供者 | LangChain Provider 架構（預設 Google Gemini；Embeddings 可切換 google/openai/huggingface/ollama） |
 | MCP | mcp Python SDK + stdio JSON-RPC Bridge（Copilot 路由到後端工具） |
 | 資料庫 | PostgreSQL（Supabase + 本地 Docker 主線）+ pg8000 驅動；SQLite 僅保留遷移/比對用途 |
 | 測試與品質 | Vitest 4.1.2、pytest/pytest-cov/pytest-flask、Stryker 9.6.0 |
@@ -171,7 +173,7 @@ npm run test:run
 
 ### 後端測試（pytest + coverage）
 
-- 結果：最新全量回歸 `162 passed`（coverage 基線 `80.59%`）
+- 結果：最新全量回歸 `187 passed`（coverage 基線持續維護中）
 - 覆蓋範圍：`blueprints`、`services`、`models`
 - 指令：
 
@@ -208,6 +210,7 @@ pytest --cov=blueprints --cov=services --cov=models --cov-report=term-missing --
 | GET | `/api/timelines/:id/risk-analysis` | 取得專案風險分析（critical path、風險清單、依賴圖資料） |
 | POST | `/api/timelines/:id/risk-analysis/notify` | 發送風險通知給專案成員（負責人限定） |
 | POST | `/api/timelines/:id/conflict-check` | 檢查排程衝突（同專案/跨專案/過載日，含建議改期） |
+| POST | `/api/timelines/ai-suggest-plan` | AI 規劃建議（整合歷史任務 + 個人知識來源） |
 | POST | `/api/timelines/:id/generate-tasks` | AI 生成任務建議 |
 | POST | `/api/timelines/:id/batch-create-tasks` | 批次建立任務 |
 | GET | `/api/timelines/:id/members` | 取得專案成員列表 |
@@ -272,6 +275,10 @@ pytest --cov=blueprints --cov=services --cov=models --cov-report=term-missing --
 | 方法 | 路徑 | 說明 |
 |------|------|------|
 | POST | `/api/tasks/:id/ai-comment-summary` | Task 留言 AI 摘要（決議/風險/下一步） |
+| POST | `/api/knowledge/documents` | 上傳知識文件並建立索引 |
+| GET | `/api/knowledge/documents` | 取得知識文件列表 |
+| DELETE | `/api/knowledge/documents/:id` | 刪除知識文件 |
+| POST | `/api/knowledge/documents/:id/reindex` | 重建指定知識文件索引 |
 | POST | `/api/groups/:id/ai-snapshot` | 群組知識快照生成（行動導向 Digest） |
 | GET | `/api/groups/:id/ai-snapshot/latest` | 取得最新群組快照 |
 | GET | `/api/groups/snapshot-jobs/:job_id` | 查詢快照生成進度 |
@@ -330,8 +337,8 @@ pytest --cov=blueprints --cov=services --cov=models --cov-report=term-missing --
 	- 邊界：不建立 staging、不新增雲端擴展部署
 - **Phase 7 精簡路線（進行中）**：
 	- 7.1：週報 + 衝突檢查 MVP（含過載日列表、多指派、隱私遮罩）✅
-	- 7.2：進度風險分析 MVP 核心（critical path + 依賴管理 + 依賴圖）🟡
-	- 7.3：知識增強規劃（來源可追溯）⏳
+	- 7.2：進度風險分析 MVP 核心（critical path + 依賴管理 + 依賴圖）✅
+	- 7.3：後端核心完成（知識索引 + RAG 規劃 API），前端整合中 🟡
 
 ## 環境需求
 

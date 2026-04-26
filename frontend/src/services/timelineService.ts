@@ -17,6 +17,9 @@ import type {
   CriticalPathAnalysisResponse,
   ConflictCheckPayload,
   ResourceConflictResponse,
+  AIPlanSuggestionRequest,
+  AIPlanSuggestionResponse,
+  KnowledgeDocumentsResponse,
 } from '../types';
 
 export const timelineService = {
@@ -46,4 +49,21 @@ export const timelineService = {
     api.get(`/timelines/${id}/risk-analysis`),
   conflictCheck:    (id: number, payload: ConflictCheckPayload): Promise<AxiosResponse<ResourceConflictResponse>> =>
     api.post(`/timelines/${id}/conflict-check`, payload),
+  suggestPlan:      (payload: AIPlanSuggestionRequest): Promise<AxiosResponse<AIPlanSuggestionResponse>> =>
+    api.post('/timelines/ai-suggest-plan', payload),
+  listKnowledgeDocuments: (
+    params?: { limit?: number; offset?: number }
+  ): Promise<AxiosResponse<KnowledgeDocumentsResponse>> =>
+    api.get('/knowledge/documents', { params }),
+  uploadKnowledgeDocument: (file: File): Promise<AxiosResponse<{ message: string }>> => {
+    const form = new FormData();
+    form.append('file', file);
+    return api.post('/knowledge/documents', form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+  },
+  deleteKnowledgeDocument: (documentId: number): Promise<AxiosResponse<{ message: string }>> =>
+    api.delete(`/knowledge/documents/${documentId}`),
+  reindexKnowledgeDocument: (documentId: number): Promise<AxiosResponse<{ message: string }>> =>
+    api.post(`/knowledge/documents/${documentId}/reindex`),
 };

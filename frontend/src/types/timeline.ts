@@ -254,3 +254,67 @@ export interface ResourceConflictResponse {
   ai_suggestion: string;
   include_ai_suggestion?: boolean;
 }
+
+export interface SourceReference {
+  source_type: 'timeline_task' | 'knowledge_chunk';
+  source_id: string;
+  title: string;
+  snippet: string;
+  score: number;
+}
+
+export interface AIPlanSuggestedTimeline {
+  name: string;
+  objective: string;
+}
+
+export interface AIPlanSuggestedTask {
+  name: string;
+  reason: string;
+  priority: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW' | string;
+  estimated_days: number;
+  depends_on: string[];
+}
+
+export interface AIPlanSuggestionResponse {
+  message: string;
+  suggested_timeline: AIPlanSuggestedTimeline;
+  suggested_tasks: AIPlanSuggestedTask[];
+  source_references: SourceReference[];
+  summary?: string;
+  meta?: {
+    fallback_used?: boolean;
+    generated_at?: string;
+    use_personal_knowledge?: boolean;
+    retrieved_history_count?: number;
+    retrieved_knowledge_count?: number;
+  };
+}
+
+export interface AIPlanSuggestionRequest {
+  request: string;
+  use_personal_knowledge?: boolean;
+  max_sources?: number;
+}
+
+export interface KnowledgeDocumentItem {
+  id: number;
+  filename: string;
+  mime_type?: string | null;
+  size_bytes?: number | null;
+  sha256?: string;
+  status: 'uploaded' | 'indexing' | 'ready' | 'failed' | string;
+  error_message?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+export interface KnowledgeDocumentsResponse {
+  message: string;
+  documents: KnowledgeDocumentItem[];
+  meta: {
+    limit: number;
+    offset: number;
+    count: number;
+  };
+}

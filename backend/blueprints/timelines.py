@@ -24,6 +24,10 @@ from services.timeline_service import (
     update_timeline_for_member,
     update_timeline_remark_for_member,
 )
+from services.rag_planning_service import (
+    RAGPlanningOperationError,
+    suggest_plan_with_rag,
+)
 
 timelines_bp = Blueprint('timelines', __name__)
 
@@ -145,6 +149,24 @@ def check_timeline_conflict(timeline_id):
         return jsonify(payload), 200
     except TimelineOperationError as err:
         return jsonify({'error': err.message}), err.status_code
+
+
+@timelines_bp.route('/ai-suggest-plan', methods=['POST'])
+@jwt_required()
+def ai_suggest_plan():
+    data, error = _get_json_dict_or_400()
+    if error:
+        return error
+
+    try:
+        payload = suggest_plan_with_rag(
+            user_id=int(get_jwt_identity()),
+            payload=data,
+        )
+        return jsonify(payload), 200
+    except RAGPlanningOperationError as err:
+        return jsonify({'error': err.message}), err.status_code
+
 
 @timelines_bp.route('/<int:timeline_id>/remark', methods=['PUT'])
 @jwt_required()

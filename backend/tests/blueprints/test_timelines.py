@@ -976,3 +976,52 @@ def test_get_member_stats_owner_only_and_payload(client):
     assert payload["status_distribution"]["completed"] == 1
     assert payload["status_distribution"]["in_progress"] == 1
     assert len(payload["members"]) == 2
+
+
+def test_post_ai_suggest_plan_returns_structured_payload(client, monkeypatch):
+    _create_user(
+        email="timeline-ai-plan-owner@example.com",
+        password="Password123!",
+        username="timeline_ai_plan_owner",
+    )
+    headers = _get_auth_headers(client, "timeline-ai-plan-owner@example.com", "Password123!")
+
+    monkeypatch.setattr(
+        "blueprints.timelines.suggest_plan_with_rag",
+        lambda user_id, payload: {
+            "message": "AI 規劃建議完成",
+            "suggested_timeline": {
+                "name": "新平台導入",
+                "objective": "完成知識庫與規劃助手整合",
+            },
+            "suggested_tasks": [
+                {
+                    "name": "建立資料表",
+                    "reason": "先完成底層資料結構",
+                    "priority": "HIGH",
+                    "estimated_days": 3,
+                    "depends_on": [],
+                }
+            ],
+            "source_references": [
+                {
+                    "source_type": "timeline_task",
+                    "source_id": "12",
+                    "title": "Task#12 建立 migration",
+                    "snippet": "先完成 migration 與 model",
+                    "score": 0.8,
+                }
+            ],
+            "meta": {"fallback_used": False},
+        },
+    )
+
+    response = client.post(
+        "/api/timelines/ai-suggest-plan",
+        headers=headers,
+        json={"request": "幫我規劃 7.3 後端實作"},
+    )
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["suggested_timeline"]["name"] == "新平台導入"
+    assert payload["source_references"][0]["source_type"] == "timeline_task"

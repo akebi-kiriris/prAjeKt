@@ -16,6 +16,7 @@ from models.notification import Notification
 from models.activity_log import ActivityLog
 from models.subtask import Subtask
 from models.group_ai_snapshot import GroupAISnapshot
+from models.knowledge import KnowledgeDocument, KnowledgeChunk
 
 __all__ = [
     'db',
@@ -31,5 +32,7 @@ __all__ = [
     'Notification',
     'ActivityLog',
     'Subtask',
-    'GroupAISnapshot'
+    'GroupAISnapshot',
+    'KnowledgeDocument',
+    'KnowledgeChunk',
 ]

@@ -33,6 +33,10 @@ from chains.timeline_insight_chain import (
     generate_weekly_report_summary,
     generate_conflict_suggestion,
 )
+from chains.rag_planning_chain import (
+    create_rag_plan_suggestion_chain,
+    generate_rag_plan_suggestion,
+)
 
 __all__ = [
     "PromptManager",
@@ -53,4 +57,6 @@ __all__ = [
     "create_conflict_suggestion_chain",
     "generate_weekly_report_summary",
     "generate_conflict_suggestion",
+    "create_rag_plan_suggestion_chain",
+    "generate_rag_plan_suggestion",
 ]

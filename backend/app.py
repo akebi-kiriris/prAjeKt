@@ -92,7 +92,8 @@ def create_app():
         from models import (User, Group, GroupMember, Message, MessageRead, 
                            Task, TaskFile, Timeline, Todo, 
                            TaskComment, TaskUser, TimelineUser,
-                           Notification, ActivityLog, GroupAISnapshot)
+                           Notification, ActivityLog, GroupAISnapshot,
+                           KnowledgeDocument, KnowledgeChunk)
     
     # 註冊 blueprints
     from blueprints.auth import auth_bp
@@ -102,6 +103,7 @@ def create_app():
     from blueprints.profile import profile_bp
     from blueprints.groups import groups_bp
     from blueprints.timelines import timelines_bp
+    from blueprints.knowledge import knowledge_bp
     from blueprints.trash import trash_bp
     from blueprints.notifications import notifications_bp
     from blueprints.copilot import copilot_bp
@@ -113,6 +115,7 @@ def create_app():
     app.register_blueprint(profile_bp, url_prefix='/api/profile')
     app.register_blueprint(groups_bp, url_prefix='/api/groups')
     app.register_blueprint(timelines_bp, url_prefix='/api/timelines')
+    app.register_blueprint(knowledge_bp, url_prefix='/api/knowledge')
     app.register_blueprint(trash_bp, url_prefix='/api/trash')
     app.register_blueprint(notifications_bp, url_prefix='/api/notifications')
     app.register_blueprint(copilot_bp, url_prefix='/api/copilot')

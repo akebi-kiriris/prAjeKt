@@ -66,6 +66,11 @@ describe('timelineService', () => {
       start_date: '2026-04-16',
       end_date: '2026-04-18',
     });
+    timelineService.suggestPlan({ request: '幫我規劃 API 上線' });
+    timelineService.listKnowledgeDocuments({ limit: 10, offset: 0 });
+    timelineService.uploadKnowledgeDocument(new File(['hello'], 'doc.md', { type: 'text/markdown' }));
+    timelineService.deleteKnowledgeDocument(9);
+    timelineService.reindexKnowledgeDocument(9);
 
     expect(mockedApi.put).toHaveBeenCalledWith('/timelines/5/remark', { remark: 'memo' });
     expect(mockedApi.post).toHaveBeenCalledWith('/timelines/search_user', { email: 'u@example.com' });
@@ -83,5 +88,14 @@ describe('timelineService', () => {
       start_date: '2026-04-16',
       end_date: '2026-04-18',
     });
+    expect(mockedApi.post).toHaveBeenCalledWith('/timelines/ai-suggest-plan', { request: '幫我規劃 API 上線' });
+    expect(mockedApi.get).toHaveBeenCalledWith('/knowledge/documents', { params: { limit: 10, offset: 0 } });
+    expect(mockedApi.post).toHaveBeenCalledWith(
+      '/knowledge/documents',
+      expect.any(FormData),
+      { headers: { 'Content-Type': 'multipart/form-data' } },
+    );
+    expect(mockedApi.delete).toHaveBeenCalledWith('/knowledge/documents/9');
+    expect(mockedApi.post).toHaveBeenCalledWith('/knowledge/documents/9/reindex');
   });
 });

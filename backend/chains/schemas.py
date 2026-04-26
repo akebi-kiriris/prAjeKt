@@ -193,3 +193,55 @@ class GroupSnapshot(BaseModel):
         if not v or len(v) == 0:
             raise ValueError("此字段不能為空列表")
         return [item.strip() for item in v if item.strip()]
+
+
+class PlanSuggestedTimeline(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    name: str = Field(..., min_length=1, max_length=120, description="建議專案名稱")
+    objective: str = Field(..., min_length=1, max_length=1000, description="建議專案目標")
+
+
+class PlanSuggestedTask(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    name: str = Field(..., min_length=1, max_length=120, description="任務名稱")
+    reason: str = Field(..., min_length=1, max_length=800, description="任務建議理由")
+    priority: str = Field(default="MEDIUM", description="任務優先級")
+    estimated_days: int = Field(default=3, ge=1, le=365, description="預估天數")
+    depends_on: List[str] = Field(default_factory=list, description="依賴任務名稱列表")
+
+    @field_validator("priority")
+    @classmethod
+    def validate_priority_value(cls, value: str) -> str:
+        normalized = (value or "").strip().upper()
+        if normalized not in {"CRITICAL", "HIGH", "MEDIUM", "LOW"}:
+            return "MEDIUM"
+        return normalized
+
+
+class PlanSourceReference(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    source_type: str = Field(..., description="來源類型: timeline_task|knowledge_chunk")
+    source_id: str = Field(..., min_length=1, max_length=120, description="來源 ID")
+    title: str = Field(..., min_length=1, max_length=180, description="來源標題")
+    snippet: str = Field(..., min_length=1, max_length=600, description="來源片段")
+    score: float = Field(default=0.0, ge=0.0, le=1.0, description="來源分數")
+
+    @field_validator("source_type")
+    @classmethod
+    def validate_source_type(cls, value: str) -> str:
+        normalized = (value or "").strip()
+        if normalized not in {"timeline_task", "knowledge_chunk"}:
+            raise ValueError("source_type 必須是 timeline_task 或 knowledge_chunk")
+        return normalized
+
+
+class PlanSuggestionOutput(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    suggested_timeline: PlanSuggestedTimeline
+    suggested_tasks: List[PlanSuggestedTask] = Field(default_factory=list)
+    source_references: List[PlanSourceReference] = Field(default_factory=list)
+    summary: str = Field(default="", max_length=1200, description="規劃摘要")
