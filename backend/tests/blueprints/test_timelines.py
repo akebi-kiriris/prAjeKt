@@ -338,6 +338,8 @@ def test_search_user_by_email_flow(client):
     )
 
     headers = _get_auth_headers(client, "timeline-search@example.com", "Password123!")
+    timeline_id = _create_timeline(client, headers, name="Search timeline")
+    outsider_headers = _get_auth_headers(client, "timeline-search-target@example.com", "Password123!")
 
     missing_email = client.post(
         "/api/timelines/search_user",
@@ -346,20 +348,37 @@ def test_search_user_by_email_flow(client):
     )
     assert missing_email.status_code == 400
 
+    missing_timeline = client.post(
+        "/api/timelines/search_user",
+        headers=headers,
+        json={"email": "timeline-search-target@example.com"},
+    )
+    assert missing_timeline.status_code == 400
+
     not_found = client.post(
         "/api/timelines/search_user",
         headers=headers,
-        json={"email": "noone@example.com"},
+        json={"timeline_id": timeline_id, "email": "noone@example.com"},
     )
     assert not_found.status_code == 404
 
     found = client.post(
         "/api/timelines/search_user",
         headers=headers,
-        json={"email": "timeline-search-target@example.com"},
+        json={"timeline_id": timeline_id, "email": "timeline-search-target@example.com"},
     )
     assert found.status_code == 200
-    assert found.get_json()["email"] == "timeline-search-target@example.com"
+    assert found.get_json() == {
+        "id": User.query.filter_by(email="timeline-search-target@example.com").first().id,
+        "name": "Timeline Blueprint User",
+    }
+
+    forbidden = client.post(
+        "/api/timelines/search_user",
+        headers=outsider_headers,
+        json={"timeline_id": timeline_id, "email": "timeline-search-target@example.com"},
+    )
+    assert forbidden.status_code == 403
 
 
 def test_timeline_members_add_get_remove_and_notification(client):

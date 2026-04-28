@@ -192,11 +192,14 @@ def search_user_by_email():
         return error
 
     try:
-        user = search_timeline_user_by_email(data.get('email'))
+        user = search_timeline_user_by_email(
+            data.get('timeline_id'),
+            int(get_jwt_identity()),
+            data.get('email'),
+        )
         return jsonify({
             'id': user.id,
             'name': user.name,
-            'email': user.email,
         }), 200
     except TimelineOperationError as err:
         return jsonify({'error': err.message}), err.status_code

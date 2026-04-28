@@ -12,7 +12,6 @@ export interface SearchUserResult {
   id: number;
   name: string;
   username?: string | null;
-  email: string;
 }
 
 export interface AiGeneratedTask {

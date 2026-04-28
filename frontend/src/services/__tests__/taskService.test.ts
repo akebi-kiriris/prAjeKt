@@ -57,7 +57,7 @@ describe('taskService', () => {
     taskService.addMember(3, 10);
     taskService.updateMemberRole(3, 10, 1);
     taskService.removeMember(3, 10);
-    taskService.searchUser('u@example.com');
+    taskService.searchUser(3, 'u@example.com');
 
     taskService.getComments(3);
     taskService.addComment(3, 'msg');
@@ -76,7 +76,7 @@ describe('taskService', () => {
     expect(mockedApi.post).toHaveBeenCalledWith('/tasks/3/members', { user_id: 10 });
     expect(mockedApi.patch).toHaveBeenCalledWith('/tasks/3/members/10', { role: 1 });
     expect(mockedApi.delete).toHaveBeenCalledWith('/tasks/3/members/10');
-    expect(mockedApi.post).toHaveBeenCalledWith('/timelines/search_user', { email: 'u@example.com' });
+    expect(mockedApi.post).toHaveBeenCalledWith('/timelines/search_user', { timeline_id: 3, email: 'u@example.com' });
 
     expect(mockedApi.get).toHaveBeenCalledWith('/tasks/3/comments');
     expect(mockedApi.post).toHaveBeenCalledWith('/tasks/3/comments', { task_message: 'msg' });

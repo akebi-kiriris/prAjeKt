@@ -2,7 +2,7 @@
 
 基於 Vue 3 + Flask 的專案管理與協作平台，整合 Google Gemini AI 實現智能任務生成。
 
-> **開發狀態**：Phase 1~6.6+ 已完成 ✅；Phase 7.1、7.2 已完成核心功能 ✅；Phase 7.3 後端核心已完成 🟡（知識文件索引 + RAG 規劃 API，前端整合中）。
+> **開發狀態**：Phase 1~6.6+ 已完成 ✅；Phase 7.1、7.2 已完成核心功能 ✅；Phase 7.3 後端核心已完成 🟡（知識文件索引 + RAG 規劃 API，安全收斂與前端契約對齊完成，知識 UI 持續整合中）。
 
 ## 功能模組
 
@@ -13,7 +13,7 @@
 - **進度風險分析（Phase 7.2）**：專案 Critical Path 分析、風險分級（high/medium/low）、資料品質警示（循環依賴/缺漏排程）
 - **任務依賴管理（Phase 7.2）**：支援 `depends_on_task_ids` 編輯、任務詳情維護前置依賴、風險面板可視化依賴圖（SVG 自動佈局 + 關鍵路徑標記）
 - **待辦事項**：個人 Todo 列表，完成狀態管理
-- **群組協作**：群組建立 / 邀請碼加入 / 即時聊天（Socket.IO，含 REST fallback）
+- **群組協作**：群組建立 / 邀請碼加入 / 即時聊天（Socket.IO，含 REST fallback；群組成員清單預設不含 email 且需成員驗證）
 - **個人資料**：個人資訊編輯、密碼變更、使用統計
 - **數據分析儀表板**：整合於個人資料頁，Level 1 個人圖表（30 天完成趨勢、任務狀態分布、各專案任務量）+ Level 2 專案圖表（成員貢獻、任務狀態，負責人限定）
 - **AI 任務生成**：自然語言輸入 → AI 工具路由 → MCP 執行，支援批次創建與自動化（MCP Copilot 整合）；生成任務可帶入依賴欄位，缺漏時會套用順序鏈 fallback
@@ -215,6 +215,7 @@ pytest --cov=blueprints --cov=services --cov=models --cov-report=term-missing --
 | POST | `/api/timelines/:id/batch-create-tasks` | 批次建立任務 |
 | GET | `/api/timelines/:id/members` | 取得專案成員列表 |
 | POST | `/api/timelines/:id/members` | 加入成員（同時發送邀請通知）|
+| POST | `/api/timelines/search_user` | 專案內使用者搜尋（需 `timeline_id`；僅同專案 owner/member 可查） |
 | DELETE | `/api/timelines/:id/members/:uid` | 移除成員 |
 | GET | `/api/timelines/upcoming` | 即將到期 / 進度落後的專案（3 天內 or ≥80%）|
 | GET | `/api/timelines/:id/member-stats` | 成員任務貢獻統計（負責人限定）|
@@ -293,7 +294,7 @@ pytest --cov=blueprints --cov=services --cov=models --cov-report=term-missing --
 | GET/POST | `/api/groups` | 群組清單與建立 |
 | POST | `/api/groups/join` | 使用邀請碼加入群組 |
 | POST | `/api/groups/:id/leave` | 離開群組 |
-| GET | `/api/groups/:id/members` | 群組成員列表 |
+| GET | `/api/groups/:id/members` | 群組成員列表（成員限定；預設不含 email） |
 | GET/POST | `/api/groups/:id/messages` | 群組訊息 |
 
 ### WebSocket 事件（群組聊天室）

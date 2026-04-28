@@ -288,9 +288,14 @@ def test_send_group_message_validation_and_members_api(client):
 
     members_response = client.get(f"/api/groups/{group_id}/members", headers=owner_headers)
     assert members_response.status_code == 200
-    member_ids = {item["user_id"] for item in members_response.get_json()}
+    members_payload = members_response.get_json()
+    member_ids = {item["user_id"] for item in members_payload}
     assert owner.id in member_ids
     assert member.id in member_ids
+    assert all("email" not in item for item in members_payload)
+
+    outsider_members_response = client.get(f"/api/groups/{group_id}/members", headers=outsider_headers)
+    assert outsider_members_response.status_code == 403
 
     empty_message = client.post(
         f"/api/groups/{group_id}/messages",

@@ -534,6 +534,10 @@ def test_group_service_operations_and_errors(app):
     member_ids = {item["user_id"] for item in members}
     assert owner.id in member_ids
     assert member.id in member_ids
+    assert all("email" not in item for item in members)
+
+    members_with_email = list_group_members_payload(group_id, include_email=True)
+    assert all("email" in item for item in members_with_email)
 
     message_id = send_group_message_for_member(group_id, owner.id, "hello service group")
     assert isinstance(message_id, int)

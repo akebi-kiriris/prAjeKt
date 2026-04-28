@@ -54,7 +54,7 @@ describe('timelineService', () => {
 
   it('should map utility endpoints correctly', () => {
     timelineService.updateRemark(5, 'memo');
-    timelineService.searchUser('u@example.com');
+    timelineService.searchUser(5, 'u@example.com');
     timelineService.generateTasks(5);
     timelineService.generateTasks(5, { description: '先做 API、再做前端' });
     timelineService.upcoming();
@@ -73,7 +73,7 @@ describe('timelineService', () => {
     timelineService.reindexKnowledgeDocument(9);
 
     expect(mockedApi.put).toHaveBeenCalledWith('/timelines/5/remark', { remark: 'memo' });
-    expect(mockedApi.post).toHaveBeenCalledWith('/timelines/search_user', { email: 'u@example.com' });
+    expect(mockedApi.post).toHaveBeenCalledWith('/timelines/search_user', { timeline_id: 5, email: 'u@example.com' });
     expect(mockedApi.post).toHaveBeenCalledWith('/timelines/5/generate-tasks', {});
     expect(mockedApi.post).toHaveBeenCalledWith('/timelines/5/generate-tasks', { description: '先做 API、再做前端' });
     expect(mockedApi.get).toHaveBeenCalledWith('/timelines/upcoming');

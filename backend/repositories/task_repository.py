@@ -44,6 +44,12 @@ def list_task_members(task_id):
     return TaskUser.query.filter_by(task_id=task_id).all()
 
 
+def list_task_members_by_task_ids(task_ids):
+    if not task_ids:
+        return []
+    return TaskUser.query.filter(TaskUser.task_id.in_(task_ids)).all()
+
+
 def remove_task_member(task_id, user_id):
     return TaskUser.query.filter_by(task_id=task_id, user_id=user_id).delete()
 
@@ -105,6 +111,17 @@ def list_subtasks(task_id):
     return Subtask.query.filter_by(task_id=task_id).order_by(Subtask.sort_order).all()
 
 
+def list_subtasks_by_task_ids(task_ids):
+    if not task_ids:
+        return []
+    return (
+        Subtask.query
+        .filter(Subtask.task_id.in_(task_ids))
+        .order_by(Subtask.task_id.asc(), Subtask.sort_order.asc())
+        .all()
+    )
+
+
 def get_subtask(task_id, subtask_id):
     return Subtask.query.filter_by(id=subtask_id, task_id=task_id).first()
 
@@ -123,6 +140,12 @@ def get_task_file(task_id, file_id):
 
 def get_task_file_by_filename(filename):
     return TaskFile.query.filter_by(filename=filename).first()
+
+
+def get_users_by_ids(user_ids):
+    if not user_ids:
+        return []
+    return User.query.filter(User.id.in_(list(user_ids))).all()
 
 
 def get_user_by_id(user_id):

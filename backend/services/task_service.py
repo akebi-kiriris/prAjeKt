@@ -1,8 +1,10 @@
+from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 import json
 import os
 import re
 import time
+import uuid
 
 from models import db
 from models.notification import Notification
@@ -26,6 +28,7 @@ from repositories.task_repository import (
     get_task_file_by_filename,
     get_task_member,
     get_user_by_id,
+    get_users_by_ids,
     get_owned_active_tasks,
     get_timeline_member,
     get_timeline_ids_for_user,
@@ -33,8 +36,10 @@ from repositories.task_repository import (
     get_upcoming_candidate_tasks_for_user,
     list_active_task_comments,
     list_subtasks,
+    list_subtasks_by_task_ids,
     list_task_files,
     list_task_members,
+    list_task_members_by_task_ids,
     list_timeline_members,
     remove_task_member,
 )
@@ -238,16 +243,22 @@ def task_member_to_dict(task_member, user, include_contact=False):
     return payload
 
 
-def build_task_member_list(task_id, viewer_user_id=None, include_contact=False):
+def build_task_member_list(task_id, viewer_user_id=None, include_contact=False, users_map=None):
     members = list_task_members(task_id)
     result = []
     viewer_role = None
+
+    if users_map is None:
+        users_map = {
+            user.id: user
+            for user in get_users_by_ids([member.user_id for member in members])
+        }
 
     for member in members:
         if viewer_user_id is not None and member.user_id == viewer_user_id:
             viewer_role = member.role
 
-        user = get_user_by_id(member.user_id)
+        user = users_map.get(member.user_id)
         if user:
             result.append(task_member_to_dict(member, user, include_contact=include_contact))
 
@@ -309,17 +320,39 @@ def list_tasks_for_user(user_id):
     all_tasks = {task.task_id: task for task in own_tasks + assigned_tasks}
     tasks = sorted(all_tasks.values(), key=lambda task: (task.completed, task.end_date or datetime.max))
 
+    task_ids = [task.task_id for task in tasks]
+    members_by_task = defaultdict(list)
+    member_rows = list_task_members_by_task_ids(task_ids)
+    user_ids = set()
+    for member in member_rows:
+        members_by_task[member.task_id].append(member)
+        user_ids.add(member.user_id)
+
+    users_map = {user.id: user for user in get_users_by_ids(user_ids)}
+
+    subtasks_by_task = defaultdict(list)
+    for subtask in list_subtasks_by_task_ids(task_ids):
+        subtasks_by_task[subtask.task_id].append(subtask)
+
     result = []
     for task in tasks:
-        member_list, current_user_role = build_task_member_list(task.task_id, viewer_user_id=user_id)
+        member_list = []
+        current_user_role = None
+
+        for member in members_by_task.get(task.task_id, []):
+            if current_user_role is None and member.user_id == user_id:
+                current_user_role = member.role
+
+            user = users_map.get(member.user_id)
+            if user:
+                member_list.append(task_member_to_dict(member, user))
 
         if current_user_role is None and task.timeline_id:
             current_user_role = get_timeline_membership_role(task.timeline_id, user_id)
 
         is_owner = (current_user_role == 0) or (task.user_id == user_id)
 
-        subtasks = list_subtasks(task.task_id)
-        subtask_list = [subtask.to_dict() for subtask in subtasks]
+        subtask_list = [subtask.to_dict() for subtask in subtasks_by_task.get(task.task_id, [])]
 
         result.append(task_list_item_to_dict(task, member_list, subtask_list, is_owner))
 
@@ -930,7 +963,8 @@ def upload_task_file_for_member(task_id, user_id, file_storage):
 
     unique_filename = f"{int(time.time())}_{safe_filename}"
     file_path = os.path.join(upload_folder, unique_filename)
-    file_storage.save(file_path)
+    temp_file_path = f"{file_path}.tmp-{uuid.uuid4().hex}"
+    file_storage.save(temp_file_path)
 
     task_file = TaskFile(
         task_id=task_id,
@@ -944,6 +978,7 @@ def upload_task_file_for_member(task_id, user_id, file_storage):
     try:
         db.session.add(task_file)
         db.session.commit()
+        os.replace(temp_file_path, file_path)
         return {
             'id': task_file.id,
             'message': '檔案上傳成功',
@@ -954,6 +989,21 @@ def upload_task_file_for_member(task_id, user_id, file_storage):
         }
     except Exception as exc:
         db.session.rollback()
+        if os.path.exists(temp_file_path):
+            try:
+                os.remove(temp_file_path)
+            except OSError:
+                pass
+        if os.path.exists(file_path):
+            try:
+                os.remove(file_path)
+            except OSError:
+                pass
+        try:
+            db.session.delete(task_file)
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
         raise TaskOperationError('檔案上傳失敗，請稍後再試', 500) from exc
 
 
@@ -969,14 +1019,19 @@ def delete_task_file_for_user(task_id, file_id, user_id):
     if task_file.uploaded_by != user_id and role != 0:
         raise TaskOperationError('只有上傳者或負責人可刪除檔案', 403)
 
+    file_path = task_file.file_path
     try:
-        if task_file.file_path and os.path.exists(task_file.file_path):
-            os.remove(task_file.file_path)
         db.session.delete(task_file)
         db.session.commit()
     except Exception as exc:
         db.session.rollback()
         raise TaskOperationError('檔案刪除失敗，請稍後再試', 500) from exc
+
+    if file_path and os.path.exists(file_path):
+        try:
+            os.remove(file_path)
+        except OSError:
+            pass
 
 
 def resolve_task_file_download_for_user(filename, user_id):

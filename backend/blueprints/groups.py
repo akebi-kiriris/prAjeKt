@@ -109,7 +109,14 @@ def leave_group(group_id):
 @jwt_required()
 def get_group_members(group_id):
     """取得群組成員清單"""
-    return jsonify(list_group_members_payload(group_id)), 200
+    user_id = int(get_jwt_identity())
+
+    try:
+        if not is_group_member(group_id, user_id):
+            raise GroupOperationError('您不是該群組成員', 403)
+        return jsonify(list_group_members_payload(group_id)), 200
+    except GroupOperationError as err:
+        return jsonify({'error': err.message}), err.status_code
 
 @groups_bp.route('/<int:group_id>/messages', methods=['GET'])
 @jwt_required()

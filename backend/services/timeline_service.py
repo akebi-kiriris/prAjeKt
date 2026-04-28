@@ -1299,9 +1299,17 @@ def update_timeline_remark_for_member(timeline_id, remark):
         raise TimelineOperationError('備註更新失敗，請稍後再試', 500) from exc
 
 
-def search_timeline_user_by_email(email):
+def search_timeline_user_by_email(timeline_id, requester_user_id, email):
+    if timeline_id in (None, ''):
+        raise TimelineOperationError('請提供 timeline_id', 400)
+
     if not email:
         raise TimelineOperationError('請提供 Email', 400)
+
+    timeline = get_active_timeline_or_404(timeline_id)
+    member = get_timeline_member(timeline_id, requester_user_id)
+    if timeline.user_id != requester_user_id and member is None:
+        raise TimelineOperationError('您不是該專案成員', 403)
 
     user = get_user_by_email(email)
     if not user:

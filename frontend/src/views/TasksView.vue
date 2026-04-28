@@ -269,7 +269,6 @@
                 </div>
                 <div>
                   <p class="text-sm font-semibold text-gray-800">{{ shareSearchResult.name }}</p>
-                  <p class="text-xs text-gray-400">{{ shareSearchResult.email }}</p>
                 </div>
               </div>
               <button
@@ -958,8 +957,12 @@ const searchShareUser = async () => {
   shareSearchResult.value = null;
   shareSearchError.value = '';
   if (!shareInputEmail.value.trim()) return;
+  if (!shareTask.value?.timeline_id) {
+    shareSearchError.value = '此任務未關聯專案，無法透過 Email 搜尋協作者';
+    return;
+  }
   try {
-    const res = await taskService.searchUser(shareInputEmail.value.trim());
+    const res = await taskService.searchUser(shareTask.value.timeline_id, shareInputEmail.value.trim());
     const found = res.data;
     const alreadyIn = taskMembers.value.some(m => m.user_id === found.id);
     if (alreadyIn) { shareSearchError.value = '此使用者已是成員'; return; }

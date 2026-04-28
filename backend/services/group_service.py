@@ -86,12 +86,14 @@ def group_to_dict(group):
     }
 
 
-def group_member_to_dict(member):
-    return {
+def group_member_to_dict(member, include_email=True):
+    payload = {
         'user_id': member.id,
         'name': member.name,
-        'email': member.email,
     }
+    if include_email:
+        payload['email'] = member.email
+    return payload
 
 
 def group_message_to_dict(message):
@@ -177,9 +179,9 @@ def leave_group_for_user(group_id, user_id):
         raise GroupOperationError('離開群組失敗，請稍後再試', 500) from exc
 
 
-def list_group_members_payload(group_id):
+def list_group_members_payload(group_id, include_email=False):
     members = list_group_members_query(group_id)
-    return [group_member_to_dict(member) for member in members]
+    return [group_member_to_dict(member, include_email=include_email) for member in members]
 
 
 def list_group_messages_for_member(group_id, user_id):

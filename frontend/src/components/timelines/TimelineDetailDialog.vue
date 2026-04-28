@@ -588,8 +588,7 @@
             <div v-if="searchResult" class="mt-2 p-4 bg-green-50 border border-green-200 rounded-xl">
               <div class="flex items-center justify-between">
                 <div>
-                  <p class="font-medium text-gray-800">{{ searchResult.username }}</p>
-                  <p class="text-sm text-gray-500">{{ searchResult.email }}</p>
+                  <p class="font-medium text-gray-800">{{ searchResult.name }}</p>
                 </div>
                 <button @click="confirmShare" class="px-4 py-2 bg-primary text-white text-sm font-medium rounded-xl hover:brightness-110 transition-all">邀請</button>
               </div>
@@ -2120,9 +2119,13 @@ watch(isSharePanelOpen, (val: boolean) => {
 
 const searchUser = async () => {
   if (!inputEmail.value.trim()) return;
+  if (!props.selectedTimeline) {
+    searchError.value = '請先選擇專案';
+    return;
+  }
   searchResult.value = null; searchError.value = '';
   try {
-    const res = await timelineService.searchUser(inputEmail.value);
+    const res = await timelineService.searchUser(props.selectedTimeline.id, inputEmail.value);
     searchResult.value = res.data;
   } catch (err: unknown) {
     searchError.value = getApiErrorMessage(err, '找不到用戶');
