@@ -340,6 +340,7 @@ pytest --cov=blueprints --cov=services --cov=models --cov-report=term-missing --
 	- 7.1：週報 + 衝突檢查 MVP（含過載日列表、多指派、隱私遮罩）✅
 	- 7.2：進度風險分析 MVP 核心（critical path + 依賴管理 + 依賴圖）✅
 	- 7.3：後端核心完成（知識索引 + RAG 規劃 API），前端整合中 🟡
+	- 7.3+：後端測試工程化收斂（models/task/timeline 大型測試檔拆分），全量後端回歸 `185 passed` ✅
 
 ## 環境需求
 

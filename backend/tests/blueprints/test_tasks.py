@@ -4,12 +4,8 @@ from io import BytesIO
 from werkzeug.security import generate_password_hash
 
 from models import db
-from models.subtask import Subtask
 from models.task import Task
-from models.task_comment import TaskComment
 from models.task_user import TaskUser
-from models.timeline import TaskFile, Timeline
-from models.timeline_user import TimelineUser
 from models.user import User
 
 
@@ -46,27 +42,12 @@ def _create_task(client, headers, **overrides) -> int:
     return response.get_json()["task_id"]
 
 
-def _create_timeline(owner_id: int, name: str = "Task Timeline") -> Timeline:
-    timeline = Timeline(
-        user_id=owner_id,
-        name=name,
-        start_date=None,
-        end_date=None,
-        remark="",
-    )
-    db.session.add(timeline)
-    db.session.flush()
-    db.session.add(TimelineUser(timeline_id=timeline.id, user_id=owner_id, role=0))
-    db.session.commit()
-    return timeline
-
-
 def test_get_tasks_requires_auth(client):
     response = client.get("/api/tasks")
     assert response.status_code == 401
 
 
-def test_create_task_success_and_owner_membership(client):
+def test_create_task_endpoint_returns_task_id_and_owner_membership(client):
     user = _create_user(
         email="task-create@example.com",
         password="Password123!",
@@ -87,45 +68,25 @@ def test_create_task_success_and_owner_membership(client):
 
     assert response.status_code == 201
     task_id = response.get_json()["task_id"]
+    assert db.session.get(Task, task_id) is not None
 
-    task = db.session.get(Task, task_id)
     owner_member = TaskUser.query.filter_by(task_id=task_id, user_id=user.id).first()
-
-    assert task is not None
     assert owner_member is not None
     assert owner_member.role == 0
 
 
-def test_create_task_rejects_unknown_field(client):
+def test_create_task_endpoint_maps_validation_errors(client):
     _create_user(
-        email="task-unknown-field@example.com",
+        email="task-validation-map@example.com",
         password="Password123!",
-        username="task_unknown_field_user",
+        username="task_validation_map_user",
     )
-    headers = _get_auth_headers(client, "task-unknown-field@example.com", "Password123!")
+    headers = _get_auth_headers(client, "task-validation-map@example.com", "Password123!")
 
-    response = client.post(
-        "/api/tasks",
-        headers=headers,
-        json={
-            "name": "Task with junk field",
-            "end_date": "2026-04-20T18:00:00",
-            "junk": True,
-        },
-    )
+    invalid_json = client.post("/api/tasks", headers=headers, json="invalid payload")
+    assert invalid_json.status_code == 400
 
-    assert response.status_code == 400
-
-
-def test_create_task_invalid_status_returns_400(client):
-    _create_user(
-        email="task-invalid-status@example.com",
-        password="Password123!",
-        username="task_invalid_status_user",
-    )
-    headers = _get_auth_headers(client, "task-invalid-status@example.com", "Password123!")
-
-    response = client.post(
+    service_error = client.post(
         "/api/tasks",
         headers=headers,
         json={
@@ -134,17 +95,18 @@ def test_create_task_invalid_status_returns_400(client):
             "status": "not_a_real_status",
         },
     )
+    assert service_error.status_code == 400
 
-    assert response.status_code == 400
-
-
-def test_create_task_priority_and_date_validations(client):
-    _create_user(
-        email="task-validate@example.com",
-        password="Password123!",
-        username="task_validate_user",
+    unknown_field = client.post(
+        "/api/tasks",
+        headers=headers,
+        json={
+            "name": "Task with junk field",
+            "end_date": "2026-04-20T18:00:00",
+            "junk": True,
+        },
     )
-    headers = _get_auth_headers(client, "task-validate@example.com", "Password123!")
+    assert unknown_field.status_code == 400
 
     invalid_priority_type = client.post(
         "/api/tasks",
@@ -190,96 +152,24 @@ def test_create_task_priority_and_date_validations(client):
     assert invalid_end_date.status_code == 400
 
 
-def test_get_tasks_returns_created_item(client):
+def test_get_tasks_endpoint_returns_created_item(client):
     _create_user(
         email="task-list@example.com",
         password="Password123!",
         username="task_list_user",
     )
     headers = _get_auth_headers(client, "task-list@example.com", "Password123!")
+    task_id = _create_task(client, headers, name="List me")
 
-    create_response = client.post(
-        "/api/tasks",
-        headers=headers,
-        json={
-            "name": "List me",
-            "end_date": "2026-04-21T12:00:00",
-        },
-    )
-    assert create_response.status_code == 201
-    task_id = create_response.get_json()["task_id"]
+    response = client.get("/api/tasks", headers=headers)
 
-    list_response = client.get("/api/tasks", headers=headers)
-    assert list_response.status_code == 200
-
-    payload = list_response.get_json()
+    assert response.status_code == 200
+    payload = response.get_json()
     assert isinstance(payload, list)
     assert any(item["task_id"] == task_id for item in payload)
 
 
-def test_get_tasks_includes_assigned_task_for_member(client):
-    owner = _create_user(
-        email="task-owner-list@example.com",
-        password="Password123!",
-        username="task_owner_list_user",
-    )
-    member = _create_user(
-        email="task-member-list@example.com",
-        password="Password123!",
-        username="task_member_list_user",
-    )
-    owner_headers = _get_auth_headers(client, "task-owner-list@example.com", "Password123!")
-    member_headers = _get_auth_headers(client, "task-member-list@example.com", "Password123!")
-
-    task_id = _create_task(client, owner_headers, name="Assigned task")
-    db.session.add(TaskUser(task_id=task_id, user_id=member.id, role=1))
-    db.session.commit()
-
-    response = client.get("/api/tasks", headers=member_headers)
-    assert response.status_code == 200
-    payload = response.get_json()
-    assigned = next(item for item in payload if item["task_id"] == task_id)
-    assert assigned["is_owner"] is False
-
-
-def test_update_task_success_and_validation(client):
-    _create_user(
-        email="task-update-success@example.com",
-        password="Password123!",
-        username="task_update_success_user",
-    )
-    headers = _get_auth_headers(client, "task-update-success@example.com", "Password123!")
-    task_id = _create_task(client, headers)
-
-    update_response = client.put(
-        f"/api/tasks/{task_id}",
-        headers=headers,
-        json={
-            "name": "Updated task name",
-            "priority": 3,
-            "status": "in_progress",
-            "estimated_hours": 8,
-            "start_date": "2026-04-01T10:00:00",
-        },
-    )
-    assert update_response.status_code == 200
-
-    invalid_name = client.put(
-        f"/api/tasks/{task_id}",
-        headers=headers,
-        json={"name": "   "},
-    )
-    assert invalid_name.status_code == 400
-
-    invalid_payload_type = client.put(
-        f"/api/tasks/{task_id}",
-        headers=headers,
-        json="invalid payload",
-    )
-    assert invalid_payload_type.status_code == 400
-
-
-def test_update_task_requires_member_role(client):
+def test_update_task_endpoint_maps_success_and_guards(client):
     _create_user(
         email="task-update-owner@example.com",
         password="Password123!",
@@ -295,74 +185,60 @@ def test_update_task_requires_member_role(client):
     outsider_headers = _get_auth_headers(client, "task-update-outsider@example.com", "Password123!")
     task_id = _create_task(client, owner_headers)
 
-    response = client.put(
+    success = client.put(
+        f"/api/tasks/{task_id}",
+        headers=owner_headers,
+        json={"name": "Updated task name", "status": "in_progress"},
+    )
+    assert success.status_code == 200
+
+    invalid_payload_type = client.put(
+        f"/api/tasks/{task_id}",
+        headers=owner_headers,
+        json="invalid payload",
+    )
+    assert invalid_payload_type.status_code == 400
+
+    invalid_name = client.put(
+        f"/api/tasks/{task_id}",
+        headers=owner_headers,
+        json={"name": "   "},
+    )
+    assert invalid_name.status_code == 400
+
+    invalid_status = client.put(
+        f"/api/tasks/{task_id}",
+        headers=owner_headers,
+        json={"status": "not_a_real_status"},
+    )
+    assert invalid_status.status_code == 400
+
+    forbidden = client.put(
         f"/api/tasks/{task_id}",
         headers=outsider_headers,
         json={"name": "should fail"},
     )
-    assert response.status_code == 403
+    assert forbidden.status_code == 403
 
 
-def test_toggle_task_updates_completed_and_status(client):
+def test_task_member_endpoints_map_service_results(client):
     _create_user(
-        email="task-toggle@example.com",
+        email="task-member-owner@example.com",
         password="Password123!",
-        username="task_toggle_user",
-    )
-    headers = _get_auth_headers(client, "task-toggle@example.com", "Password123!")
-    task_id = _create_task(client, headers)
-
-    response = client.patch(f"/api/tasks/{task_id}/toggle", headers=headers)
-    assert response.status_code == 200
-    assert response.get_json()["completed"] is True
-
-    task = db.session.get(Task, task_id)
-    assert task is not None
-    assert task.status == "completed"
-
-
-def test_add_task_member_requires_owner(client):
-    owner = _create_user(
-        email="task-owner-manage@example.com",
-        password="Password123!",
-        username="task_owner_manage_user",
-    )
-    outsider = _create_user(
-        email="task-outsider-manage@example.com",
-        password="Password123!",
-        username="task_outsider_manage_user",
+        username="task_member_owner_user",
     )
     target = _create_user(
-        email="task-target-manage@example.com",
+        email="task-member-target@example.com",
         password="Password123!",
-        username="task_target_manage_user",
+        username="task_member_target_user",
     )
-
-    owner_headers = _get_auth_headers(client, "task-owner-manage@example.com", "Password123!")
-    outsider_headers = _get_auth_headers(client, "task-outsider-manage@example.com", "Password123!")
-    task_id = _create_task(client, owner_headers)
-
-    response = client.post(
-        f"/api/tasks/{task_id}/members",
-        headers=outsider_headers,
-        json={"user_id": target.id, "role": 1},
-    )
-    assert response.status_code == 403
-    assert owner.id != outsider.id
-
-
-def test_add_task_member_validation_duplicate_and_success(client):
-    owner = _create_user(
-        email="task-owner-add-member@example.com",
+    _create_user(
+        email="task-member-outsider@example.com",
         password="Password123!",
-        username="task_owner_add_member_user",
+        username="task_member_outsider_user",
     )
-    target = _create_user(
-        email="task-target-add-member@example.com",
-        password="Password123!",
-        username="task_target_add_member_user",
-    )
-    headers = _get_auth_headers(client, "task-owner-add-member@example.com", "Password123!")
+    headers = _get_auth_headers(client, "task-member-owner@example.com", "Password123!")
+    outsider_headers = _get_auth_headers(client, "task-member-outsider@example.com", "Password123!")
     task_id = _create_task(client, headers)
 
     missing_user_id = client.post(
@@ -372,225 +248,212 @@ def test_add_task_member_validation_duplicate_and_success(client):
     )
     assert missing_user_id.status_code == 400
 
-    success = client.post(
+    add_member = client.post(
         f"/api/tasks/{task_id}/members",
         headers=headers,
         json={"user_id": target.id, "role": 1},
     )
-    assert success.status_code == 201
+    assert add_member.status_code == 201
 
-    duplicate = client.post(
+    duplicate_member = client.post(
         f"/api/tasks/{task_id}/members",
         headers=headers,
         json={"user_id": target.id, "role": 1},
     )
-    assert duplicate.status_code == 409
+    assert duplicate_member.status_code == 409
 
-    membership = TaskUser.query.filter_by(task_id=task_id, user_id=target.id).first()
-    assert membership is not None
-    assert membership.role == 1
-    assert owner.id != target.id
-
-
-def test_remove_task_member_owner_guard_and_success(client):
-    owner = _create_user(
-        email="task-owner-remove@example.com",
-        password="Password123!",
-        username="task_owner_remove_user",
+    forbidden_add = client.post(
+        f"/api/tasks/{task_id}/members",
+        headers=outsider_headers,
+        json={"user_id": target.id, "role": 1},
     )
-    member = _create_user(
-        email="task-member-remove@example.com",
-        password="Password123!",
-        username="task_member_remove_user",
-    )
-    headers = _get_auth_headers(client, "task-owner-remove@example.com", "Password123!")
-    task_id = _create_task(client, headers)
-    db.session.add(TaskUser(task_id=task_id, user_id=member.id, role=1))
-    db.session.commit()
+    assert forbidden_add.status_code == 403
 
-    cannot_remove_owner = client.delete(
-        f"/api/tasks/{task_id}/members/{owner.id}",
-        headers=headers,
-    )
-    assert cannot_remove_owner.status_code == 400
+    list_members = client.get(f"/api/tasks/{task_id}/members", headers=headers)
+    assert list_members.status_code == 200
+    assert any(item["user_id"] == target.id for item in list_members.get_json())
 
     remove_member = client.delete(
-        f"/api/tasks/{task_id}/members/{member.id}",
+        f"/api/tasks/{task_id}/members/{target.id}",
         headers=headers,
     )
     assert remove_member.status_code == 200
-    assert TaskUser.query.filter_by(task_id=task_id, user_id=member.id).first() is None
 
 
-def test_update_task_member_role_validation_and_promotion(client):
-    owner = _create_user(
-        email="task-owner-role@example.com",
+def test_task_member_role_endpoint_validations_and_permissions(client):
+    _create_user(
+        email="task-member-role-owner@example.com",
         password="Password123!",
-        username="task_owner_role_user",
+        username="task_member_role_owner_user",
     )
-    timeline_member = _create_user(
-        email="task-timeline-member-role@example.com",
+    member = _create_user(
+        email="task-member-role-member@example.com",
         password="Password123!",
-        username="task_timeline_member_role_user",
+        username="task_member_role_member_user",
     )
-    headers = _get_auth_headers(client, "task-owner-role@example.com", "Password123!")
+    _create_user(
+        email="task-member-role-outsider@example.com",
+        password="Password123!",
+        username="task_member_role_outsider_user",
+    )
+    owner_headers = _get_auth_headers(client, "task-member-role-owner@example.com", "Password123!")
+    outsider_headers = _get_auth_headers(client, "task-member-role-outsider@example.com", "Password123!")
+    task_id = _create_task(client, owner_headers)
 
-    timeline = _create_timeline(owner.id, "Role Timeline")
-    db.session.add(TimelineUser(timeline_id=timeline.id, user_id=timeline_member.id, role=1))
-    db.session.commit()
-
-    task_id = _create_task(client, headers, timeline_id=timeline.id)
+    add_member = client.post(
+        f"/api/tasks/{task_id}/members",
+        headers=owner_headers,
+        json={"user_id": member.id, "role": 1},
+    )
+    assert add_member.status_code == 201
 
     missing_role = client.patch(
-        f"/api/tasks/{task_id}/members/{timeline_member.id}",
-        headers=headers,
+        f"/api/tasks/{task_id}/members/{member.id}",
+        headers=owner_headers,
         json={},
     )
     assert missing_role.status_code == 400
 
-    invalid_role = client.patch(
-        f"/api/tasks/{task_id}/members/{timeline_member.id}",
-        headers=headers,
+    invalid_type = client.patch(
+        f"/api/tasks/{task_id}/members/{member.id}",
+        headers=owner_headers,
+        json={"role": "bad"},
+    )
+    assert invalid_type.status_code == 400
+
+    invalid_value = client.patch(
+        f"/api/tasks/{task_id}/members/{member.id}",
+        headers=owner_headers,
         json={"role": 9},
     )
-    assert invalid_role.status_code == 400
+    assert invalid_value.status_code == 400
+
+    forbidden = client.patch(
+        f"/api/tasks/{task_id}/members/{member.id}",
+        headers=outsider_headers,
+        json={"role": 0},
+    )
+    assert forbidden.status_code == 403
 
     promote = client.patch(
-        f"/api/tasks/{task_id}/members/{timeline_member.id}",
-        headers=headers,
+        f"/api/tasks/{task_id}/members/{member.id}",
+        headers=owner_headers,
         json={"role": 0},
     )
     assert promote.status_code == 200
 
-    promoted_member = TaskUser.query.filter_by(task_id=task_id, user_id=timeline_member.id).first()
-    owner_member = TaskUser.query.filter_by(task_id=task_id, user_id=owner.id).first()
 
-    assert promoted_member is not None
-    assert promoted_member.role == 0
-    assert owner_member is not None
-    assert owner_member.role == 1
-
-
-def test_task_comment_flow_and_permissions(client):
-    owner = _create_user(
+def test_task_comment_endpoints_map_crud_flow(client):
+    _create_user(
         email="task-comment-owner@example.com",
         password="Password123!",
         username="task_comment_owner_user",
     )
-    member = _create_user(
-        email="task-comment-member@example.com",
-        password="Password123!",
-        username="task_comment_member_user",
-    )
-    owner_headers = _get_auth_headers(client, "task-comment-owner@example.com", "Password123!")
-    member_headers = _get_auth_headers(client, "task-comment-member@example.com", "Password123!")
-
-    task_id = _create_task(client, owner_headers)
-    db.session.add(TaskUser(task_id=task_id, user_id=member.id, role=1))
-    db.session.commit()
-
-    add_empty = client.post(
-        f"/api/tasks/{task_id}/comments",
-        headers=owner_headers,
-        json={"message": ""},
-    )
-    assert add_empty.status_code == 400
+    headers = _get_auth_headers(client, "task-comment-owner@example.com", "Password123!")
+    task_id = _create_task(client, headers)
 
     add_response = client.post(
         f"/api/tasks/{task_id}/comments",
-        headers=owner_headers,
+        headers=headers,
         json={"message": "new comment"},
     )
     assert add_response.status_code == 201
     comment_id = add_response.get_json()["comment_id"]
 
-    get_response = client.get(f"/api/tasks/{task_id}/comments", headers=member_headers)
+    get_response = client.get(f"/api/tasks/{task_id}/comments", headers=headers)
     assert get_response.status_code == 200
     assert any(item["comment_id"] == comment_id for item in get_response.get_json())
 
+    delete_response = client.delete(
+        f"/api/tasks/{task_id}/comments/{comment_id}",
+        headers=headers,
+    )
+    assert delete_response.status_code == 200
+
+
+def test_task_comment_endpoints_reject_invalid_and_forbidden(client):
+    _create_user(
+        email="task-comment-owner2@example.com",
+        password="Password123!",
+        username="task_comment_owner_user2",
+    )
+    _create_user(
+        email="task-comment-outsider@example.com",
+        password="Password123!",
+        username="task_comment_outsider_user",
+    )
+    owner_headers = _get_auth_headers(client, "task-comment-owner2@example.com", "Password123!")
+    outsider_headers = _get_auth_headers(client, "task-comment-outsider@example.com", "Password123!")
+    task_id = _create_task(client, owner_headers)
+
+    empty_message = client.post(
+        f"/api/tasks/{task_id}/comments",
+        headers=owner_headers,
+        json={"message": ""},
+    )
+    assert empty_message.status_code == 400
+
+    forbidden_add = client.post(
+        f"/api/tasks/{task_id}/comments",
+        headers=outsider_headers,
+        json={"message": "should fail"},
+    )
+    assert forbidden_add.status_code == 403
+
+    add_response = client.post(
+        f"/api/tasks/{task_id}/comments",
+        headers=owner_headers,
+        json={"message": "comment"},
+    )
+    assert add_response.status_code == 201
+    comment_id = add_response.get_json()["comment_id"]
+
     forbidden_delete = client.delete(
         f"/api/tasks/{task_id}/comments/{comment_id}",
-        headers=member_headers,
+        headers=outsider_headers,
     )
     assert forbidden_delete.status_code == 403
 
-    own_delete = client.delete(
-        f"/api/tasks/{task_id}/comments/{comment_id}",
-        headers=owner_headers,
-    )
-    assert own_delete.status_code == 200
-    comment = db.session.get(TaskComment, comment_id)
-    assert comment is not None
-    assert comment.deleted_at is not None
-    assert owner.id != member.id
 
-
-def test_ai_comment_summary_returns_empty_payload_when_no_comments(client):
+def test_ai_comment_summary_endpoint_maps_service_payload_and_errors(client, monkeypatch):
     _create_user(
-        email="task-summary-empty@example.com",
+        email="task-summary-route@example.com",
         password="Password123!",
-        username="task_summary_empty_user",
+        username="task_summary_route_user",
     )
-    headers = _get_auth_headers(client, "task-summary-empty@example.com", "Password123!")
-    task_id = _create_task(client, headers, name="Summary empty")
+    headers = _get_auth_headers(client, "task-summary-route@example.com", "Password123!")
+    task_id = _create_task(client, headers, name="Summary route")
 
-    response = client.post(f"/api/tasks/{task_id}/ai-comment-summary", headers=headers, json={})
-    assert response.status_code == 200
-
-    payload = response.get_json()
-    assert payload["summary"]["decisions"] == []
-    assert payload["summary"]["risks"] == []
-    assert payload["summary"]["next_actions"] == []
-    assert payload["meta"]["comment_count"] == 0
-
-
-def test_ai_comment_summary_success(client, monkeypatch):
-    import services.task_service as task_service_module
-
-    _create_user(
-        email="task-summary-success@example.com",
-        password="Password123!",
-        username="task_summary_success_user",
-    )
-    headers = _get_auth_headers(client, "task-summary-success@example.com", "Password123!")
-    task_id = _create_task(client, headers, name="Summary success")
-
-    create_comment = client.post(
-        f"/api/tasks/{task_id}/comments",
-        headers=headers,
-        json={"message": "今天確認採用 JWT 方案"},
-    )
-    assert create_comment.status_code == 201
-
-    def _fake_summary(task, comment_items):
-        assert task.task_id == task_id
-        assert len(comment_items) == 1
+    def _fake_summary(_task_id):
         return {
-            "decisions": ["採用 JWT 驗證流程"],
-            "risks": ["refresh token 失效處理需再補測"],
-            "next_actions": ["補上 refresh 失效測試案例"],
-        }, {
-            "total_comments": 1,
-            "used_comments": 1,
-            "truncated": False,
-            "context_chars": 120,
-            "model": "qwen",
+            "task_id": task_id,
+            "summary": {
+                "decisions": ["adopt JWT"],
+                "risks": [],
+                "next_actions": [],
+            },
+            "meta": {"comment_count": 1, "model": "test-model"},
         }
 
-    monkeypatch.setattr(task_service_module, "generate_task_comment_summary", _fake_summary)
-
+    monkeypatch.setattr("blueprints.tasks.summarize_task_comments_for_member", _fake_summary)
     response = client.post(f"/api/tasks/{task_id}/ai-comment-summary", headers=headers, json={})
     assert response.status_code == 200
+    assert response.get_json()["meta"]["model"] == "test-model"
 
-    payload = response.get_json()
-    assert payload["summary"]["decisions"][0] == "採用 JWT 驗證流程"
-    assert payload["summary"]["risks"][0] == "refresh token 失效處理需再補測"
-    assert payload["summary"]["next_actions"][0] == "補上 refresh 失效測試案例"
-    assert payload["meta"]["comment_count"] == 1
-    assert payload["meta"]["model"] == "qwen"
+    class _FakeTaskOperationError(Exception):
+        message = "AI 摘要服務暫時不可用，請稍後再試"
+        status_code = 503
+
+    def _raise_service_error(_task_id):
+        raise _FakeTaskOperationError()
+
+    monkeypatch.setattr("blueprints.tasks.TaskOperationError", _FakeTaskOperationError)
+    monkeypatch.setattr("blueprints.tasks.summarize_task_comments_for_member", _raise_service_error)
+    unavailable = client.post(f"/api/tasks/{task_id}/ai-comment-summary", headers=headers, json={})
+    assert unavailable.status_code == 503
 
 
-def test_ai_comment_summary_requires_member_role(client):
+def test_ai_comment_summary_requires_member_and_handles_empty(client):
     _create_user(
         email="task-summary-owner@example.com",
         password="Password123!",
@@ -601,71 +464,40 @@ def test_ai_comment_summary_requires_member_role(client):
         password="Password123!",
         username="task_summary_outsider_user",
     )
-
     owner_headers = _get_auth_headers(client, "task-summary-owner@example.com", "Password123!")
     outsider_headers = _get_auth_headers(client, "task-summary-outsider@example.com", "Password123!")
-    task_id = _create_task(client, owner_headers, name="Summary role check")
+    task_id = _create_task(client, owner_headers, name="Summary empty")
 
-    response = client.post(f"/api/tasks/{task_id}/ai-comment-summary", headers=outsider_headers, json={})
-    assert response.status_code == 403
+    forbidden = client.post(f"/api/tasks/{task_id}/ai-comment-summary", headers=outsider_headers, json={})
+    assert forbidden.status_code == 403
+
+    response = client.post(f"/api/tasks/{task_id}/ai-comment-summary", headers=owner_headers, json={})
+    assert response.status_code == 200
+    payload = response.get_json()
+    assert payload["meta"]["comment_count"] == 0
+    assert payload["summary"]["decisions"] == []
+    assert payload["summary"]["risks"] == []
+    assert payload["summary"]["next_actions"] == []
 
 
-def test_ai_comment_summary_returns_503_when_service_unavailable(client, monkeypatch):
-    import services.task_service as task_service_module
-
+def test_task_file_endpoints_handle_multipart_and_download(client):
     _create_user(
-        email="task-summary-unavailable@example.com",
-        password="Password123!",
-        username="task_summary_unavailable_user",
-    )
-    headers = _get_auth_headers(client, "task-summary-unavailable@example.com", "Password123!")
-    task_id = _create_task(client, headers, name="Summary unavailable")
-
-    create_comment = client.post(
-        f"/api/tasks/{task_id}/comments",
-        headers=headers,
-        json={"message": "留言一"},
-    )
-    assert create_comment.status_code == 201
-
-    def _fake_raise(*_args, **_kwargs):
-        raise RuntimeError("AI 摘要服務暫時不可用，請稍後再試")
-
-    monkeypatch.setattr(task_service_module, "generate_task_comment_summary", _fake_raise)
-
-    response = client.post(f"/api/tasks/{task_id}/ai-comment-summary", headers=headers, json={})
-    assert response.status_code == 503
-    assert "暫時不可用" in response.get_json()["error"]
-
-
-def test_task_file_upload_list_download_and_delete(client):
-    owner = _create_user(
         email="task-file-owner@example.com",
         password="Password123!",
         username="task_file_owner_user",
     )
-    member = _create_user(
-        email="task-file-member@example.com",
-        password="Password123!",
-        username="task_file_member_user",
-    )
-    outsider = _create_user(
+    _create_user(
         email="task-file-outsider@example.com",
         password="Password123!",
         username="task_file_outsider_user",
     )
-
-    owner_headers = _get_auth_headers(client, "task-file-owner@example.com", "Password123!")
-    member_headers = _get_auth_headers(client, "task-file-member@example.com", "Password123!")
+    headers = _get_auth_headers(client, "task-file-owner@example.com", "Password123!")
     outsider_headers = _get_auth_headers(client, "task-file-outsider@example.com", "Password123!")
-
-    task_id = _create_task(client, owner_headers)
-    db.session.add(TaskUser(task_id=task_id, user_id=member.id, role=1))
-    db.session.commit()
+    task_id = _create_task(client, headers)
 
     no_file = client.post(
         f"/api/tasks/{task_id}/upload",
-        headers=owner_headers,
+        headers=headers,
         data={},
         content_type="multipart/form-data",
     )
@@ -673,7 +505,7 @@ def test_task_file_upload_list_download_and_delete(client):
 
     unsupported = client.post(
         f"/api/tasks/{task_id}/upload",
-        headers=owner_headers,
+        headers=headers,
         data={"file": (BytesIO(b"bad"), "file.exe")},
         content_type="multipart/form-data",
     )
@@ -681,52 +513,48 @@ def test_task_file_upload_list_download_and_delete(client):
 
     upload = client.post(
         f"/api/tasks/{task_id}/upload",
-        headers=member_headers,
+        headers=headers,
         data={"file": (BytesIO(b"hello"), "report.txt")},
         content_type="multipart/form-data",
     )
     assert upload.status_code == 201
     upload_payload = upload.get_json()
-    file_id = upload_payload["id"]
-    stored_filename = upload_payload["filename"]
 
-    list_response = client.get(f"/api/tasks/{task_id}/files", headers=owner_headers)
+    list_response = client.get(f"/api/tasks/{task_id}/files", headers=headers)
     assert list_response.status_code == 200
-    assert any(item["id"] == file_id for item in list_response.get_json())
+    assert any(item["id"] == upload_payload["id"] for item in list_response.get_json())
 
-    download_unauthorized = client.get(f"/api/tasks/files/{stored_filename}")
+    download_unauthorized = client.get(f"/api/tasks/files/{upload_payload['filename']}")
     assert download_unauthorized.status_code == 401
 
     download_forbidden = client.get(
-        f"/api/tasks/files/{stored_filename}",
+        f"/api/tasks/files/{upload_payload['filename']}",
         headers=outsider_headers,
     )
     assert download_forbidden.status_code == 403
 
     download = client.get(
-        f"/api/tasks/files/{stored_filename}",
-        headers=member_headers,
+        f"/api/tasks/files/{upload_payload['filename']}",
+        headers=headers,
     )
     assert download.status_code == 200
     assert download.data == b"hello"
     download.close()
 
     forbidden_delete = client.delete(
-        f"/api/tasks/{task_id}/files/{file_id}",
+        f"/api/tasks/{task_id}/files/{upload_payload['id']}",
         headers=outsider_headers,
     )
     assert forbidden_delete.status_code == 403
 
-    allowed_delete = client.delete(
-        f"/api/tasks/{task_id}/files/{file_id}",
-        headers=owner_headers,
+    delete_response = client.delete(
+        f"/api/tasks/{task_id}/files/{upload_payload['id']}",
+        headers=headers,
     )
-    assert allowed_delete.status_code == 200
-    assert db.session.get(TaskFile, file_id) is None
-    assert owner.id != outsider.id
+    assert delete_response.status_code == 200
 
 
-def test_subtask_crud_flow(client):
+def test_subtask_status_toggle_and_delete_endpoints(client):
     _create_user(
         email="task-subtask@example.com",
         password="Password123!",
@@ -745,20 +573,24 @@ def test_subtask_crud_flow(client):
 
     list_subtasks = client.get(f"/api/tasks/{task_id}/subtasks", headers=headers)
     assert list_subtasks.status_code == 200
-    assert len(list_subtasks.get_json()) == 1
 
-    update_subtask = client.put(
-        f"/api/tasks/{task_id}/subtasks/{subtask_id}",
+    update_status = client.patch(
+        f"/api/tasks/{task_id}/status",
         headers=headers,
-        json={"name": "Subtask A Updated", "completed": True, "sort_order": 3},
+        json={"status": "completed"},
     )
-    assert update_subtask.status_code == 200
+    assert update_status.status_code == 200
+    assert update_status.get_json()["completed"] is True
 
-    toggle_subtask = client.patch(
-        f"/api/tasks/{task_id}/subtasks/{subtask_id}/toggle",
+    invalid_status = client.patch(
+        f"/api/tasks/{task_id}/status",
         headers=headers,
+        json={"status": "bad"},
     )
-    assert toggle_subtask.status_code == 200
+    assert invalid_status.status_code == 400
+
+    toggle_task = client.patch(f"/api/tasks/{task_id}/toggle", headers=headers)
+    assert toggle_task.status_code == 200
 
     delete_subtask = client.delete(
         f"/api/tasks/{task_id}/subtasks/{subtask_id}",
@@ -766,32 +598,27 @@ def test_subtask_crud_flow(client):
     )
     assert delete_subtask.status_code == 200
 
-    assert Subtask.query.filter_by(id=subtask_id).first() is None
 
-
-def test_update_task_status_validation_and_success(client):
+def test_delete_task_endpoint_maps_owner_guard_and_success(client):
     _create_user(
-        email="task-status@example.com",
+        email="task-delete-owner@example.com",
         password="Password123!",
-        username="task_status_user",
+        username="task_delete_owner_user",
     )
-    headers = _get_auth_headers(client, "task-status@example.com", "Password123!")
-    task_id = _create_task(client, headers)
+    _create_user(
+        email="task-delete-outsider@example.com",
+        password="Password123!",
+        username="task_delete_outsider_user",
+    )
+    owner_headers = _get_auth_headers(client, "task-delete-owner@example.com", "Password123!")
+    outsider_headers = _get_auth_headers(client, "task-delete-outsider@example.com", "Password123!")
+    task_id = _create_task(client, owner_headers)
 
-    invalid = client.patch(
-        f"/api/tasks/{task_id}/status",
-        headers=headers,
-        json={"status": "bad"},
-    )
-    assert invalid.status_code == 400
+    forbidden = client.delete(f"/api/tasks/{task_id}", headers=outsider_headers)
+    assert forbidden.status_code == 403
 
-    valid = client.patch(
-        f"/api/tasks/{task_id}/status",
-        headers=headers,
-        json={"status": "completed"},
-    )
-    assert valid.status_code == 200
-    assert valid.get_json()["completed"] is True
+    success = client.delete(f"/api/tasks/{task_id}", headers=owner_headers)
+    assert success.status_code == 200
 
 
 def test_get_upcoming_tasks_includes_due_and_progress_items(client):
@@ -834,30 +661,3 @@ def test_get_upcoming_tasks_includes_due_and_progress_items(client):
     assert "due soon" in names
     assert "progress warning" in names
     assert "not upcoming" not in names
-
-
-def test_delete_task_as_owner_soft_deletes(client):
-    _create_user(
-        email="task-delete@example.com",
-        password="Password123!",
-        username="task_delete_user",
-    )
-    headers = _get_auth_headers(client, "task-delete@example.com", "Password123!")
-
-    create_response = client.post(
-        "/api/tasks",
-        headers=headers,
-        json={
-            "name": "Delete me",
-            "end_date": "2026-04-22T12:00:00",
-        },
-    )
-    assert create_response.status_code == 201
-    task_id = create_response.get_json()["task_id"]
-
-    delete_response = client.delete(f"/api/tasks/{task_id}", headers=headers)
-    assert delete_response.status_code == 200
-
-    deleted_task = db.session.get(Task, task_id)
-    assert deleted_task is not None
-    assert deleted_task.deleted_at is not None
