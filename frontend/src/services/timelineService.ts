@@ -20,7 +20,10 @@ import type {
   AIPlanSuggestionRequest,
   AIPlanSuggestionResponse,
   KnowledgeDocumentsResponse,
+  KnowledgeDocumentEventsResponse,
 } from '../types';
+
+const knowledgeProjectParams = (projectId?: number) => (projectId ? { project_id: projectId } : undefined);
 
 export const timelineService = {
   getAll:           (): Promise<AxiosResponse<Timeline[]>>                                       => api.get('/timelines'),
@@ -50,20 +53,48 @@ export const timelineService = {
   conflictCheck:    (id: number, payload: ConflictCheckPayload): Promise<AxiosResponse<ResourceConflictResponse>> =>
     api.post(`/timelines/${id}/conflict-check`, payload),
   suggestPlan:      (payload: AIPlanSuggestionRequest): Promise<AxiosResponse<AIPlanSuggestionResponse>> =>
-    api.post('/timelines/ai-suggest-plan', payload),
+    api.post('/timelines/ai-suggest-plan', payload, { timeout: 90000 }),
   listKnowledgeDocuments: (
-    params?: { limit?: number; offset?: number }
+    params?: {
+      limit?: number;
+      offset?: number;
+      project_id?: number;
+      q?: string;
+      sort?: 'created_desc' | 'created_asc' | 'name_asc' | 'name_desc' | 'status_asc';
+      status?: string;
+    }
   ): Promise<AxiosResponse<KnowledgeDocumentsResponse>> =>
     api.get('/knowledge/documents', { params }),
-  uploadKnowledgeDocument: (file: File): Promise<AxiosResponse<{ message: string }>> => {
+  uploadKnowledgeDocument: (file: File, projectId?: number): Promise<AxiosResponse<{ message: string }>> => {
     const form = new FormData();
     form.append('file', file);
-    return api.post('/knowledge/documents', form, {
+    const config: { headers: { 'Content-Type': string }; params?: { project_id: number } } = {
       headers: { 'Content-Type': 'multipart/form-data' },
-    });
+    };
+    const params = knowledgeProjectParams(projectId);
+    if (params) config.params = params;
+    return api.post('/knowledge/documents', form, config);
   },
-  deleteKnowledgeDocument: (documentId: number): Promise<AxiosResponse<{ message: string }>> =>
-    api.delete(`/knowledge/documents/${documentId}`),
-  reindexKnowledgeDocument: (documentId: number): Promise<AxiosResponse<{ message: string }>> =>
-    api.post(`/knowledge/documents/${documentId}/reindex`),
+  deleteKnowledgeDocument: (documentId: number, projectId?: number): Promise<AxiosResponse<{ message: string }>> =>
+    api.delete(`/knowledge/documents/${documentId}`, { params: knowledgeProjectParams(projectId) }),
+  reindexKnowledgeDocument: (documentId: number, projectId?: number): Promise<AxiosResponse<{ message: string }>> =>
+    api.post(`/knowledge/documents/${documentId}/reindex`, null, { params: knowledgeProjectParams(projectId) }),
+  batchDeleteKnowledgeDocuments: (projectId: number, documentIds: number[]) =>
+    api.post('/knowledge/documents/batch-delete', { document_ids: documentIds }, { params: { project_id: projectId } }),
+  batchReindexKnowledgeDocuments: (projectId: number, documentIds: number[]) =>
+    api.post('/knowledge/documents/batch-reindex', { document_ids: documentIds }, { params: { project_id: projectId } }),
+  downloadKnowledgeDocumentFile: (documentId: number, projectId: number): Promise<AxiosResponse<Blob>> =>
+    api.get(`/knowledge/documents/${documentId}/download`, {
+      params: { project_id: projectId },
+      responseType: 'blob',
+    }),
+  previewKnowledgeDocumentFile: (documentId: number, projectId: number): Promise<AxiosResponse<Blob>> =>
+    api.get(`/knowledge/documents/${documentId}/preview`, {
+      params: { project_id: projectId },
+      responseType: 'blob',
+    }),
+  listKnowledgeDocumentEvents: (
+    params: { project_id: number; limit?: number; offset?: number }
+  ): Promise<AxiosResponse<KnowledgeDocumentEventsResponse>> =>
+    api.get('/knowledge/documents/events', { params }),
 };

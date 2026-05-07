@@ -93,7 +93,7 @@ def create_app():
                            Task, TaskFile, Timeline, Todo, 
                            TaskComment, TaskUser, TimelineUser,
                            Notification, ActivityLog, GroupAISnapshot,
-                           KnowledgeDocument, KnowledgeChunk)
+                           KnowledgeDocument, KnowledgeChunk, KnowledgeDocumentEvent)
     
     # 註冊 blueprints
     from blueprints.auth import auth_bp

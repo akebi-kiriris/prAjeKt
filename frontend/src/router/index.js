@@ -8,6 +8,7 @@ import GroupsView from '../views/GroupsView.vue';
 import TimelinesView from '../views/TimelinesView.vue';
 import ProfileView from '../views/ProfileView.vue';
 import TrashView from '../views/TrashView.vue';
+import KnowledgeBaseView from '../views/KnowledgeBaseView.vue';
 
 const routes = [
   {
@@ -30,6 +31,12 @@ const routes = [
     path: '/timelines',
     name: 'Timelines',
     component: TimelinesView,
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/knowledge',
+    name: 'KnowledgeBase',
+    component: KnowledgeBaseView,
     meta: { requiresAuth: true }
   },
   {

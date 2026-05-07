@@ -4,7 +4,9 @@ import pytest
 
 from services.rag_planning_service import (
     RAGPlanningOperationError,
+    RAGPlanningTimeoutError,
     _build_history_references,
+    _generate_rag_plan_with_timeout,
     suggest_plan_with_rag,
 )
 
@@ -75,6 +77,33 @@ def test_suggest_plan_with_rag_requires_references(monkeypatch):
     assert exc.value.status_code == 422
 
 
+def test_suggest_plan_with_rag_uses_text_fallback_when_vector_empty(monkeypatch):
+    fake_chunk = SimpleNamespace(id=31, document_id=4, chunk_index=0, content="Phase 7.3 RAG 前端規劃")
+    monkeypatch.setattr("services.rag_planning_service._build_history_references", lambda *args, **kwargs: [])
+    monkeypatch.setattr("services.rag_planning_service.GeminiEmbeddingService", lambda: SimpleNamespace(embed_query=lambda _text: [0.1, 0.2]))
+    monkeypatch.setattr("services.rag_planning_service.search_knowledge_chunks_with_scores", lambda *args, **kwargs: [])
+    monkeypatch.setattr("services.rag_planning_service.search_knowledge_chunks_by_text", lambda *args, **kwargs: [fake_chunk])
+    monkeypatch.setattr(
+        "services.rag_planning_service.get_default_llm",
+        lambda provider: SimpleNamespace(name="fake-llm"),
+    )
+    monkeypatch.setattr(
+        "services.rag_planning_service.generate_rag_plan_suggestion",
+        lambda llm, user_request, retrieval_context: {
+            "suggested_timeline": {"name": "RAG 專案", "objective": "完成 7.3"},
+            "suggested_tasks": [],
+            "source_references": [],
+            "summary": "ok",
+        },
+    )
+
+    payload = suggest_plan_with_rag(user_id=1, payload={"request": "Phase 7.3", "use_personal_knowledge": True})
+
+    assert payload["message"] == "AI 規劃建議完成"
+    assert payload["source_references"][0]["source_type"] == "knowledge_chunk"
+    assert payload["meta"]["retrieved_knowledge_count"] == 1
+
+
 def test_build_history_references_parses_string_tags(monkeypatch):
     fake_timeline = SimpleNamespace(id=100)
     fake_task = SimpleNamespace(
@@ -99,3 +128,17 @@ def test_build_history_references_parses_string_tags(monkeypatch):
     assert len(refs) == 1
     assert refs[0]["source_id"] == "77"
     assert refs[0]["score"] > 0
+
+
+def test_generate_rag_plan_with_timeout_raises(monkeypatch):
+    monkeypatch.setenv("RAG_PLANNING_AI_TIMEOUT_SEC", "0.01")
+
+    def slow_generate(**_kwargs):
+        import time
+        time.sleep(0.05)
+        return {}
+
+    monkeypatch.setattr("services.rag_planning_service.generate_rag_plan_suggestion", slow_generate)
+
+    with pytest.raises(RAGPlanningTimeoutError):
+        _generate_rag_plan_with_timeout(SimpleNamespace(), "request", "context")

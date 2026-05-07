@@ -44,13 +44,18 @@ class KnowledgeDocument(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
+    project_id = db.Column(db.Integer, nullable=True, index=True)
     filename = db.Column(db.String(255), nullable=False)
     mime_type = db.Column(db.String(120), nullable=True)
     size_bytes = db.Column(db.Integer, nullable=True)
+    file_path = db.Column(db.Text, nullable=True)
+    storage_key = db.Column(db.String(255), nullable=True, index=True)
+    original_filename = db.Column(db.String(255), nullable=True)
     source_text = db.Column(db.Text, nullable=True)
     sha256 = db.Column(db.String(64), nullable=False)
     status = db.Column(db.String(20), nullable=False, default="uploaded")
     error_message = db.Column(db.Text, nullable=True)
+    deleted_at = db.Column(db.DateTime, nullable=True, index=True)
     created_at = db.Column(db.DateTime, default=utcnow_naive, nullable=False)
     updated_at = db.Column(
         db.DateTime,
@@ -80,6 +85,7 @@ class KnowledgeChunk(db.Model):
         index=True,
     )
     user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
+    project_id = db.Column(db.Integer, nullable=True, index=True)
     chunk_index = db.Column(db.Integer, nullable=False, default=0)
     token_count = db.Column(db.Integer, nullable=False, default=0)
     content = db.Column(db.Text, nullable=False)
@@ -90,3 +96,27 @@ class KnowledgeChunk(db.Model):
 
     def __repr__(self):
         return f"<KnowledgeChunk {self.id}>"
+
+
+class KnowledgeDocumentEvent(db.Model):
+    __tablename__ = "knowledge_document_events"
+
+    id = db.Column(db.Integer, primary_key=True)
+    document_id = db.Column(
+        db.Integer,
+        db.ForeignKey("knowledge_documents.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    project_id = db.Column(db.Integer, nullable=False, index=True)
+    actor_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
+    event_type = db.Column(db.String(50), nullable=False, index=True)
+    event_payload = db.Column(
+        _build_metadata_type(),
+        nullable=False,
+        default=dict,
+    )
+    created_at = db.Column(db.DateTime, default=utcnow_naive, nullable=False, index=True)
+
+    def __repr__(self):
+        return f"<KnowledgeDocumentEvent {self.id} {self.event_type}>"

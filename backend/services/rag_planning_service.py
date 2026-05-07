@@ -1,9 +1,11 @@
 import os
 from collections import Counter
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
 from datetime import datetime, timezone
 
 from chains import generate_rag_plan_suggestion, get_default_llm
 from repositories.knowledge_repository import (
+    search_knowledge_chunks_by_text,
     search_knowledge_chunks_with_scores,
 )
 from repositories.timeline_repository import (
@@ -18,6 +20,10 @@ class RAGPlanningOperationError(Exception):
         super().__init__(message)
         self.message = message
         self.status_code = status_code
+
+
+class RAGPlanningTimeoutError(Exception):
+    pass
 
 
 def _normalize_text(value):
@@ -95,25 +101,45 @@ def _build_history_references(user_id, user_request, limit):
     return references[:limit]
 
 
-def _build_knowledge_references(user_id, user_request, limit):
+def _build_knowledge_references(user_id, user_request, limit, project_id=None):
+    rows = []
     try:
         embedder = GeminiEmbeddingService()
         query_embedding = embedder.embed_query(user_request)
+        rows = search_knowledge_chunks_with_scores(
+            user_id=user_id,
+            query_embedding=query_embedding,
+            limit=limit,
+            project_id=project_id,
+        )
     except EmbeddingOperationError:
-        return []
+        rows = []
     except Exception:
-        return []
+        rows = []
 
-    rows = search_knowledge_chunks_with_scores(
-        user_id=user_id,
-        query_embedding=query_embedding,
-        limit=limit,
-    )
+    if not rows:
+        fallback_chunks = search_knowledge_chunks_by_text(
+            user_id=user_id,
+            query_text=user_request,
+            limit=limit,
+            project_id=project_id,
+        )
+        rows = [
+            {
+                "chunk": chunk,
+                "distance": index / max(1, len(fallback_chunks)),
+                "retrieval_mode": "text",
+            }
+            for index, chunk in enumerate(fallback_chunks)
+        ]
+
     references = []
     for row in rows:
         chunk = row["chunk"]
         distance = float(row["distance"])
         score = 1.0 / (1.0 + max(distance, 0.0))
+        if row.get("retrieval_mode") == "text":
+            score = max(score, 0.5)
         title = f"Document#{chunk.document_id} Chunk#{chunk.chunk_index}"
         references.append(
             {
@@ -212,6 +238,33 @@ def _fallback_suggestion(user_request, references):
     }
 
 
+def _generate_rag_plan_with_timeout(llm, user_request, retrieval_context):
+    timeout_sec = float(os.getenv("RAG_PLANNING_AI_TIMEOUT_SEC", "25"))
+    if timeout_sec <= 0:
+        return generate_rag_plan_suggestion(
+            llm=llm,
+            user_request=user_request,
+            retrieval_context=retrieval_context,
+        )
+
+    executor = ThreadPoolExecutor(max_workers=1)
+    future = executor.submit(
+        generate_rag_plan_suggestion,
+        llm=llm,
+        user_request=user_request,
+        retrieval_context=retrieval_context,
+    )
+    try:
+        return future.result(timeout=timeout_sec)
+    except FutureTimeoutError as exc:
+        future.cancel()
+        executor.shutdown(wait=False, cancel_futures=True)
+        raise RAGPlanningTimeoutError("RAG 規劃生成逾時，已改用降級模式") from exc
+    finally:
+        if future.done():
+            executor.shutdown(wait=False, cancel_futures=True)
+
+
 def suggest_plan_with_rag(user_id, payload):
     if not isinstance(payload, dict):
         raise RAGPlanningOperationError("請提供正確的 JSON 物件", 400)
@@ -221,6 +274,13 @@ def suggest_plan_with_rag(user_id, payload):
         raise RAGPlanningOperationError("request 不可為空", 400)
 
     use_personal_knowledge = bool(payload.get("use_personal_knowledge", True))
+    use_project_knowledge = bool(payload.get("use_project_knowledge", False))
+    project_id = payload.get("project_id")
+    if project_id is not None:
+        try:
+            project_id = int(project_id)
+        except (TypeError, ValueError):
+            raise RAGPlanningOperationError("project_id 必須為整數", 400)
     max_sources = payload.get("max_sources", 8)
     try:
         max_sources = int(max_sources)
@@ -242,6 +302,28 @@ def suggest_plan_with_rag(user_id, payload):
             limit=max(retrieval_top_k // 2, 4),
         )
 
+    # project-scoped knowledge
+    if use_project_knowledge:
+        # 驗證使用者是否為該 project(timeline) 成員
+        memberships = get_timeline_memberships_for_user(user_id)
+        timeline_ids = [timeline.id for timeline, _role in memberships]
+        if not project_id or project_id not in timeline_ids:
+            raise RAGPlanningOperationError("沒有權限存取該專案知識或 project_id 錯誤", 403)
+        project_refs = _build_knowledge_references(
+            user_id=user_id,
+            user_request=user_request,
+            limit=max(retrieval_top_k // 2, 4),
+            project_id=project_id,
+        )
+        # 標記來源為 project（後端 repository search 會根據 project_id 做篩選）
+        # 目前 repository search 已支援 project_id 參數
+        # 將 project_refs 併入 knowledge_refs（避免重複）
+        existing_keys = {(r['source_type'], r['source_id']) for r in knowledge_refs}
+        for r in project_refs:
+            key = (r['source_type'], r['source_id'])
+            if key not in existing_keys:
+                knowledge_refs.append(r)
+
     merged_refs = _merge_references(
         history_refs=history_refs,
         knowledge_refs=knowledge_refs,
@@ -255,7 +337,7 @@ def suggest_plan_with_rag(user_id, payload):
     try:
         provider = os.getenv("LLM_PROVIDER", "google-generativeai")
         llm = get_default_llm(provider=provider)
-        ai_result = generate_rag_plan_suggestion(
+        ai_result = _generate_rag_plan_with_timeout(
             llm=llm,
             user_request=user_request,
             retrieval_context=retrieval_context,
@@ -265,6 +347,8 @@ def suggest_plan_with_rag(user_id, payload):
             "fallback_used": False,
             "generated_at": datetime.now(timezone.utc).isoformat(),
             "use_personal_knowledge": use_personal_knowledge,
+            "use_project_knowledge": use_project_knowledge,
+            "project_id": project_id,
             "retrieved_history_count": len(history_refs),
             "retrieved_knowledge_count": len(knowledge_refs),
         }
@@ -277,6 +361,8 @@ def suggest_plan_with_rag(user_id, payload):
         fallback["meta"].update(
             {
                 "use_personal_knowledge": use_personal_knowledge,
+                "use_project_knowledge": use_project_knowledge,
+                "project_id": project_id,
                 "retrieved_history_count": len(history_refs),
                 "retrieved_knowledge_count": len(knowledge_refs),
             }

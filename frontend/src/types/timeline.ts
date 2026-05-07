@@ -286,6 +286,8 @@ export interface AIPlanSuggestionResponse {
     fallback_used?: boolean;
     generated_at?: string;
     use_personal_knowledge?: boolean;
+    use_project_knowledge?: boolean;
+    project_id?: number | null;
     retrieved_history_count?: number;
     retrieved_knowledge_count?: number;
   };
@@ -294,24 +296,52 @@ export interface AIPlanSuggestionResponse {
 export interface AIPlanSuggestionRequest {
   request: string;
   use_personal_knowledge?: boolean;
+  use_project_knowledge?: boolean;
+  project_id?: number;
   max_sources?: number;
 }
 
 export interface KnowledgeDocumentItem {
   id: number;
   filename: string;
+  project_id?: number | null;
   mime_type?: string | null;
+  file_path?: string | null;
+  storage_key?: string | null;
+  original_filename?: string | null;
   size_bytes?: number | null;
   sha256?: string;
   status: 'uploaded' | 'indexing' | 'ready' | 'failed' | string;
   error_message?: string | null;
+  chunk_count?: number;
+  has_source_text?: boolean;
   created_at?: string | null;
   updated_at?: string | null;
+}
+
+export interface KnowledgeDocumentEventItem {
+  id: number;
+  document_id?: number | null;
+  project_id: number;
+  actor_user_id: number;
+  event_type: string;
+  event_payload: Record<string, unknown>;
+  created_at?: string | null;
 }
 
 export interface KnowledgeDocumentsResponse {
   message: string;
   documents: KnowledgeDocumentItem[];
+  meta: {
+    limit: number;
+    offset: number;
+    count: number;
+  };
+}
+
+export interface KnowledgeDocumentEventsResponse {
+  message: string;
+  events: KnowledgeDocumentEventItem[];
   meta: {
     limit: number;
     offset: number;

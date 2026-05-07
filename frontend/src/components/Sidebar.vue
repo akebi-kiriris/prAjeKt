@@ -51,6 +51,7 @@ defineEmits<{
 const navItems: SidebarNavItem[] = [
   { path: '/', icon: '🏠', text: '主頁' },
   { path: '/timelines', icon: '📊', text: '專案管理' },
+  { path: '/knowledge', icon: '📚', text: '知識庫' },
   { path: '/tasks', icon: '✅', text: '任務管理' },
   { path: '/todos', icon: '📝', text: '待辦事項' },
   { path: '/groups', icon: '💬', text: '群組訊息' },

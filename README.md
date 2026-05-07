@@ -2,7 +2,7 @@
 
 基於 Vue 3 + Flask 的專案管理與協作平台，整合 Google Gemini AI 實現智能任務生成。
 
-> **開發狀態**：Phase 1~6.6+ 已完成 ✅；Phase 7.1、7.2 已完成核心功能 ✅；Phase 7.3 後端核心已完成 🟡（知識文件索引 + RAG 規劃 API，安全收斂與前端契約對齊完成，知識 UI 持續整合中）。
+> **開發狀態**：Phase 1~6.6+ 已完成 ✅；Phase 7.1、7.2 已完成核心功能 ✅；Phase 7.3 核心閉環已完成 ✅（個人知識庫頁、專案檔案區、RAG 規劃 API 與來源契約已串接；後續聚焦生成品質與評測收斂）。
 
 ## 功能模組
 
@@ -18,8 +18,9 @@
 - **數據分析儀表板**：整合於個人資料頁，Level 1 個人圖表（30 天完成趨勢、任務狀態分布、各專案任務量）+ Level 2 專案圖表（成員貢獻、任務狀態，負責人限定）
 - **AI 任務生成**：自然語言輸入 → AI 工具路由 → MCP 執行，支援批次創建與自動化（MCP Copilot 整合）；生成任務可帶入依賴欄位，缺漏時會套用順序鏈 fallback
 - **AI 群組快照（RAG-B 核心）**：群組聊天可生成「行動導向 Digest」（一句重點 / 你現在要做什麼 / 阻塞風險 / 精簡決議）
-- **知識文件索引（Phase 7.3）**：支援 md/txt/pdf 上傳、切塊、向量化與 per-user 隔離檢索（含重建索引）
-- **AI 規劃建議（Phase 7.3）**：`/api/timelines/ai-suggest-plan` 會整合歷史任務與個人知識來源，回傳可追溯 `source_references`
+- **個人知識庫（Phase 7.3）**：`/knowledge` 支援 md/txt/pdf 上傳、列表、狀態、搜尋、篩選、排序、刪除與重建索引，採 per-user 隔離檢索
+- **專案檔案區（Phase 7.3）**：Timeline 詳情內可管理 project-scoped knowledge files，支援上傳、篩選、批次刪除/重建、下載、預覽與最近操作紀錄
+- **AI 規劃建議（Phase 7.3）**：`/api/timelines/ai-suggest-plan` 會整合歷史任務、個人知識與專案文件，回傳可追溯 `source_references`，並具備文字 fallback 與 LLM timeout fallback
 - **Copilot + MCP 整合**：自然語言 AI 路由至後端工具，無需 Inspector；支援任務知識摘要、群組快照、自動化創建
 - **垃圾桶回收機制**：已刪任務 / 專案暫存，支援還原或永久刪除；非建立者唯讀
 - **通知系統**：任務指派 / 專案邀請通知、鈴鐺 30 秒輪詢更新、主頁即將到期提醒區塊（3 天內截止或進度 ≥80%）
@@ -63,7 +64,7 @@ prajekt/
 │   │   └── socket_events.py
 │   ├── tests/                    # pytest
 │   ├── migrations/               # Flask-Migrate
-│   ├── uploads/                  # 任務附件
+│   ├── uploads/                  # 任務附件與專案知識檔案（本機執行資料，不納入版控）
 │   └── requirements.txt
 │
 ├── frontend/
@@ -79,7 +80,7 @@ prajekt/
 │       ├── utils/
 │       ├── types/                # `index.ts` + domain type files
 │       ├── styles/
-│       ├── views/
+│       ├── views/                # 頁面層，含 KnowledgeBaseView
 │       └── router/
 │
 ├── docs/                         # 開發筆記與流程文件（納入版控）
@@ -187,6 +188,12 @@ pytest --cov=blueprints --cov=services --cov=models --cov-report=term-missing --
 - 已啟用：`backend-tests.yml`（PR/Push 自動執行 pytest + coverage 報告）
 - 已建立：`frontend-tests.yml`（後續可接 branch protection）
 
+### 本輪 Phase 7.3 聚焦驗證（2026/05/08）
+
+- 前端：`npm run test -- timelineService.test.ts KnowledgeBaseView.test.ts TimelineDetailDialog.phase7.test.ts`（3 files / 11 tests passed）
+- 後端：`venv\Scripts\python.exe -m pytest`（189 passed，僅 `.pytest_cache` 權限 warning）
+- 後端語法檢查：`python -m py_compile services\rag_planning_service.py repositories\knowledge_repository.py services\knowledge_service.py`
+
 ## API 端點
 
 ### 認證
@@ -210,7 +217,7 @@ pytest --cov=blueprints --cov=services --cov=models --cov-report=term-missing --
 | GET | `/api/timelines/:id/risk-analysis` | 取得專案風險分析（critical path、風險清單、依賴圖資料） |
 | POST | `/api/timelines/:id/risk-analysis/notify` | 發送風險通知給專案成員（負責人限定） |
 | POST | `/api/timelines/:id/conflict-check` | 檢查排程衝突（同專案/跨專案/過載日，含建議改期） |
-| POST | `/api/timelines/ai-suggest-plan` | AI 規劃建議（整合歷史任務 + 個人知識來源） |
+| POST | `/api/timelines/ai-suggest-plan` | AI 規劃建議（整合歷史任務 + 個人知識 + 專案文件，回傳 `timeline_task` / `knowledge_chunk` 來源） |
 | POST | `/api/timelines/:id/generate-tasks` | AI 生成任務建議 |
 | POST | `/api/timelines/:id/batch-create-tasks` | 批次建立任務 |
 | GET | `/api/timelines/:id/members` | 取得專案成員列表 |
@@ -271,15 +278,25 @@ pytest --cov=blueprints --cov=services --cov=models --cov-report=term-missing --
 | POST | `/api/profile/search` | 搜尋使用者（username / email）|
 | GET | `/api/profile/chart-stats` | 個人圖表資料（30 天趨勢、狀態分布、各專案量）|
 
+### 知識庫（Knowledge）
+
+| 方法 | 路徑 | 說明 |
+|------|------|------|
+| POST | `/api/knowledge/documents` | 上傳知識文件並建立索引；不帶 `project_id` 為個人知識庫，帶 `project_id` 為專案檔案 |
+| GET | `/api/knowledge/documents` | 取得知識文件列表，支援 `q` / `status` / `sort` / `limit` / `offset` / `project_id` |
+| DELETE | `/api/knowledge/documents/:id` | 刪除知識文件；個人知識庫為單檔刪除，專案檔案會記錄事件並清理實體檔 |
+| POST | `/api/knowledge/documents/:id/reindex` | 重建指定知識文件索引 |
+| POST | `/api/knowledge/documents/batch-delete` | 專案檔案批次刪除（需 `project_id`） |
+| POST | `/api/knowledge/documents/batch-reindex` | 專案檔案批次重建索引（需 `project_id`） |
+| GET | `/api/knowledge/documents/:id/download` | 專案檔案下載（需 `project_id`，JWT 驗證） |
+| GET | `/api/knowledge/documents/:id/preview` | 專案檔案預覽（需 `project_id`，JWT 驗證） |
+| GET | `/api/knowledge/documents/events` | 專案檔案最近操作紀錄（需 `project_id`） |
+
 ### AI 與自動化
 
 | 方法 | 路徑 | 說明 |
 |------|------|------|
 | POST | `/api/tasks/:id/ai-comment-summary` | Task 留言 AI 摘要（決議/風險/下一步） |
-| POST | `/api/knowledge/documents` | 上傳知識文件並建立索引 |
-| GET | `/api/knowledge/documents` | 取得知識文件列表 |
-| DELETE | `/api/knowledge/documents/:id` | 刪除知識文件 |
-| POST | `/api/knowledge/documents/:id/reindex` | 重建指定知識文件索引 |
 | POST | `/api/groups/:id/ai-snapshot` | 群組知識快照生成（行動導向 Digest） |
 | GET | `/api/groups/:id/ai-snapshot/latest` | 取得最新群組快照 |
 | GET | `/api/groups/snapshot-jobs/:job_id` | 查詢快照生成進度 |
@@ -339,8 +356,9 @@ pytest --cov=blueprints --cov=services --cov=models --cov-report=term-missing --
 - **Phase 7 精簡路線（進行中）**：
 	- 7.1：週報 + 衝突檢查 MVP（含過載日列表、多指派、隱私遮罩）✅
 	- 7.2：進度風險分析 MVP 核心（critical path + 依賴管理 + 依賴圖）✅
-	- 7.3：後端核心完成（知識索引 + RAG 規劃 API），前端整合中 🟡
+	- 7.3：核心閉環完成（個人知識庫 `/knowledge` + Project Files + RAG 規劃 API + source references）✅
 	- 7.3+：後端測試工程化收斂（models/task/timeline 大型測試檔拆分），全量後端回歸 `185 passed` ✅
+	- 7.3 後續：RAG 生成品質、評測資料集、來源排序與 prompt 調校 🟡
 
 ## 環境需求
 

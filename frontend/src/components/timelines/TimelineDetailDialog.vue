@@ -354,6 +354,85 @@
             </div>
           </div>
 
+          <div class="mb-4 p-4 bg-indigo-50 border border-indigo-200 rounded-xl">
+            <div class="flex items-center justify-between gap-3 mb-3">
+              <div>
+                <p class="text-sm font-semibold text-indigo-700">專案檔案區</p>
+                <p class="text-xs text-indigo-500">支援上傳、批次操作與 RAG 引用來源</p>
+              </div>
+              <div class="flex items-center gap-2">
+                <input
+                  ref="projectKnowledgeInput"
+                  type="file"
+                  class="hidden"
+                  @change="handleProjectKnowledgeUpload"
+                />
+                <button
+                  type="button"
+                  class="px-3 py-1.5 text-xs font-medium rounded-lg bg-white border border-indigo-200 text-indigo-600 hover:bg-indigo-100 transition-colors disabled:opacity-60"
+                  :disabled="projectKnowledgeUploading"
+                  @click="projectKnowledgeInput?.click()"
+                >
+                  {{ projectKnowledgeUploading ? '上傳中...' : '上傳檔案' }}
+                </button>
+                <button type="button" class="px-3 py-1.5 text-xs font-medium rounded-lg bg-white border border-indigo-200 text-indigo-600 hover:bg-indigo-100 transition-colors" @click="fetchProjectKnowledgeDocuments">刷新</button>
+              </div>
+            </div>
+            <div class="grid md:grid-cols-3 gap-2 mb-3">
+              <input v-model="projectKnowledgeQuery" type="text" placeholder="搜尋檔名" class="px-3 py-2 text-xs border border-indigo-200 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none" />
+              <select v-model="projectKnowledgeSort" class="px-3 py-2 text-xs border border-indigo-200 rounded-lg bg-white focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none">
+                <option value="created_desc">最新建立</option>
+                <option value="created_asc">最早建立</option>
+                <option value="name_asc">檔名 A-Z</option>
+                <option value="name_desc">檔名 Z-A</option>
+                <option value="status_asc">狀態</option>
+              </select>
+              <select v-model="projectKnowledgeStatus" class="px-3 py-2 text-xs border border-indigo-200 rounded-lg bg-white focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none">
+                <option value="">全部狀態</option>
+                <option value="uploaded">uploaded</option>
+                <option value="indexing">indexing</option>
+                <option value="ready">ready</option>
+                <option value="failed">failed</option>
+              </select>
+            </div>
+            <div class="flex items-center gap-2 mb-3">
+              <button type="button" class="px-3 py-1.5 text-xs rounded-lg border border-red-200 text-red-600 bg-white hover:bg-red-50 disabled:opacity-40" :disabled="projectKnowledgeSelectedIds.length===0" @click="batchDeleteProjectKnowledge">批次刪除</button>
+              <button type="button" class="px-3 py-1.5 text-xs rounded-lg border border-amber-200 text-amber-700 bg-white hover:bg-amber-50 disabled:opacity-40" :disabled="projectKnowledgeSelectedIds.length===0" @click="batchReindexProjectKnowledge">批次重建</button>
+              <button type="button" class="px-3 py-1.5 text-xs rounded-lg border border-indigo-200 text-indigo-700 bg-white hover:bg-indigo-50" @click="fetchProjectKnowledgeDocuments">套用篩選</button>
+            </div>
+            <p v-if="projectKnowledgeError" class="mb-2 text-xs text-red-600">{{ projectKnowledgeError }}</p>
+            <div v-if="projectKnowledgeLoading" class="text-xs text-indigo-500">載入中...</div>
+            <div v-else-if="projectKnowledgeDocuments.length===0" class="text-xs text-indigo-400">目前沒有檔案</div>
+            <div v-else class="space-y-2 mb-3">
+              <div v-for="doc in projectKnowledgeDocuments" :key="`pk-doc-${doc.id}`" class="p-2.5 bg-white border border-indigo-100 rounded-lg text-xs flex items-start gap-2">
+                <input type="checkbox" class="mt-0.5" :checked="projectKnowledgeSelectedIds.includes(doc.id)" @change="toggleKnowledgeSelection(doc.id)" />
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-center gap-2">
+                    <p class="font-medium text-indigo-700 truncate">{{ doc.original_filename || doc.filename }}</p>
+                    <span class="px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700">{{ doc.status }}</span>
+                  </div>
+                  <p class="text-indigo-500 mt-0.5">
+                    {{ typeof doc.chunk_count === 'number' ? `${doc.chunk_count} chunks` : '索引數未知' }}
+                  </p>
+                  <p v-if="doc.error_message" class="text-red-500 mt-0.5">{{ doc.error_message }}</p>
+                </div>
+                <div class="flex items-center gap-1">
+                  <button type="button" class="px-2 py-1 border border-indigo-200 rounded text-indigo-700 hover:bg-indigo-50" @click="downloadProjectKnowledgeDocument(doc)">下載</button>
+                  <button type="button" class="px-2 py-1 border border-indigo-200 rounded text-indigo-700 hover:bg-indigo-50" @click="previewProjectKnowledgeDocument(doc)">預覽</button>
+                </div>
+              </div>
+            </div>
+            <div>
+              <p class="text-xs font-semibold text-indigo-700 mb-1">最近操作</p>
+              <div v-if="projectKnowledgeEvents.length===0" class="text-xs text-indigo-400">尚無紀錄</div>
+              <div v-else class="space-y-1 max-h-24 overflow-y-auto pr-1">
+                <p v-for="evt in projectKnowledgeEvents" :key="`pk-evt-${evt.id}`" class="text-xs text-indigo-600">
+                  {{ evt.event_type }} · #{{ evt.document_id || '-' }} · {{ formatDateTime(evt.created_at || '') }}
+                </p>
+              </div>
+            </div>
+          </div>
+
           <!-- 任務列表 -->
           <div class="space-y-2">
             <div v-for="task in timelineTasks" :key="task.task_id" class="flex items-center gap-3 p-3 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors group">
@@ -934,18 +1013,31 @@
               ></textarea>
               <div class="flex flex-wrap items-center gap-4 text-sm text-gray-600">
                 <label class="inline-flex items-center gap-2 cursor-pointer select-none">
+                  <input v-model="useRagPlanning" type="checkbox" class="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary" />
+                  使用 RAG 規劃建議
+                </label>
+                <label v-if="!useRagPlanning" class="inline-flex items-center gap-2 cursor-pointer select-none">
                   <input v-model="useCopilotMcp" type="checkbox" class="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary" />
                   優先使用 AI + MCP 工具路由
+                </label>
+                <label v-if="useRagPlanning" class="inline-flex items-center gap-2 cursor-pointer select-none">
+                  <input v-model="usePersonalKnowledge" type="checkbox" class="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary" />
+                  納入個人知識庫
+                </label>
+                <label v-if="useRagPlanning" class="inline-flex items-center gap-2 cursor-pointer select-none">
+                  <input v-model="useProjectKnowledge" type="checkbox" class="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary" @change="useProjectKnowledgeTouched = true" />
+                  納入專案檔案
                 </label>
                 <label class="inline-flex items-center gap-2 cursor-pointer select-none">
                   <input v-model="autoCreateAfterGenerate" type="checkbox" class="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary" />
                   生成後直接建立任務
                 </label>
               </div>
+              <p v-if="ragErrorMessage" class="text-sm text-red-600">{{ ragErrorMessage }}</p>
             </div>
             <div class="text-center">
               <button @click="generateTasksWithAi" class="px-6 py-3 bg-linear-to-r from-purple-500 to-indigo-500 text-white font-semibold rounded-xl hover:brightness-110 transition-all shadow-lg shadow-purple-200">
-                {{ useCopilotMcp ? '✨ AI 智慧生成' : '🤖 開始生成' }}
+                {{ useRagPlanning ? '📚 RAG 規劃生成' : (useCopilotMcp ? '✨ AI 智慧生成' : '🤖 開始生成') }}
               </button>
             </div>
           </div>
@@ -955,6 +1047,17 @@
               <div class="flex gap-2">
                 <button @click="toggleAllAiTasks" class="text-sm text-primary hover:underline">{{ selectedAiTasks.length === aiGeneratedTasks.length ? '全部取消' : '全部選取' }}</button>
                 <button @click="aiGeneratedTasks = []; selectedAiTasks = []" class="text-sm text-gray-400 hover:text-gray-600">重新生成</button>
+              </div>
+            </div>
+            <div v-if="ragSourceReferences.length > 0" class="p-3 rounded-xl border border-indigo-100 bg-indigo-50/60">
+              <p class="text-xs font-semibold text-indigo-700 mb-2">來源依據（{{ ragSourceReferences.length }}）</p>
+              <p v-if="ragSummary" class="text-xs text-indigo-600 mb-2">{{ ragSummary }}</p>
+              <div class="space-y-2 max-h-40 overflow-y-auto pr-1">
+                <div v-for="ref in ragSourceReferences" :key="`${ref.source_type}-${ref.source_id}`" class="text-xs text-indigo-700 bg-white/80 border border-indigo-100 rounded-lg p-2">
+                  <p class="font-medium">{{ getSourceReferenceLabel(ref.source_type) }} · score {{ Number(ref.score || 0).toFixed(2) }}</p>
+                  <p class="truncate">{{ ref.title }}</p>
+                  <p class="text-indigo-500 line-clamp-2">{{ ref.snippet }}</p>
+                </div>
               </div>
             </div>
             <div class="space-y-3 max-h-80 overflow-y-auto">
@@ -1022,8 +1125,12 @@ import type {
   TimelineBatchTaskPayload,
   ApiErrorPayload,
   GenerateTasksResponse,
+  AIPlanSuggestionResponse,
   CopilotMcpExecuteResponse,
   CriticalPathAnalysisResponse,
+  KnowledgeDocumentEventItem,
+  KnowledgeDocumentItem,
+  SourceReference,
   WeeklyReportAiSummarySource,
   WeeklyReportResponse,
   ConflictCheckPayload,
@@ -1045,6 +1152,11 @@ const getApiErrorMessage = (error: unknown, fallback: string) => {
     return error.response?.data?.error || fallback;
   }
   return fallback;
+};
+
+const getSourceReferenceLabel = (sourceType: SourceReference['source_type']) => {
+  if (sourceType === 'timeline_task') return '歷史任務';
+  return '知識文件';
 };
 
 const emit = defineEmits<{
@@ -1074,8 +1186,25 @@ const aiGeneratedTasks = ref<AiGeneratedTask[]>([]);
 const selectedAiTasks = ref<number[]>([]);
 const isGeneratingAi = ref(false);
 const aiPrompt = ref('');
+const useRagPlanning = ref(false);
 const useCopilotMcp = ref(true);
+const usePersonalKnowledge = ref(true);
+const useProjectKnowledge = ref(false);
+const useProjectKnowledgeTouched = ref(false);
 const autoCreateAfterGenerate = ref(false);
+const ragSourceReferences = ref<SourceReference[]>([]);
+const ragSummary = ref('');
+const ragErrorMessage = ref('');
+const projectKnowledgeDocuments = ref<KnowledgeDocumentItem[]>([]);
+const projectKnowledgeEvents = ref<KnowledgeDocumentEventItem[]>([]);
+const projectKnowledgeLoading = ref(false);
+const projectKnowledgeUploading = ref(false);
+const projectKnowledgeSelectedIds = ref<number[]>([]);
+const projectKnowledgeQuery = ref('');
+const projectKnowledgeSort = ref<'created_desc' | 'created_asc' | 'name_asc' | 'name_desc' | 'status_asc'>('created_desc');
+const projectKnowledgeStatus = ref('');
+const projectKnowledgeError = ref('');
+const projectKnowledgeInput = ref<HTMLInputElement | null>(null);
 const isEditingRemark = ref(false);
 const timelineRemark = ref('');
 const localRemark = ref('');
@@ -1663,6 +1792,8 @@ watch(() => props.selectedTimeline, async (val) => {
 watch(showAiGenerateModal, (opened) => {
   if (!opened) return;
   selectedAiTasks.value = [];
+  ragSourceReferences.value = [];
+  ragSummary.value = '';
   if (!aiPrompt.value.trim()) {
     aiPrompt.value = timelineRemark.value || '';
   }
@@ -2181,14 +2312,61 @@ const buildAiDescription = (): string => {
   return `請為「${props.selectedTimeline?.name || '此專案'}」生成可執行的任務拆解，含優先順序。`;
 };
 
+const mapRagPriorityToTaskPriority = (priority: string | undefined): number => {
+  const normalized = String(priority || '').toUpperCase();
+  if (normalized === 'CRITICAL' || normalized === 'HIGH') return 1;
+  if (normalized === 'LOW') return 3;
+  return 2;
+};
+
+const mapRagResponseToGeneratedTasks = (payload: AIPlanSuggestionResponse): AiGeneratedTask[] => {
+  const tasks = Array.isArray(payload.suggested_tasks) ? payload.suggested_tasks : [];
+  const today = new Date();
+  return tasks.map((task, index) => {
+    const estimatedDays = Number(task.estimated_days) > 0 ? Number(task.estimated_days) : 3;
+    const startDate = new Date(today);
+    const endDate = new Date(today);
+    startDate.setDate(today.getDate() + index);
+    endDate.setDate(startDate.getDate() + Math.max(estimatedDays - 1, 0));
+
+    return {
+      name: task.name || `建議任務 ${index + 1}`,
+      priority: mapRagPriorityToTaskPriority(task.priority),
+      estimated_days: estimatedDays,
+      start_date: startDate.toISOString().split('T')[0],
+      end_date: endDate.toISOString().split('T')[0],
+      remark: task.reason || null,
+      task_remark: task.reason || null,
+      depends_on_task_refs: Array.isArray(task.depends_on) ? task.depends_on : [],
+      status: 'pending',
+    };
+  });
+};
+
 const generateTasksWithAi = async () => {
   if (!props.selectedTimeline) return;
 
   const description = buildAiDescription();
   isGeneratingAi.value = true;
+  ragSourceReferences.value = [];
+  ragSummary.value = '';
+  ragErrorMessage.value = '';
 
   try {
-    if (useCopilotMcp.value) {
+    if (useRagPlanning.value) {
+      const ragPayload = {
+        request: description,
+        use_personal_knowledge: usePersonalKnowledge.value,
+        use_project_knowledge: useProjectKnowledge.value,
+        project_id: props.selectedTimeline.id,
+        max_sources: 8,
+      };
+      const res = await timelineService.suggestPlan(ragPayload);
+      const payload: AIPlanSuggestionResponse = res.data;
+      aiGeneratedTasks.value = mapRagResponseToGeneratedTasks(payload);
+      ragSourceReferences.value = Array.isArray(payload.source_references) ? payload.source_references : [];
+      ragSummary.value = payload.summary || '';
+    } else if (useCopilotMcp.value) {
       const res = await copilotService.executeMcp({
         message: description,
         context: {
@@ -2226,7 +2404,11 @@ const generateTasksWithAi = async () => {
       ? aiGeneratedTasks.value.map((_, i) => i)  // 全選
       : [];  // 空選，用戶手動選
   } catch (err: unknown) {
-    toast.error(getApiErrorMessage(err, 'AI 生成失敗，請稍後再試'));
+    const message = getApiErrorMessage(err, 'AI 生成失敗，請稍後再試');
+    if (useRagPlanning.value) {
+      ragErrorMessage.value = message;
+    }
+    toast.error(message);
   } finally {
     isGeneratingAi.value = false;
   }
@@ -2298,7 +2480,10 @@ const batchCreateAiTasks = async () => {
     }
 
     showAiGenerateModal.value = false;
-    aiGeneratedTasks.value = []; selectedAiTasks.value = [];
+    aiGeneratedTasks.value = [];
+    selectedAiTasks.value = [];
+    ragSourceReferences.value = [];
+    ragSummary.value = '';
     emit('refresh-all');
   } catch (err: unknown) { toast.error(getApiErrorMessage(err, '批量新增失敗')); }
 };
@@ -2322,4 +2507,136 @@ const getPriorityBadgeClass = (priority: number) => ({
 const getAiPriorityClass = (priority: number) => ({
   1: 'bg-red-100 text-red-700', 2: 'bg-yellow-100 text-yellow-700', 3: 'bg-green-100 text-green-700'
 }[priority] || 'bg-gray-100 text-gray-700');
+
+const fetchProjectKnowledgeDocuments = async () => {
+  if (!props.selectedTimeline) return;
+  projectKnowledgeLoading.value = true;
+  projectKnowledgeError.value = '';
+  try {
+    const res = await timelineService.listKnowledgeDocuments({
+      project_id: props.selectedTimeline.id,
+      q: projectKnowledgeQuery.value || undefined,
+      sort: projectKnowledgeSort.value,
+      status: projectKnowledgeStatus.value || undefined,
+      limit: 50,
+      offset: 0,
+    });
+    projectKnowledgeDocuments.value = res.data.documents || [];
+    if (!useProjectKnowledgeTouched.value && projectKnowledgeDocuments.value.some(doc => doc.status === 'ready')) {
+      useProjectKnowledge.value = true;
+    }
+  } catch (err: unknown) {
+    projectKnowledgeError.value = getApiErrorMessage(err, '讀取專案檔案失敗');
+  } finally {
+    projectKnowledgeLoading.value = false;
+  }
+};
+
+const fetchProjectKnowledgeEvents = async () => {
+  if (!props.selectedTimeline) return;
+  try {
+    const res = await timelineService.listKnowledgeDocumentEvents({
+      project_id: props.selectedTimeline.id,
+      limit: 10,
+      offset: 0,
+    });
+    projectKnowledgeEvents.value = res.data.events || [];
+  } catch {
+    projectKnowledgeEvents.value = [];
+  }
+};
+
+const toggleKnowledgeSelection = (documentId: number) => {
+  const idx = projectKnowledgeSelectedIds.value.indexOf(documentId);
+  if (idx >= 0) projectKnowledgeSelectedIds.value.splice(idx, 1);
+  else projectKnowledgeSelectedIds.value.push(documentId);
+};
+
+const handleProjectKnowledgeUpload = async (event: Event) => {
+  const target = event.target as HTMLInputElement | null;
+  const file = target?.files?.[0];
+  if (!file || !props.selectedTimeline) return;
+  projectKnowledgeUploading.value = true;
+  try {
+    await timelineService.uploadKnowledgeDocument(file, props.selectedTimeline.id);
+    toast.success('檔案已上傳');
+    await fetchProjectKnowledgeDocuments();
+    await fetchProjectKnowledgeEvents();
+  } catch (err: unknown) {
+    toast.error(getApiErrorMessage(err, '上傳失敗'));
+  } finally {
+    projectKnowledgeUploading.value = false;
+    if (projectKnowledgeInput.value) projectKnowledgeInput.value.value = '';
+  }
+};
+
+const batchDeleteProjectKnowledge = async () => {
+  if (!props.selectedTimeline || projectKnowledgeSelectedIds.value.length === 0) return;
+  if (!await confirm({ title: `確定刪除 ${projectKnowledgeSelectedIds.value.length} 份檔案？`, danger: true })) return;
+  try {
+    await timelineService.batchDeleteKnowledgeDocuments(props.selectedTimeline.id, projectKnowledgeSelectedIds.value);
+    projectKnowledgeSelectedIds.value = [];
+    await fetchProjectKnowledgeDocuments();
+    await fetchProjectKnowledgeEvents();
+    toast.success('批次刪除完成');
+  } catch (err: unknown) {
+    toast.error(getApiErrorMessage(err, '批次刪除失敗'));
+  }
+};
+
+const batchReindexProjectKnowledge = async () => {
+  if (!props.selectedTimeline || projectKnowledgeSelectedIds.value.length === 0) return;
+  try {
+    await timelineService.batchReindexKnowledgeDocuments(props.selectedTimeline.id, projectKnowledgeSelectedIds.value);
+    await fetchProjectKnowledgeDocuments();
+    await fetchProjectKnowledgeEvents();
+    toast.success('批次重建完成');
+  } catch (err: unknown) {
+    toast.error(getApiErrorMessage(err, '批次重建失敗'));
+  }
+};
+
+const createKnowledgeBlobUrl = (blob: Blob) => URL.createObjectURL(blob);
+
+const downloadProjectKnowledgeDocument = async (document: KnowledgeDocumentItem) => {
+  if (!props.selectedTimeline) return;
+  try {
+    const res = await timelineService.downloadKnowledgeDocumentFile(document.id, props.selectedTimeline.id);
+    const blobUrl = createKnowledgeBlobUrl(res.data);
+    const anchor = window.document.createElement('a');
+    anchor.href = blobUrl;
+    anchor.download = document.original_filename || document.filename || `knowledge-${document.id}`;
+    window.document.body.appendChild(anchor);
+    anchor.click();
+    window.document.body.removeChild(anchor);
+    URL.revokeObjectURL(blobUrl);
+    await fetchProjectKnowledgeEvents();
+  } catch (err: unknown) {
+    toast.error(getApiErrorMessage(err, '下載檔案失敗'));
+  }
+};
+
+const previewProjectKnowledgeDocument = async (document: KnowledgeDocumentItem) => {
+  if (!props.selectedTimeline) return;
+  try {
+    const res = await timelineService.previewKnowledgeDocumentFile(document.id, props.selectedTimeline.id);
+    const blobUrl = createKnowledgeBlobUrl(res.data);
+    window.open(blobUrl, '_blank', 'noopener,noreferrer');
+    window.setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
+    await fetchProjectKnowledgeEvents();
+  } catch (err: unknown) {
+    toast.error(getApiErrorMessage(err, '預覽檔案失敗'));
+  }
+};
+
+watch(
+  () => props.selectedTimeline?.id,
+  async (timelineId) => {
+    if (!timelineId) return;
+    projectKnowledgeSelectedIds.value = [];
+    await fetchProjectKnowledgeDocuments();
+    await fetchProjectKnowledgeEvents();
+  },
+  { immediate: true },
+);
 </script>

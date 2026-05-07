@@ -35,7 +35,7 @@ def test_knowledge_documents_blueprint_flow(client, monkeypatch):
 
     monkeypatch.setattr(
         "blueprints.knowledge.upload_and_index_knowledge_document",
-        lambda user_id, file_storage: {
+        lambda user_id, file_storage, project_id=None: {
             "message": "文件上傳與索引完成",
             "document": {"id": 10, "status": "ready", "filename": file_storage.filename},
             "chunk_count": 1,
@@ -43,7 +43,7 @@ def test_knowledge_documents_blueprint_flow(client, monkeypatch):
     )
     monkeypatch.setattr(
         "blueprints.knowledge.list_knowledge_documents",
-        lambda user_id, limit, offset: {
+        lambda user_id, limit, offset, project_id=None, q=None, sort="created_desc", status=None: {
             "message": "知識文件列表",
             "documents": [{"id": 10, "filename": "doc.md", "status": "ready"}],
             "meta": {"limit": limit, "offset": offset, "count": 1},
@@ -51,11 +51,18 @@ def test_knowledge_documents_blueprint_flow(client, monkeypatch):
     )
     monkeypatch.setattr(
         "blueprints.knowledge.delete_knowledge_document",
-        lambda user_id, document_id: {"message": "知識文件已刪除", "document_id": document_id},
+        lambda user_id, document_id, project_id=None: {
+            "message": "知識文件已刪除",
+            "document_id": document_id,
+        },
     )
     monkeypatch.setattr(
         "blueprints.knowledge.reindex_knowledge_document",
-        lambda user_id, document_id: {"message": "文件已重新建立索引", "document_id": document_id, "chunk_count": 2},
+        lambda user_id, document_id, project_id=None: {
+            "message": "文件已重新建立索引",
+            "document_id": document_id,
+            "chunk_count": 2,
+        },
     )
 
     upload = client.post(

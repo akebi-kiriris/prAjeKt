@@ -1,18 +1,27 @@
 import hashlib
 import os
+import uuid
 from io import BytesIO
 from typing import Any
+
+from flask import current_app
 
 from models import db
 from repositories.knowledge_repository import (
     count_knowledge_chunks_for_document,
     create_knowledge_document,
+    create_knowledge_document_event,
+    delete_knowledge_document as delete_knowledge_document_record,
     delete_knowledge_document_for_user,
     get_knowledge_document_by_id,
+    get_knowledge_document_by_project_id,
     get_knowledge_document_by_sha256,
+    list_knowledge_document_events,
     list_knowledge_documents_for_user,
     replace_knowledge_chunks_for_document,
+    soft_delete_knowledge_document,
     update_knowledge_document_status,
+    update_knowledge_document_status_by_id,
 )
 from services.embedding_service import EmbeddingOperationError, GeminiEmbeddingService
 from services.text_splitter_service import TextSplitterOperationError, TextSplitterService
@@ -95,13 +104,18 @@ def _decode_text_content(filename: str, payload: bytes) -> str:
     raise KnowledgeOperationError("不支援的檔案格式", 400)
 
 
-def _doc_to_dict(document):
+def _doc_to_dict(document, chunk_count=None):
     return {
         "id": document.id,
         "filename": document.filename,
+        "project_id": getattr(document, "project_id", None),
         "mime_type": document.mime_type,
+        "file_path": document.file_path,
+        "storage_key": document.storage_key,
+        "original_filename": document.original_filename,
         "size_bytes": document.size_bytes,
         "has_source_text": bool(document.source_text),
+        "chunk_count": chunk_count,
         "sha256": document.sha256,
         "status": document.status,
         "error_message": document.error_message,
@@ -110,16 +124,60 @@ def _doc_to_dict(document):
     }
 
 
-def upload_and_index_knowledge_document(user_id, file_storage):
+def _event_to_dict(event):
+    return {
+        "id": event.id,
+        "document_id": event.document_id,
+        "project_id": event.project_id,
+        "actor_user_id": event.actor_user_id,
+        "event_type": event.event_type,
+        "event_payload": event.event_payload or {},
+        "created_at": event.created_at.isoformat() + "Z" if event.created_at else None,
+    }
+
+
+def _resolve_project_storage_path(project_id: int, filename: str):
+    upload_root = current_app.config.get("UPLOAD_FOLDER") or os.path.join(os.path.dirname(__file__), "..", "uploads")
+    ext = _extract_extension(filename)
+    token = uuid.uuid4().hex
+    safe_name = f"{token}.{ext}" if ext else token
+    storage_key = f"project_knowledge/{project_id}/{safe_name}"
+    abs_path = os.path.join(upload_root, "project_knowledge", str(project_id), safe_name)
+    return storage_key, abs_path
+
+
+def _save_project_file(project_id: int, filename: str, payload: bytes):
+    storage_key, abs_path = _resolve_project_storage_path(project_id=project_id, filename=filename)
+    os.makedirs(os.path.dirname(abs_path), exist_ok=True)
+    with open(abs_path, "wb") as fh:
+        fh.write(payload)
+    return storage_key, abs_path
+
+
+def _delete_physical_file(file_path: str | None):
+    if not file_path:
+        return
+    try:
+        if os.path.exists(file_path):
+            os.remove(file_path)
+    except Exception:
+        pass
+
+
+def upload_and_index_knowledge_document(user_id, file_storage, project_id=None):
     content_bytes = _read_uploaded_file(file_storage)
     filename = str(file_storage.filename).strip()
     mime_type = getattr(file_storage, "mimetype", None)
     sha256 = hashlib.sha256(content_bytes).hexdigest()
 
-    if get_knowledge_document_by_sha256(user_id=user_id, sha256=sha256):
+    if project_id is None and get_knowledge_document_by_sha256(user_id=user_id, sha256=sha256):
         raise KnowledgeOperationError("相同內容的文件已存在", 409)
 
     text_content = _decode_text_content(filename, content_bytes)
+    storage_key = None
+    file_path = None
+    if project_id is not None:
+        storage_key, file_path = _save_project_file(project_id=project_id, filename=filename, payload=content_bytes)
 
     splitter = TextSplitterService()
     embedder = GeminiEmbeddingService()
@@ -127,16 +185,29 @@ def upload_and_index_knowledge_document(user_id, file_storage):
     try:
         document = create_knowledge_document(
             user_id=user_id,
+            project_id=project_id,
             filename=filename,
             sha256=sha256,
             status="uploaded",
             mime_type=mime_type,
             size_bytes=len(content_bytes),
             source_text=text_content,
+            file_path=file_path,
+            storage_key=storage_key,
+            original_filename=filename,
         )
+        if project_id is not None:
+            create_knowledge_document_event(
+                document_id=document.id,
+                project_id=project_id,
+                actor_user_id=user_id,
+                event_type="upload",
+                event_payload={"filename": filename, "size_bytes": len(content_bytes)},
+            )
         db.session.commit()
     except Exception as exc:
         db.session.rollback()
+        _delete_physical_file(file_path)
         raise KnowledgeOperationError("建立知識文件失敗", 500) from exc
 
     document_id = document.id
@@ -169,6 +240,7 @@ def upload_and_index_knowledge_document(user_id, file_storage):
             user_id=user_id,
             document_id=document_id,
             chunk_rows=chunk_rows,
+            project_id=project_id,
         )
         update_knowledge_document_status(
             user_id=user_id,
@@ -186,6 +258,15 @@ def upload_and_index_knowledge_document(user_id, file_storage):
             error_message=str(exc),
         )
         db.session.commit()
+        if project_id is not None:
+            create_knowledge_document_event(
+                document_id=document_id,
+                project_id=project_id,
+                actor_user_id=user_id,
+                event_type="index_failed",
+                event_payload={"error_message": str(exc)},
+            )
+            db.session.commit()
         raise KnowledgeOperationError(str(exc), getattr(exc, "status_code", 422))
     except Exception as exc:
         db.session.rollback()
@@ -196,21 +277,66 @@ def upload_and_index_knowledge_document(user_id, file_storage):
             error_message="索引流程失敗",
         )
         db.session.commit()
+        if project_id is not None:
+            create_knowledge_document_event(
+                document_id=document_id,
+                project_id=project_id,
+                actor_user_id=user_id,
+                event_type="index_failed",
+                event_payload={"error_message": "索引流程失敗"},
+            )
+            db.session.commit()
         raise KnowledgeOperationError("索引流程失敗", 500) from exc
+
+    if project_id is not None:
+        create_knowledge_document_event(
+            document_id=document_id,
+            project_id=project_id,
+            actor_user_id=user_id,
+            event_type="indexed",
+            event_payload={"chunk_count": len(chunks)},
+        )
+        db.session.commit()
 
     refreshed = get_knowledge_document_by_id(user_id=user_id, document_id=document_id)
     return {
         "message": "文件上傳與索引完成",
         "document": _doc_to_dict(refreshed),
-        "chunk_count": count_knowledge_chunks_for_document(user_id=user_id, document_id=document_id),
+        "chunk_count": count_knowledge_chunks_for_document(user_id=user_id, document_id=document_id, project_id=project_id),
     }
 
 
-def list_knowledge_documents(user_id, limit=50, offset=0):
-    docs = list_knowledge_documents_for_user(user_id=user_id, limit=limit, offset=offset)
+def list_knowledge_documents(
+    user_id,
+    limit=50,
+    offset=0,
+    project_id=None,
+    q=None,
+    sort="created_desc",
+    status=None,
+):
+    docs = list_knowledge_documents_for_user(
+        user_id=user_id,
+        limit=limit,
+        offset=offset,
+        project_id=project_id,
+        query_text=q,
+        sort=sort,
+        status=status,
+    )
     return {
         "message": "知識文件列表",
-        "documents": [_doc_to_dict(document) for document in docs],
+        "documents": [
+            _doc_to_dict(
+                document,
+                chunk_count=count_knowledge_chunks_for_document(
+                    user_id=user_id,
+                    document_id=document.id,
+                    project_id=project_id,
+                ),
+            )
+            for document in docs
+        ],
         "meta": {
             "limit": limit,
             "offset": offset,
@@ -219,12 +345,30 @@ def list_knowledge_documents(user_id, limit=50, offset=0):
     }
 
 
-def delete_knowledge_document(user_id, document_id):
-    if not get_knowledge_document_by_id(user_id=user_id, document_id=document_id):
+def _resolve_document_for_operation(user_id, document_id, project_id=None):
+    if project_id is not None:
+        return get_knowledge_document_by_project_id(document_id=document_id, project_id=project_id)
+    return get_knowledge_document_by_id(user_id=user_id, document_id=document_id)
+
+
+def delete_knowledge_document(user_id, document_id, project_id=None):
+    document = _resolve_document_for_operation(user_id=user_id, document_id=document_id, project_id=project_id)
+    if document is None:
         raise KnowledgeOperationError("找不到知識文件", 404)
 
     try:
-        delete_knowledge_document_for_user(user_id=user_id, document_id=document_id)
+        if project_id is not None:
+            soft_delete_knowledge_document(document)
+            _delete_physical_file(document.file_path)
+            create_knowledge_document_event(
+                document_id=document.id,
+                project_id=project_id,
+                actor_user_id=user_id,
+                event_type="delete",
+                event_payload={"filename": document.filename},
+            )
+        else:
+            delete_knowledge_document_for_user(user_id=user_id, document_id=document_id)
         db.session.commit()
     except Exception as exc:
         db.session.rollback()
@@ -233,8 +377,8 @@ def delete_knowledge_document(user_id, document_id):
     return {"message": "知識文件已刪除", "document_id": document_id}
 
 
-def reindex_knowledge_document(user_id, document_id):
-    document = get_knowledge_document_by_id(user_id=user_id, document_id=document_id)
+def reindex_knowledge_document(user_id, document_id, project_id=None):
+    document = _resolve_document_for_operation(user_id=user_id, document_id=document_id, project_id=project_id)
     if document is None:
         raise KnowledgeOperationError("找不到知識文件", 404)
 
@@ -242,15 +386,17 @@ def reindex_knowledge_document(user_id, document_id):
     if not raw_text:
         raise KnowledgeOperationError("文件缺少原始內容，請重新上傳後再重建索引", 400)
 
+    owner_user_id = int(document.user_id)
+    resolved_project_id = getattr(document, "project_id", None)
     splitter = TextSplitterService()
     embedder = GeminiEmbeddingService()
 
     try:
-        update_knowledge_document_status(user_id=user_id, document_id=document_id, status="indexing")
+        update_knowledge_document_status_by_id(document_id=document_id, status="indexing")
         db.session.commit()
 
         chunks = splitter.split_document_content(
-            user_id=user_id,
+            user_id=owner_user_id,
             document_id=document_id,
             raw_text=raw_text,
         )
@@ -269,12 +415,12 @@ def reindex_knowledge_document(user_id, document_id):
             )
 
         replace_knowledge_chunks_for_document(
-            user_id=user_id,
+            user_id=owner_user_id,
             document_id=document_id,
             chunk_rows=chunk_rows,
+            project_id=resolved_project_id,
         )
-        update_knowledge_document_status(
-            user_id=user_id,
+        update_knowledge_document_status_by_id(
             document_id=document_id,
             status="ready",
             error_message=None,
@@ -282,8 +428,7 @@ def reindex_knowledge_document(user_id, document_id):
         db.session.commit()
     except (TextSplitterOperationError, EmbeddingOperationError, KnowledgeOperationError) as exc:
         db.session.rollback()
-        update_knowledge_document_status(
-            user_id=user_id,
+        update_knowledge_document_status_by_id(
             document_id=document_id,
             status="failed",
             error_message=str(exc),
@@ -292,8 +437,7 @@ def reindex_knowledge_document(user_id, document_id):
         raise KnowledgeOperationError(str(exc), getattr(exc, "status_code", 422))
     except Exception as exc:
         db.session.rollback()
-        update_knowledge_document_status(
-            user_id=user_id,
+        update_knowledge_document_status_by_id(
             document_id=document_id,
             status="failed",
             error_message="重建索引失敗",
@@ -301,8 +445,92 @@ def reindex_knowledge_document(user_id, document_id):
         db.session.commit()
         raise KnowledgeOperationError("重建索引失敗", 500) from exc
 
+    if project_id is not None:
+        create_knowledge_document_event(
+            document_id=document_id,
+            project_id=project_id,
+            actor_user_id=user_id,
+            event_type="reindex",
+            event_payload={"chunk_count": len(chunks)},
+        )
+        db.session.commit()
+
     return {
         "message": "文件已重新建立索引",
         "document_id": document_id,
-        "chunk_count": count_knowledge_chunks_for_document(user_id=user_id, document_id=document_id),
+        "chunk_count": count_knowledge_chunks_for_document(
+            user_id=owner_user_id,
+            document_id=document_id,
+            project_id=resolved_project_id,
+        ),
+    }
+
+
+def batch_delete_knowledge_documents(user_id, project_id, document_ids):
+    results = []
+    for raw_id in document_ids:
+        document_id = int(raw_id)
+        try:
+            delete_knowledge_document(user_id=user_id, document_id=document_id, project_id=project_id)
+            results.append({"document_id": document_id, "success": True})
+        except KnowledgeOperationError as err:
+            results.append({"document_id": document_id, "success": False, "error": err.message})
+    success_count = len([item for item in results if item["success"]])
+    return {
+        "message": "批次刪除完成",
+        "project_id": project_id,
+        "results": results,
+        "meta": {"total": len(results), "success": success_count, "failed": len(results) - success_count},
+    }
+
+
+def batch_reindex_knowledge_documents(user_id, project_id, document_ids):
+    results = []
+    for raw_id in document_ids:
+        document_id = int(raw_id)
+        try:
+            payload = reindex_knowledge_document(user_id=user_id, document_id=document_id, project_id=project_id)
+            create_knowledge_document_event(
+                document_id=document_id,
+                project_id=project_id,
+                actor_user_id=user_id,
+                event_type="reindex",
+                event_payload={"chunk_count": payload.get("chunk_count", 0)},
+            )
+            db.session.commit()
+            results.append({"document_id": document_id, "success": True, "chunk_count": payload.get("chunk_count", 0)})
+        except KnowledgeOperationError as err:
+            results.append({"document_id": document_id, "success": False, "error": err.message})
+    success_count = len([item for item in results if item["success"]])
+    return {
+        "message": "批次重建完成",
+        "project_id": project_id,
+        "results": results,
+        "meta": {"total": len(results), "success": success_count, "failed": len(results) - success_count},
+    }
+
+
+def get_project_knowledge_document_file(user_id, project_id, document_id, event_type="download"):
+    document = _resolve_document_for_operation(user_id=user_id, document_id=document_id, project_id=project_id)
+    if document is None or document.deleted_at is not None:
+        raise KnowledgeOperationError("找不到知識文件", 404)
+    if not document.file_path or not os.path.exists(document.file_path):
+        raise KnowledgeOperationError("檔案不存在", 404)
+    create_knowledge_document_event(
+        document_id=document.id,
+        project_id=project_id,
+        actor_user_id=user_id,
+        event_type=event_type,
+        event_payload={"filename": document.filename},
+    )
+    db.session.commit()
+    return document
+
+
+def list_project_knowledge_events(project_id, limit=50, offset=0):
+    events = list_knowledge_document_events(project_id=project_id, limit=limit, offset=offset)
+    return {
+        "message": "專案檔案操作紀錄",
+        "events": [_event_to_dict(event) for event in events],
+        "meta": {"limit": limit, "offset": offset, "count": len(events)},
     }
