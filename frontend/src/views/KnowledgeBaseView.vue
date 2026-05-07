@@ -162,10 +162,10 @@
 
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
-import { isAxiosError } from 'axios';
 import { toast } from 'vue-sonner';
 import { timelineService } from '../services/timelineService';
-import type { ApiErrorPayload, KnowledgeDocumentItem } from '../types';
+import { getApiErrorMessage } from '../utils/apiError';
+import type { KnowledgeDocumentItem } from '../types';
 import { formatDateTime, formatFileSize, getFileIcon } from '../utils/formatters';
 import { useConfirm } from '../composables/useConfirm';
 
@@ -183,13 +183,6 @@ const sort = ref<'created_desc' | 'created_asc' | 'name_asc' | 'name_desc' | 'st
 const limit = 20;
 const offset = ref(0);
 const totalCount = ref(0);
-
-const getApiErrorMessage = (err: unknown, fallback: string) => {
-  if (isAxiosError<ApiErrorPayload>(err)) {
-    return err.response?.data?.error || fallback;
-  }
-  return fallback;
-};
 
 const loadDocuments = async () => {
   loading.value = true;

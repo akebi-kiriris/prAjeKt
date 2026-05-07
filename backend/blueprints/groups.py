@@ -1,6 +1,8 @@
-﻿from flask import Blueprint, request, jsonify, current_app
+from flask import Blueprint, request, jsonify, current_app
 import os
 from flask_jwt_extended import jwt_required, get_jwt_identity
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+from blueprints.validation import error_from_exception, error_response, validate_payload_or_400
 from services.group_service import (
     GroupOperationError,
     count_group_messages_for_snapshot,
@@ -23,11 +25,45 @@ from services.group_service import (
 groups_bp = Blueprint('groups', __name__)
 
 
+class GroupCreatePayload(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    group_name: str
+
+
+class GroupJoinPayload(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    invite_code: str
+
+
+class GroupMessagePayload(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    content: str
+
+
+class GroupSnapshotPayload(BaseModel):
+    model_config = ConfigDict(extra='forbid', populate_by_name=True)
+    window_days: int | None = None
+    async_flag: bool | int | str = Field(default=False, alias='async')
+
+    @field_validator('window_days')
+    @classmethod
+    def validate_window_days(cls, value):
+        if value is None:
+            return value
+        if value <= 0:
+            raise ValueError('window_days 必須為正整數')
+        return value
+
+
 def _get_json_dict_or_400():
     data = request.get_json(silent=True)
     if not isinstance(data, dict):
-        return None, (jsonify({'error': '請提供正確的 JSON 物件'}), 400)
+        return None, error_response("BAD_REQUEST", "請提供正確的 JSON 物件", 400)
     return data, None
+
+
+def _validate_payload_or_400(model_cls, payload):
+    return validate_payload_or_400(model_cls, payload, by_alias=True)
 
 
 def _parse_window_days(value):
@@ -67,6 +103,9 @@ def create_group():
     data, error = _get_json_dict_or_400()
     if error:
         return error
+    data, error = _validate_payload_or_400(GroupCreatePayload, data)
+    if error:
+        return error
 
     try:
         payload = create_group_for_user(user_id, data.get('group_name', ''))
@@ -76,7 +115,7 @@ def create_group():
             'invite_code': payload['invite_code'],
         }), 201
     except GroupOperationError as err:
-        return jsonify({'error': err.message}), err.status_code
+        return error_from_exception(err)
 
 @groups_bp.route('/join', methods=['POST'])
 @jwt_required()
@@ -86,12 +125,15 @@ def join_group():
     data, error = _get_json_dict_or_400()
     if error:
         return error
+    data, error = _validate_payload_or_400(GroupJoinPayload, data)
+    if error:
+        return error
 
     try:
         join_group_by_invite_code(user_id, data.get('invite_code', ''))
         return jsonify({'message': '成功加入群組'}), 200
     except GroupOperationError as err:
-        return jsonify({'error': err.message}), err.status_code
+        return error_from_exception(err)
 
 @groups_bp.route('/<int:group_id>/leave', methods=['POST'])
 @jwt_required()
@@ -103,7 +145,7 @@ def leave_group(group_id):
         leave_group_for_user(group_id, user_id)
         return jsonify({'message': '已離開群組'}), 200
     except GroupOperationError as err:
-        return jsonify({'error': err.message}), err.status_code
+        return error_from_exception(err)
 
 @groups_bp.route('/<int:group_id>/members', methods=['GET'])
 @jwt_required()
@@ -116,7 +158,7 @@ def get_group_members(group_id):
             raise GroupOperationError('您不是該群組成員', 403)
         return jsonify(list_group_members_payload(group_id)), 200
     except GroupOperationError as err:
-        return jsonify({'error': err.message}), err.status_code
+        return error_from_exception(err)
 
 @groups_bp.route('/<int:group_id>/messages', methods=['GET'])
 @jwt_required()
@@ -127,7 +169,7 @@ def get_group_messages(group_id):
     try:
         return jsonify(list_group_messages_for_member(group_id, user_id)), 200
     except GroupOperationError as err:
-        return jsonify({'error': err.message}), err.status_code
+        return error_from_exception(err)
 
 @groups_bp.route('/<int:group_id>/messages', methods=['POST'])
 @jwt_required()
@@ -137,12 +179,15 @@ def send_message(group_id):
     data, error = _get_json_dict_or_400()
     if error:
         return error
+    data, error = _validate_payload_or_400(GroupMessagePayload, data)
+    if error:
+        return error
 
     try:
         message_id = send_group_message_for_member(group_id, user_id, data.get('content', ''))
         return jsonify({'message': '訊息已發送', 'message_id': message_id}), 201
     except GroupOperationError as err:
-        return jsonify({'error': err.message}), err.status_code
+        return error_from_exception(err)
 
 
 @groups_bp.route('/<int:group_id>/ai-snapshot', methods=['POST'])
@@ -150,9 +195,12 @@ def send_message(group_id):
 def generate_ai_snapshot(group_id):
     """產生群組知識快照（小量同步，大量可背景執行）"""
     user_id = int(get_jwt_identity())
-    data = request.get_json(silent=True) or {}
-    if not isinstance(data, dict):
-        return jsonify({'error': '請提供正確的 JSON 物件'}), 400
+    data, error = _get_json_dict_or_400()
+    if error:
+        return error
+    data, error = _validate_payload_or_400(GroupSnapshotPayload, data)
+    if error:
+        return error
 
     try:
         if not is_group_member(group_id, user_id):
@@ -182,7 +230,7 @@ def generate_ai_snapshot(group_id):
         )
         return jsonify(snapshot), 200
     except GroupOperationError as err:
-        return jsonify({'error': err.message}), err.status_code
+        return error_from_exception(err)
 
 
 @groups_bp.route('/snapshot-jobs/<string:job_id>', methods=['GET'])
@@ -195,7 +243,7 @@ def get_ai_snapshot_job(job_id):
         payload = get_snapshot_job_status(job_id, requester_user_id=user_id)
         return jsonify(payload), 200
     except GroupOperationError as err:
-        return jsonify({'error': err.message}), err.status_code
+        return error_from_exception(err)
 
 
 @groups_bp.route('/<int:group_id>/ai-snapshot/latest', methods=['GET'])
@@ -208,4 +256,5 @@ def get_latest_ai_snapshot(group_id):
         payload = get_latest_group_snapshot_for_member(group_id, user_id)
         return jsonify(payload), 200
     except GroupOperationError as err:
-        return jsonify({'error': err.message}), err.status_code
+        return error_from_exception(err)
+

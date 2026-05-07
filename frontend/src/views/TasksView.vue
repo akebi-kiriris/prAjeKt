@@ -546,25 +546,18 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue';
-import { isAxiosError } from 'axios';
 import { toast } from 'vue-sonner';
 import { storeToRefs } from 'pinia';
 import { useTaskStore } from '../stores/tasks';
 import { taskService } from '../services/taskService';
 import { timelineService } from '../services/timelineService';
 import { formatDate, formatDateTime, formatFileSize, isImageFile, getFileIcon } from '../utils/formatters';
+import { getApiErrorMessage } from '../utils/apiError';
 import { downloadFileFromUrl, loadTaskDetailResources } from '../utils/taskDetails';
 import { useConfirm } from '../composables/useConfirm';
-import type { Task, TaskComment, TaskCommentSummary, TaskFile, Subtask, TaskMember, SearchUserResult, ApiErrorPayload, ResourceConflictResponse } from '../types';
+import type { Task, TaskComment, TaskCommentSummary, TaskFile, Subtask, TaskMember, SearchUserResult, ResourceConflictResponse } from '../types';
 
 const { confirm } = useConfirm();
-
-const getApiErrorMessage = (error: unknown, fallback: string) => {
-  if (isAxiosError<ApiErrorPayload>(error)) {
-    return error.response?.data?.error || fallback;
-  }
-  return fallback;
-};
 
 const store = useTaskStore();
 const { tasks } = storeToRefs(store);

@@ -155,10 +155,10 @@
 </template>
 
 <script setup lang="ts">
-import axios from 'axios';
 import { ref } from 'vue';
 import { useRouter } from 'vue-router';
 import api from '../services/api';
+import { getApiErrorMessage } from '../utils/apiError';
 import type { RegisterForm } from '../types';
 
 const router = useRouter();
@@ -201,11 +201,7 @@ const handleRegister = async (): Promise<void> => {
       router.push('/login');
     }, 2000);
   } catch (error: unknown) {
-    if (axios.isAxiosError(error)) {
-      errorMessage.value = (error.response?.data as { error?: string } | undefined)?.error || '註冊失敗，請稍後再試';
-    } else {
-      errorMessage.value = '註冊失敗，請稍後再試';
-    }
+    errorMessage.value = getApiErrorMessage(error, '註冊失敗，請稍後再試');
   } finally {
     loading.value = false;
   }

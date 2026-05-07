@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia';
-import axios from 'axios';
 import type { User } from '../types';
 import api from '../services/api';
+import { getApiErrorCode, getApiErrorMessage, shouldRedirectToLogin } from '../utils/apiError';
 
 interface AuthState {
   user: User | null;
@@ -13,13 +13,6 @@ interface AuthResult {
   success: boolean;
   error?: string;
 }
-
-const getErrorMessage = (error: unknown, fallback: string): string => {
-  if (axios.isAxiosError(error)) {
-    return (error.response?.data as { error?: string } | undefined)?.error || fallback;
-  }
-  return fallback;
-};
 
 export const useAuthStore = defineStore('auth', {
   state: (): AuthState => ({
@@ -45,7 +38,7 @@ export const useAuthStore = defineStore('auth', {
         await this.fetchCurrentUser();
         return { success: true };
       } catch (error) {
-        return { success: false, error: getErrorMessage(error, '登入失敗') };
+        return { success: false, error: getApiErrorMessage(error, '登入失敗') };
       }
     },
 
@@ -54,7 +47,7 @@ export const useAuthStore = defineStore('auth', {
         await api.post('/auth/register', userData);
         return { success: true };
       } catch (error) {
-        return { success: false, error: getErrorMessage(error, '註冊失敗') };
+        return { success: false, error: getApiErrorMessage(error, '註冊失敗') };
       }
     },
 
@@ -78,7 +71,14 @@ export const useAuthStore = defineStore('auth', {
         this.user = response.data as User;
         return { success: true };
       } catch (error) {
-        return { success: false, error: getErrorMessage(error, '取得使用者資料失敗') };
+        if (shouldRedirectToLogin(getApiErrorCode(error))) {
+          this.user = null;
+          this.accessToken = null;
+          this.refreshToken = null;
+          localStorage.removeItem('access_token');
+          localStorage.removeItem('refresh_token');
+        }
+        return { success: false, error: getApiErrorMessage(error, '取得使用者資料失敗') };
       }
     },
   },

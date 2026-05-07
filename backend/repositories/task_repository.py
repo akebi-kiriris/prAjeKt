@@ -36,6 +36,16 @@ def get_active_tasks_by_ids(task_ids):
     return Task.query.filter(Task.task_id.in_(task_ids), Task.deleted_at.is_(None)).all()
 
 
+def get_active_task_ids_for_timeline(timeline_id):
+    return [
+        task.task_id
+        for task in Task.query.filter(
+            Task.timeline_id == timeline_id,
+            Task.deleted_at.is_(None),
+        ).all()
+    ]
+
+
 def get_task_member(task_id, user_id):
     return TaskUser.query.filter_by(task_id=task_id, user_id=user_id).first()
 

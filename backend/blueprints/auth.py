@@ -1,5 +1,7 @@
 from flask import Blueprint, request, jsonify, session
 from flask_jwt_extended import create_access_token, create_refresh_token, jwt_required, get_jwt_identity
+from pydantic import BaseModel, ConfigDict, field_validator
+from blueprints.validation import error_from_exception, error_response, validate_payload_or_400
 from services.auth_service import (
     AuthOperationError,
     auth_user_to_dict,
@@ -12,11 +14,36 @@ from services.auth_service import (
 auth_bp = Blueprint('auth', __name__)
 
 
+class RegisterPayload(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    name: str
+    username: str
+    email: str
+    password: str
+
+    @field_validator('name', 'username', 'email', 'password')
+    @classmethod
+    def validate_required_text(cls, value):
+        if not str(value).strip():
+            raise ValueError('欄位不可為空')
+        return value
+
+
+class LoginPayload(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    email: str
+    password: str
+
+
 def _get_json_dict_or_400():
     data = request.get_json(silent=True)
     if not isinstance(data, dict):
-        return None, (jsonify({'error': '請提供正確的 JSON 物件'}), 400)
+        return None, error_response("BAD_REQUEST", "請提供正確的 JSON 物件", 400)
     return data, None
+
+
+def _validate_payload_or_400(model_cls, payload):
+    return validate_payload_or_400(model_cls, payload)
 
 @auth_bp.route('/register', methods=['POST'])
 def register():
@@ -24,12 +51,15 @@ def register():
     data, error = _get_json_dict_or_400()
     if error:
         return error
+    data, error = _validate_payload_or_400(RegisterPayload, data)
+    if error:
+        return error
 
     try:
         user_id = register_user(data)
         return jsonify({'message': '註冊成功', 'user_id': user_id}), 201
     except AuthOperationError as err:
-        return jsonify({'error': err.message}), err.status_code
+        return error_from_exception(err)
 
 @auth_bp.route('/login', methods=['POST'])
 def login():
@@ -37,11 +67,14 @@ def login():
     data, error = _get_json_dict_or_400()
     if error:
         return error
+    data, error = _validate_payload_or_400(LoginPayload, data)
+    if error:
+        return error
 
     try:
         user = authenticate_user(data.get('email'), data.get('password'))
     except AuthOperationError as err:
-        return jsonify({'error': err.message}), err.status_code
+        return error_from_exception(err)
     
     # 建立 JWT tokens
     access_token = create_access_token(identity=str(user.id))
@@ -70,7 +103,7 @@ def get_current_user():
         user = get_current_user_or_404(user_id)
         return jsonify(current_user_to_dict(user)), 200
     except AuthOperationError as err:
-        return jsonify({'error': err.message}), err.status_code
+        return error_from_exception(err)
     
 @auth_bp.route('/refresh', methods=['POST'])
 @jwt_required(refresh=True)

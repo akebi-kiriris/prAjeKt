@@ -63,6 +63,14 @@ class TimelineOperationError(Exception):
         self.status_code = status_code
 
 
+def _commit_or_raise_timeline_error(error_message):
+    try:
+        db.session.commit()
+    except Exception as exc:
+        db.session.rollback()
+        raise TimelineOperationError(error_message, 500) from exc
+
+
 def find_unknown_fields(payload, allowed_fields):
     return sorted(set(payload.keys()) - allowed_fields)
 
@@ -388,24 +396,16 @@ def update_timeline_for_member(timeline_id, data):
     if 'remark' in data:
         timeline.remark = data['remark']
 
-    try:
-        db.session.commit()
-    except Exception as exc:
-        db.session.rollback()
-        raise TimelineOperationError('專案更新失敗，請稍後再試', 500) from exc
+    _commit_or_raise_timeline_error('專案更新失敗，請稍後再試')
 
 
 def soft_delete_timeline_for_owner(timeline_id):
     timeline = get_active_timeline_or_404(timeline_id)
 
-    try:
-        deleted_at = _utcnow_naive()
-        timeline.deleted_at = deleted_at
-        soft_delete_tasks_by_timeline_id(timeline_id, deleted_at)
-        db.session.commit()
-    except Exception as exc:
-        db.session.rollback()
-        raise TimelineOperationError('專案刪除失敗，請稍後再試', 500) from exc
+    deleted_at = _utcnow_naive()
+    timeline.deleted_at = deleted_at
+    soft_delete_tasks_by_timeline_id(timeline_id, deleted_at)
+    _commit_or_raise_timeline_error('專案刪除失敗，請稍後再試')
 
 
 def list_timeline_tasks_detail(timeline_id, viewer_user_id=None):
@@ -1291,12 +1291,8 @@ def update_timeline_remark_for_member(timeline_id, remark):
     if not isinstance(remark, str):
         raise TimelineOperationError('備註必須是字串', 400)
 
-    try:
-        timeline.remark = remark
-        db.session.commit()
-    except Exception as exc:
-        db.session.rollback()
-        raise TimelineOperationError('備註更新失敗，請稍後再試', 500) from exc
+    timeline.remark = remark
+    _commit_or_raise_timeline_error('備註更新失敗，請稍後再試')
 
 
 def search_timeline_user_by_email(timeline_id, requester_user_id, email):
@@ -1368,12 +1364,8 @@ def remove_timeline_member_for_owner(timeline_id, member_user_id, operator_user_
     if not member or member.role == 0:
         raise TimelineOperationError('找不到該成員，或無法移除負責人', 404)
 
-    try:
-        db.session.delete(member)
-        db.session.commit()
-    except Exception as exc:
-        db.session.rollback()
-        raise TimelineOperationError('成員移除失敗，請稍後再試', 500) from exc
+    db.session.delete(member)
+    _commit_or_raise_timeline_error('成員移除失敗，請稍後再試')
 
 
 def batch_create_tasks_for_timeline(timeline_id, user_id, task_payloads):

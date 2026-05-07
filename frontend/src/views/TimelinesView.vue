@@ -96,7 +96,6 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
-import type { AxiosError } from 'axios';
 import { toast } from 'vue-sonner';
 import { storeToRefs } from 'pinia';
 import { useTimelineStore } from '../stores/timelines';
@@ -104,8 +103,8 @@ import TimelineHeader from '../components/timelines/TimelineHeader.vue';
 import TimelineViewModes from '../components/timelines/TimelineViewModes.vue';
 import TimelineDetailDialog from '../components/timelines/TimelineDetailDialog.vue';
 import { useConfirm } from '../composables/useConfirm';
+import { getApiErrorMessage } from '../utils/apiError';
 import type {
-  ApiErrorPayload,
   CreateTimelinePayload,
   UpdateTimelinePayload,
   Task,
@@ -196,8 +195,7 @@ const deleteTimeline = async (id: number) => {
     await timelineStore.removeTimeline(id);
     toast.success('專案刪除成功');
   } catch (error) {
-    const message = (error as AxiosError<ApiErrorPayload>).response?.data?.error;
-    toast.error(message || '刪除失敗');
+    toast.error(getApiErrorMessage(error, '刪除失敗'));
   }
 };
 
@@ -225,8 +223,7 @@ const handleSubmit = async () => {
     }
     closeModal();
   } catch (error) {
-    const message = (error as AxiosError<ApiErrorPayload>).response?.data?.error;
-    toast.error(message || '操作失敗');
+    toast.error(getApiErrorMessage(error, '操作失敗'));
   }
 };
 
@@ -257,8 +254,7 @@ const onDeleteTask = async (taskId: number) => {
       await viewTimeline(selectedTimeline.value);
     }
   } catch (error) {
-    const message = (error as AxiosError<ApiErrorPayload>).response?.data?.error;
-    toast.error(message || '刪除任務失敗');
+    toast.error(getApiErrorMessage(error, '刪除任務失敗'));
   }
 };
 

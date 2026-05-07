@@ -1,6 +1,7 @@
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import jwt_required
 
+from blueprints.validation import error_from_exception, error_response
 from services.copilot_service import CopilotOperationError, execute_copilot_mcp_request
 
 
@@ -10,7 +11,7 @@ copilot_bp = Blueprint('copilot', __name__)
 def _get_json_dict_or_400():
     data = request.get_json(silent=True)
     if not isinstance(data, dict):
-        return None, (jsonify({'error': '請提供正確的 JSON 物件'}), 400)
+        return None, error_response("BAD_REQUEST", "請提供正確的 JSON 物件", 400)
     return data, None
 
 
@@ -31,7 +32,7 @@ def execute_copilot_mcp():
 
     message = data.get('message')
     if not isinstance(message, str) or not message.strip():
-        return jsonify({'error': '請提供 message（自然語言需求）'}), 400
+        return error_response("BAD_REQUEST", "請提供 message（自然語言需求）", 400)
 
     context = data.get('context') if isinstance(data.get('context'), dict) else {}
     preferred_tool = data.get('preferred_tool') if isinstance(data.get('preferred_tool'), str) else None
@@ -49,4 +50,4 @@ def execute_copilot_mcp():
         )
         return jsonify(payload), 200
     except CopilotOperationError as err:
-        return jsonify({'error': err.message}), err.status_code
+        return error_from_exception(err)

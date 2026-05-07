@@ -1101,7 +1101,6 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue';
-import { isAxiosError } from 'axios';
 import { toast } from 'vue-sonner';
 import { taskService } from '../../services/taskService';
 import { timelineService } from '../../services/timelineService';
@@ -1109,6 +1108,7 @@ import { copilotService } from '../../services/copilotService';
 import { formatDate, formatDateTime, formatFileSize, isImageFile, getFileIcon } from '../../utils/formatters';
 import { downloadFileFromUrl, loadTaskDetailResourcesWithMembers } from '../../utils/taskDetails';
 import { useConfirm } from '../../composables/useConfirm';
+import { getApiErrorMessage } from '../../utils/apiError';
 import { mapToCreateTaskPayload } from '../../utils/payloadMappers';
 import type {
   TimelineDetailDialogProps,
@@ -1123,7 +1123,6 @@ import type {
   CreateTaskPayload,
   TimelineBatchCreateTasksResponse,
   TimelineBatchTaskPayload,
-  ApiErrorPayload,
   GenerateTasksResponse,
   AIPlanSuggestionResponse,
   CopilotMcpExecuteResponse,
@@ -1140,19 +1139,6 @@ import type {
 const { confirm } = useConfirm();
 
 const props = defineProps<TimelineDetailDialogProps>();
-
-const getApiErrorMessage = (error: unknown, fallback: string) => {
-  if (isAxiosError<ApiErrorPayload>(error)) {
-    if (error.code === 'ECONNABORTED') {
-      return '請求逾時，請稍後再試';
-    }
-    if (!error.response) {
-      return error.message || '網路連線異常，請稍後再試';
-    }
-    return error.response?.data?.error || fallback;
-  }
-  return fallback;
-};
 
 const getSourceReferenceLabel = (sourceType: SourceReference['source_type']) => {
   if (sourceType === 'timeline_task') return '歷史任務';

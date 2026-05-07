@@ -1,5 +1,6 @@
-﻿from flask import Blueprint, jsonify
+from flask import Blueprint, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
+from blueprints.validation import error_from_exception
 from services.notification_service import (
     NotificationOperationError,
     delete_notification_for_user,
@@ -40,7 +41,7 @@ def mark_as_read(notification_id):
         mark_notification_as_read(notification_id, user_id)
         return jsonify({'message': '已標記為已讀'}), 200
     except NotificationOperationError as err:
-        return jsonify({'error': err.message}), err.status_code
+        return error_from_exception(err)
 
 
 @notifications_bp.route('/read-all', methods=['PATCH'])
@@ -61,4 +62,5 @@ def delete_notification(notification_id):
         delete_notification_for_user(notification_id, user_id)
         return jsonify({'message': '通知已刪除'}), 200
     except NotificationOperationError as err:
-        return jsonify({'error': err.message}), err.status_code
+        return error_from_exception(err)
+

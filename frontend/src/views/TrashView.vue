@@ -93,13 +93,12 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
-import type { AxiosError } from 'axios';
 import { toast } from 'vue-sonner';
 import { trashService } from '../services/trashService';
 import type { TrashTask, TrashTimeline } from '../types';
 import { formatDateTimeCompact as formatDate, formatDateShort } from '../utils/formatters';
 import { useConfirm } from '../composables/useConfirm';
-import type { TrashErrorPayload } from '../types';
+import { getApiErrorMessage } from '../utils/apiError';
 
 const { confirm } = useConfirm();
 
@@ -125,8 +124,7 @@ const restoreTask = async (task: TrashTask) => {
     await trashService.restoreTask(task.task_id);
     tasks.value = tasks.value.filter(t => t.task_id !== task.task_id);
   } catch (err) {
-    const message = (err as AxiosError<TrashErrorPayload>).response?.data?.error;
-    toast.error(message || '還原失敗');
+    toast.error(getApiErrorMessage(err, '還原失敗'));
   }
 };
 
@@ -140,8 +138,7 @@ const permanentDeleteTask = async (task: TrashTask) => {
     await trashService.permanentDeleteTask(task.task_id);
     tasks.value = tasks.value.filter(t => t.task_id !== task.task_id);
   } catch (err) {
-    const message = (err as AxiosError<TrashErrorPayload>).response?.data?.error;
-    toast.error(message || '永久刪除失敗');
+    toast.error(getApiErrorMessage(err, '永久刪除失敗'));
   }
 };
 
@@ -150,8 +147,7 @@ const restoreTimeline = async (tl: TrashTimeline) => {
     await trashService.restoreTimeline(tl.id);
     timelines.value = timelines.value.filter(t => t.id !== tl.id);
   } catch (err) {
-    const message = (err as AxiosError<TrashErrorPayload>).response?.data?.error;
-    toast.error(message || '還原失敗');
+    toast.error(getApiErrorMessage(err, '還原失敗'));
   }
 };
 
@@ -166,8 +162,7 @@ const permanentDeleteTimeline = async (tl: TrashTimeline) => {
     // 重新 call API：cascade 同時刪除了底下所有任務，前端無法自行推算哪些要移除
     await loadTrash();
   } catch (err) {
-    const message = (err as AxiosError<TrashErrorPayload>).response?.data?.error;
-    toast.error(message || '永久刪除失敗');
+    toast.error(getApiErrorMessage(err, '永久刪除失敗'));
   }
 };
 

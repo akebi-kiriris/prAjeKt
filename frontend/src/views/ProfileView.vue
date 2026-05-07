@@ -241,7 +241,6 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
-import type { AxiosError } from 'axios';
 import type { Ref } from 'vue';
 import { toast } from 'vue-sonner';
 import { storeToRefs } from 'pinia';
@@ -253,8 +252,8 @@ import { CanvasRenderer } from 'echarts/renderers';
 import { LineChart, BarChart, PieChart } from 'echarts/charts';
 import { GridComponent, TooltipComponent, LegendComponent } from 'echarts/components';
 import { timelineService } from '../services/timelineService';
+import { getApiErrorMessage } from '../utils/apiError';
 import type {
-  ApiErrorPayload,
   ChartStats,
   ProfileForm,
   ProfileUpdatePayload,
@@ -335,8 +334,7 @@ const handleSubmit = async () => {
     profileForm.value.confirm_password = '';
     originalProfile.value = { ...profileForm.value };
   } catch (error) {
-    const message = (error as AxiosError<ApiErrorPayload>).response?.data?.error;
-    toast.error(message || '更新失敗');
+    toast.error(getApiErrorMessage(error, '更新失敗'));
   }
 };
 
@@ -434,8 +432,8 @@ const loadProjectStats = async () => {
   try {
     const res = await timelineService.getMemberStats(selectedTimelineId.value);
     projectStats.value = res.data;
-  } catch {
-    toast.error('載入專案統計失敗');
+  } catch (error) {
+    toast.error(getApiErrorMessage(error, '載入專案統計失敗'));
   } finally {
     loadingProjectStats.value = false;
   }

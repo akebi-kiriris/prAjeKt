@@ -1,5 +1,6 @@
 from flask import Blueprint, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
+from blueprints.validation import error_from_exception
 from services.message_service import (
     MessageOperationError,
     get_unread_message_count,
@@ -28,4 +29,4 @@ def mark_all_as_read():
         mark_all_unread_messages_as_read(user_id)
         return jsonify({'message': '已標記所有訊息為已讀'}), 200
     except MessageOperationError as err:
-        return jsonify({'error': err.message}), err.status_code
+        return error_from_exception(err)

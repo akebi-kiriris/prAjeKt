@@ -1,5 +1,6 @@
-﻿from flask import Blueprint, jsonify
+from flask import Blueprint, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
+from blueprints.validation import error_from_exception
 from services.trash_service import (
     TrashOperationError,
     get_trash_payload,
@@ -33,7 +34,7 @@ def restore_task(task_id):
         restore_task_for_owner(task_id, user_id)
         return jsonify({'message': '任務已還原'}), 200
     except TrashOperationError as err:
-        return jsonify({'error': err.message}), err.status_code
+        return error_from_exception(err)
 
 
 @trash_bp.route('/tasks/<int:task_id>', methods=['DELETE'])
@@ -45,7 +46,7 @@ def permanently_delete_task(task_id):
         permanently_delete_task_for_owner(task_id, user_id)
         return jsonify({'message': '任務已永久刪除'}), 200
     except TrashOperationError as err:
-        return jsonify({'error': err.message}), err.status_code
+        return error_from_exception(err)
 
 
 # ─────────────── 專案：還原 / 永久刪除 ───────────────
@@ -59,7 +60,7 @@ def restore_timeline(timeline_id):
         restore_timeline_for_owner(timeline_id, user_id)
         return jsonify({'message': '專案已還原'}), 200
     except TrashOperationError as err:
-        return jsonify({'error': err.message}), err.status_code
+        return error_from_exception(err)
 
 
 @trash_bp.route('/timelines/<int:timeline_id>', methods=['DELETE'])
@@ -73,4 +74,5 @@ def permanently_delete_timeline(timeline_id):
         permanently_delete_timeline_for_owner(timeline_id, user_id)
         return jsonify({'message': '專案已永久刪除'}), 200
     except TrashOperationError as err:
-        return jsonify({'error': err.message}), err.status_code
+        return error_from_exception(err)
+

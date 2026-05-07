@@ -19,6 +19,7 @@ from repositories.task_repository import (
     demote_task_members_to_collaborator,
     get_active_task_by_id,
     get_active_task_comment,
+    get_active_task_ids_for_timeline,
     get_max_subtask_sort_order,
     get_active_tasks_by_ids,
     get_assigned_task_ids_for_user,
@@ -104,6 +105,14 @@ class TaskOperationError(Exception):
         self.status_code = status_code
 
 
+def _commit_or_raise_task_error(error_message):
+    try:
+        db.session.commit()
+    except Exception as exc:
+        db.session.rollback()
+        raise TaskOperationError(error_message, 500) from exc
+
+
 def find_unknown_fields(payload, allowed_fields):
     return sorted(set(payload.keys()) - allowed_fields)
 
@@ -172,13 +181,7 @@ def validate_dependency_task_ids(timeline_id, depends_on_task_ids, current_task_
     if current_task_id is not None and current_task_id in depends_on_task_ids:
         raise TaskOperationError('depends_on_task_ids 不可包含自己', 400)
 
-    active_task_ids = {
-        task.task_id
-        for task in Task.query.filter(
-            Task.timeline_id == timeline_id,
-            Task.deleted_at.is_(None),
-        ).all()
-    }
+    active_task_ids = set(get_active_task_ids_for_timeline(timeline_id))
 
     invalid_ids = sorted(task_id for task_id in depends_on_task_ids if task_id not in active_task_ids)
     if invalid_ids:
@@ -371,9 +374,6 @@ def create_task_for_user(user_id, data):
     if status not in TASK_STATUS_VALUES:
         raise TaskOperationError('status 欄位值不合法', 400)
 
-    is_completed = status == 'completed'
-    completed_at = _utcnow_naive() if is_completed else None
-
     try:
         priority = int(data.get('priority', 2))
     except (TypeError, ValueError):
@@ -407,8 +407,8 @@ def create_task_for_user(user_id, data):
     new_task = Task(
         user_id=user_id,
         name=data['name'],
-        completed=is_completed,
-        completed_at=completed_at,
+        completed=False,
+        completed_at=None,
         timeline_id=timeline_id,
         priority=priority,
         status=status,
@@ -420,6 +420,7 @@ def create_task_for_user(user_id, data):
         isWork=data.get('isWork', 0),
         depends_on_task_ids=depends_on_task_ids,
     )
+    new_task.change_status(status, completed_at_fallback=_utcnow_naive())
 
     try:
         db.session.add(new_task)
@@ -500,12 +501,7 @@ def update_task_for_member(task_id, data):
 
     if 'status' in data:
         next_status = data['status']
-        task.status = next_status
-        task.completed = (next_status == 'completed')
-        if task.completed:
-            task.completed_at = task.completed_at or _utcnow_naive()
-        else:
-            task.completed_at = None
+        task.change_status(next_status, completed_at_fallback=_utcnow_naive())
 
     if 'tags' in data:
         task.tags = data['tags']
@@ -540,35 +536,21 @@ def update_task_for_member(task_id, data):
         else:
             task.end_date = None
 
-    try:
-        db.session.commit()
-    except Exception as exc:
-        db.session.rollback()
-        raise TaskOperationError('任務更新失敗，請稍後再試', 500) from exc
+    _commit_or_raise_task_error('任務更新失敗，請稍後再試')
 
 
 def soft_delete_task_for_owner(task_id):
     task = _find_active_task_or_404(task_id)
-    try:
-        task.deleted_at = _utcnow_naive()
-        db.session.commit()
-    except Exception as exc:
-        db.session.rollback()
-        raise TaskOperationError('任務刪除失敗，請稍後再試', 500) from exc
+    task.deleted_at = _utcnow_naive()
+    _commit_or_raise_task_error('任務刪除失敗，請稍後再試')
 
 
 def toggle_task_for_member(task_id):
     task = _find_active_task_or_404(task_id)
-    task.completed = not task.completed
-    task.status = 'completed' if task.completed else 'pending'
-    task.completed_at = _utcnow_naive() if task.completed else None
+    task.change_status('pending' if task.completed else 'completed', completed_at_fallback=_utcnow_naive())
 
-    try:
-        db.session.commit()
-        return task.completed
-    except Exception as exc:
-        db.session.rollback()
-        raise TaskOperationError('狀態更新失敗，請稍後再試', 500) from exc
+    _commit_or_raise_task_error('狀態更新失敗，請稍後再試')
+    return task.completed
 
 
 def list_upcoming_tasks_for_user(user_id):
@@ -766,12 +748,8 @@ def soft_delete_task_comment_for_user(task_id, comment_id, user_id):
     if comment.user_id != user_id:
         raise TaskOperationError('只能刪除自己的留言', 403)
 
-    try:
-        comment.deleted_at = _utcnow_naive()
-        db.session.commit()
-    except Exception as exc:
-        db.session.rollback()
-        raise TaskOperationError('留言刪除失敗，請稍後再試', 500) from exc
+    comment.deleted_at = _utcnow_naive()
+    _commit_or_raise_task_error('留言刪除失敗，請稍後再試')
 
 
 def list_subtasks_for_task(task_id):
@@ -785,18 +763,14 @@ def create_subtask_for_task(task_id, name):
 
     max_order = get_max_subtask_sort_order(task_id)
 
-    try:
-        subtask = Subtask(
-            task_id=task_id,
-            name=name.strip(),
-            sort_order=max_order + 1,
-        )
-        db.session.add(subtask)
-        db.session.commit()
-        return subtask.to_dict()
-    except Exception as exc:
-        db.session.rollback()
-        raise TaskOperationError('子任務新增失敗，請稍後再試', 500) from exc
+    subtask = Subtask(
+        task_id=task_id,
+        name=name.strip(),
+        sort_order=max_order + 1,
+    )
+    db.session.add(subtask)
+    _commit_or_raise_task_error('子任務新增失敗，請稍後再試')
+    return subtask.to_dict()
 
 
 def _find_subtask_or_404(task_id, subtask_id):
@@ -816,35 +790,23 @@ def update_subtask_for_task(task_id, subtask_id, data):
     if 'sort_order' in data:
         subtask.sort_order = data['sort_order']
 
-    try:
-        db.session.commit()
-        return subtask.to_dict()
-    except Exception as exc:
-        db.session.rollback()
-        raise TaskOperationError('子任務更新失敗，請稍後再試', 500) from exc
+    _commit_or_raise_task_error('子任務更新失敗，請稍後再試')
+    return subtask.to_dict()
 
 
 def delete_subtask_for_task(task_id, subtask_id):
     subtask = _find_subtask_or_404(task_id, subtask_id)
 
-    try:
-        db.session.delete(subtask)
-        db.session.commit()
-    except Exception as exc:
-        db.session.rollback()
-        raise TaskOperationError('子任務刪除失敗，請稍後再試', 500) from exc
+    db.session.delete(subtask)
+    _commit_or_raise_task_error('子任務刪除失敗，請稍後再試')
 
 
 def toggle_subtask_for_task(task_id, subtask_id):
     subtask = _find_subtask_or_404(task_id, subtask_id)
     subtask.completed = not subtask.completed
 
-    try:
-        db.session.commit()
-        return subtask.to_dict()
-    except Exception as exc:
-        db.session.rollback()
-        raise TaskOperationError('狀態更新失敗，請稍後再試', 500) from exc
+    _commit_or_raise_task_error('狀態更新失敗，請稍後再試')
+    return subtask.to_dict()
 
 
 def update_task_status_for_member(task_id, new_status):
@@ -854,22 +816,13 @@ def update_task_status_for_member(task_id, new_status):
     if new_status not in valid_statuses:
         raise TaskOperationError(f'無效的狀態，有效值為: {valid_statuses}', 400)
 
-    task.status = new_status
-    task.completed = (new_status == 'completed')
-    if task.completed:
-        task.completed_at = task.completed_at or _utcnow_naive()
-    else:
-        task.completed_at = None
+    task.change_status(new_status, completed_at_fallback=_utcnow_naive())
 
-    try:
-        db.session.commit()
-        return {
-            'status': task.status,
-            'completed': task.completed,
-        }
-    except Exception as exc:
-        db.session.rollback()
-        raise TaskOperationError('狀態更新失敗，請稍後再試', 500) from exc
+    _commit_or_raise_task_error('狀態更新失敗，請稍後再試')
+    return {
+        'status': task.status,
+        'completed': task.completed,
+    }
 
 
 def summarize_task_comments_for_member(task_id):
@@ -1020,12 +973,8 @@ def delete_task_file_for_user(task_id, file_id, user_id):
         raise TaskOperationError('只有上傳者或負責人可刪除檔案', 403)
 
     file_path = task_file.file_path
-    try:
-        db.session.delete(task_file)
-        db.session.commit()
-    except Exception as exc:
-        db.session.rollback()
-        raise TaskOperationError('檔案刪除失敗，請稍後再試', 500) from exc
+    db.session.delete(task_file)
+    _commit_or_raise_task_error('檔案刪除失敗，請稍後再試')
 
     if file_path and os.path.exists(file_path):
         try:

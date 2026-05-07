@@ -47,6 +47,7 @@ lerna-debug.log*
 *.sql
 
 # 上傳檔案
+backend/uploads/
 backend/uploads/task_files/
 
 # 測試與構建產物

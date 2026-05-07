@@ -1,6 +1,6 @@
 from functools import wraps
 
-from flask import jsonify
+from blueprints.validation import error_response
 from flask_jwt_extended import get_jwt_identity
 
 from services.task_service import get_user_task_role
@@ -15,9 +15,9 @@ def require_task_role(required_role='member'):
             task_id = kwargs.get('task_id')
             role = get_user_task_role(user_id, task_id)
             if role is None:
-                return jsonify({'error': '你不是此任務成員'}), 403
+                return error_response("FORBIDDEN", "你不是此任務成員", 403)
             if required_role == 'owner' and role != 0:
-                return jsonify({'error': '只有負責人可執行此操作'}), 403
+                return error_response("FORBIDDEN", "只有負責人可執行此操作", 403)
             return f(*args, **kwargs)
 
         return wrapper
@@ -33,9 +33,9 @@ def require_timeline_role(required_role='member'):
             timeline_id = kwargs.get('timeline_id')
             role = get_user_timeline_role(user_id, timeline_id)
             if role is None:
-                return jsonify({'error': '你不是此專案成員'}), 403
+                return error_response("FORBIDDEN", "你不是此專案成員", 403)
             if required_role == 'owner' and role != 0:
-                return jsonify({'error': '只有負責人可執行此操作'}), 403
+                return error_response("FORBIDDEN", "只有負責人可執行此操作", 403)
             return f(*args, **kwargs)
 
         return wrapper

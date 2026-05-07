@@ -288,7 +288,6 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue';
-import type { AxiosError } from 'axios';
 import type { Ref } from 'vue';
 import { toast } from 'vue-sonner';
 import { storeToRefs } from 'pinia';
@@ -296,11 +295,11 @@ import { useGroupStore } from '../stores/groups';
 import { groupService } from '../services/groupService';
 import { formatDate, formatDateTime } from '../utils/formatters';
 import { useConfirm } from '../composables/useConfirm';
+import { getApiErrorMessage } from '../utils/apiError';
 import type {
   Group,
   Message,
   GroupCreateResponse,
-  GroupErrorPayload,
   GroupSnapshotResponse,
   GroupSnapshotJobStatus,
 } from '../types';
@@ -350,8 +349,7 @@ const handleCreateGroup = async () => {
     showCreateGroup.value = false;
     newGroupName.value = '';
   } catch (error) {
-    const message = (error as AxiosError<GroupErrorPayload>).response?.data?.error;
-    toast.error(message || '建立群組失敗');
+    toast.error(getApiErrorMessage(error, '建立群組失敗'));
   }
 };
 
@@ -366,8 +364,7 @@ const handleJoinGroup = async () => {
     showJoinGroup.value = false;
     inviteCode.value = '';
   } catch (error) {
-    const message = (error as AxiosError<GroupErrorPayload>).response?.data?.error;
-    toast.error(message || '加入群組失敗');
+    toast.error(getApiErrorMessage(error, '加入群組失敗'));
   }
 };
 
@@ -456,8 +453,7 @@ const generateSnapshot = async (groupId: number) => {
     openSnapshotModal(response.data as GroupSnapshotResponse);
     toast.success('群組快照生成完成');
   } catch (error) {
-    const message = (error as AxiosError<GroupErrorPayload>).response?.data?.error || (error as Error).message;
-    toast.error(message || '生成群組快照失敗');
+    toast.error(getApiErrorMessage(error, (error as Error).message || '生成群組快照失敗'));
   } finally {
     snapshotLoadingGroupId.value = null;
   }
@@ -469,8 +465,7 @@ const viewLatestSnapshot = async (groupId: number) => {
     const response = await groupService.getLatestSnapshot(groupId);
     openSnapshotModal(response.data as GroupSnapshotResponse);
   } catch (error) {
-    const message = (error as AxiosError<GroupErrorPayload>).response?.data?.error;
-    toast.error(message || '取得最新快照失敗');
+    toast.error(getApiErrorMessage(error, '取得最新快照失敗'));
   } finally {
     snapshotLoadingGroupId.value = null;
   }
@@ -482,8 +477,7 @@ const sendMessage = async () => {
     await groupStore.sendMessage(newMessage.value, scrollToBottom);
     newMessage.value = '';
   } catch (error) {
-    const message = (error as AxiosError<GroupErrorPayload>).response?.data?.error;
-    toast.error(message || '發送訊息失敗');
+    toast.error(getApiErrorMessage(error, '發送訊息失敗'));
   }
 };
 
@@ -493,8 +487,7 @@ const leaveGroup = async (groupId: number) => {
     await groupStore.leaveGroup(groupId);
     toast.success('已離開群組');
   } catch (error) {
-    const message = (error as AxiosError<GroupErrorPayload>).response?.data?.error;
-    toast.error(message || '離開群組失敗');
+    toast.error(getApiErrorMessage(error, '離開群組失敗'));
   }
 };
 

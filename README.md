@@ -24,6 +24,7 @@
 - **Copilot + MCP 整合**：自然語言 AI 路由至後端工具，無需 Inspector；支援任務知識摘要、群組快照、自動化創建
 - **垃圾桶回收機制**：已刪任務 / 專案暫存，支援還原或永久刪除；非建立者唯讀
 - **通知系統**：任務指派 / 專案邀請通知、鈴鐺 30 秒輪詢更新、主頁即將到期提醒區塊（3 天內截止或進度 ≥80%）
+- **錯誤契約統一（工程化）**：後端錯誤回應統一為 `error` + `error_code` + `error_details`，前端以共用 `apiError` 工具做解析與分流
 
 ## 技術架構
 
@@ -331,6 +332,7 @@ pytest --cov=blueprints --cov=services --cov=models --cov-report=term-missing --
 - **開發資料庫**：Phase 6 主線改為 PostgreSQL；SQLite 保留舊環境相容與資料比對用途
 - **AI 功能**：需要有效的 Google API Key，可於 [Google AI Studio](https://aistudio.google.com/app/apikey) 免費申請；目前已完成本地完整鏈路，雲端環境建議以受控方式逐步驗證
 - **Payload 契約**：請參考 `docs/payload-contracts.md`，前後端 update/create 請遵守 allowlist
+- **錯誤碼契約**：請參考 `docs/API_錯誤碼表.md`，前端流程判斷請優先依 `error_code`
 - **文件同步流程**：請參考 `docs/文件更新與發布流程.md`
 
 ## Roadmap（近程）

@@ -1,6 +1,10 @@
 ﻿from flask import Blueprint, request, jsonify, send_from_directory
+from datetime import datetime
+
 from flask_jwt_extended import jwt_required, get_jwt_identity
+from pydantic import BaseModel, ConfigDict, ValidationError, field_validator
 from blueprints.guards import require_task_role
+from blueprints.validation import error_from_exception, error_response, format_pydantic_error, validate_payload_or_400
 from services.task_service import (
     TaskOperationError,
     add_task_comment_for_member,
@@ -32,11 +36,200 @@ from services.task_service import (
 tasks_bp = Blueprint('tasks', __name__)
 
 
+class TaskCreatePayload(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+
+    name: str
+    end_date: str
+    timeline_id: int | None = None
+    priority: int | None = None
+    status: str | None = None
+    tags: list[str] | None = None
+    estimated_hours: int | float | None = None
+    start_date: str | None = None
+    task_remark: str | None = None
+    isWork: int | bool | None = None
+    assignee_user_ids: list[int] | None = None
+    depends_on_task_ids: list[int] | None = None
+
+    @field_validator('name')
+    @classmethod
+    def validate_name(cls, value):
+        if not str(value).strip():
+            raise ValueError('name 不可為空')
+        return value
+
+    @field_validator('status')
+    @classmethod
+    def validate_status(cls, value):
+        if value is None:
+            return value
+        if value not in {'pending', 'in_progress', 'review', 'completed', 'cancelled'}:
+            raise ValueError('status 欄位值不合法')
+        return value
+
+    @field_validator('priority')
+    @classmethod
+    def validate_priority(cls, value):
+        if value is None:
+            return value
+        if value < 1 or value > 3:
+            raise ValueError('priority 必須介於 1 到 3')
+        return value
+
+    @field_validator('start_date', 'end_date')
+    @classmethod
+    def validate_iso_date(cls, value):
+        if value in (None, ''):
+            return value
+        try:
+            datetime.fromisoformat(str(value))
+        except ValueError as exc:
+            raise ValueError('日期格式錯誤') from exc
+        return value
+
+
+class TaskUpdatePayload(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+
+    name: str | None = None
+    timeline_id: int | None = None
+    priority: int | None = None
+    status: str | None = None
+    tags: list[str] | None = None
+    estimated_hours: int | float | None = None
+    actual_hours: int | float | None = None
+    start_date: str | None = None
+    end_date: str | None = None
+    task_remark: str | None = None
+    isWork: int | bool | None = None
+    depends_on_task_ids: list[int] | None = None
+
+    @field_validator('name')
+    @classmethod
+    def validate_name(cls, value):
+        if value is None:
+            return value
+        if not str(value).strip():
+            raise ValueError('name 不可為空')
+        return value
+
+    @field_validator('status')
+    @classmethod
+    def validate_status(cls, value):
+        if value is None:
+            return value
+        if value not in {'pending', 'in_progress', 'review', 'completed', 'cancelled'}:
+            raise ValueError('status 欄位值不合法')
+        return value
+
+    @field_validator('priority')
+    @classmethod
+    def validate_priority(cls, value):
+        if value is None:
+            return value
+        if value < 1 or value > 3:
+            raise ValueError('priority 必須介於 1 到 3')
+        return value
+
+    @field_validator('start_date', 'end_date')
+    @classmethod
+    def validate_iso_date(cls, value):
+        if value in (None, ''):
+            return value
+        try:
+            datetime.fromisoformat(str(value))
+        except ValueError as exc:
+            raise ValueError('日期格式錯誤') from exc
+        return value
+
+
+class TaskMemberAddPayload(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    user_id: int
+    role: int = 1
+
+    @field_validator('role')
+    @classmethod
+    def validate_role(cls, value):
+        if value not in (0, 1):
+            raise ValueError('role 只允許 0(負責人) 或 1(協作者)')
+        return value
+
+
+class TaskMemberRoleUpdatePayload(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    role: int
+
+    @field_validator('role')
+    @classmethod
+    def validate_role(cls, value):
+        if value not in (0, 1):
+            raise ValueError('role 只允許 0(負責人) 或 1(協作者)')
+        return value
+
+
+class TaskCommentPayload(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    message: str | None = None
+    task_message: str | None = None
+
+
+class SubtaskCreatePayload(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    name: str
+
+    @field_validator('name')
+    @classmethod
+    def validate_name(cls, value):
+        if not str(value).strip():
+            raise ValueError('請提供子任務名稱')
+        return value
+
+
+class SubtaskUpdatePayload(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    name: str | None = None
+    completed: bool | None = None
+    sort_order: int | None = None
+
+
+class TaskStatusPayload(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    status: str
+
+
+def _pydantic_error_message(err: ValidationError):
+    base = format_pydantic_error(
+        err,
+        integer_field_messages={
+            'priority': 'priority 必須是數字',
+            'role': 'role 必須是數字',
+        },
+    )
+    if base == '日期格式錯誤':
+        first_error = err.errors()[0] if err.errors() else {}
+        field = str((first_error.get('loc') or ['欄位'])[-1])
+        if field == 'end_date':
+            return 'end_date 格式錯誤'
+        if field == 'start_date':
+            return 'start_date 格式錯誤'
+    return base
+
+
 def _get_json_dict_or_400():
     data = request.get_json(silent=True)
     if not isinstance(data, dict):
-        return None, (jsonify({'error': '請提供正確的 JSON 物件'}), 400)
+        return None, error_response("BAD_REQUEST", "請提供正確的 JSON 物件", 400)
     return data, None
+
+
+def _validate_payload_or_400(model_cls, payload):
+    return validate_payload_or_400(
+        model_cls,
+        payload,
+        error_message_builder=_pydantic_error_message,
+    )
 
 @tasks_bp.route('', methods=['GET'])
 @jwt_required()
@@ -54,12 +247,15 @@ def create_task():
     data, error = _get_json_dict_or_400()
     if error:
         return error
+    data, error = _validate_payload_or_400(TaskCreatePayload, data)
+    if error:
+        return error
 
     try:
         task_id = create_task_for_user(user_id, data)
         return jsonify({'message': '任務新增成功', 'task_id': task_id}), 201
     except TaskOperationError as err:
-        return jsonify({'error': err.message}), err.status_code
+        return error_from_exception(err)
 
 @tasks_bp.route('/<int:task_id>', methods=['PUT'])
 @jwt_required()
@@ -69,12 +265,15 @@ def update_task(task_id):
     data, error = _get_json_dict_or_400()
     if error:
         return error
+    data, error = _validate_payload_or_400(TaskUpdatePayload, data)
+    if error:
+        return error
 
     try:
         update_task_for_member(task_id, data)
         return jsonify({'message': '任務更新成功'}), 200
     except TaskOperationError as err:
-        return jsonify({'error': err.message}), err.status_code
+        return error_from_exception(err)
 
 @tasks_bp.route('/<int:task_id>', methods=['DELETE'])
 @jwt_required()
@@ -85,7 +284,7 @@ def delete_task(task_id):
         soft_delete_task_for_owner(task_id)
         return jsonify({'message': '任務刪除成功'}), 200
     except TaskOperationError as err:
-        return jsonify({'error': err.message}), err.status_code
+        return error_from_exception(err)
 
 @tasks_bp.route('/<int:task_id>/toggle', methods=['PATCH'])
 @jwt_required()
@@ -97,7 +296,7 @@ def toggle_task(task_id):
         completed = toggle_task_for_member(task_id)
         return jsonify({'message': '狀態更新成功', 'completed': completed}), 200
     except TaskOperationError as err:
-        return jsonify({'error': err.message}), err.status_code
+        return error_from_exception(err)
 
 # ===== 任務成員 API =====
 
@@ -115,6 +314,9 @@ def add_task_member(task_id):
     data, error = _get_json_dict_or_400()
     if error:
         return error
+    data, error = _validate_payload_or_400(TaskMemberAddPayload, data)
+    if error:
+        return error
 
     try:
         add_task_member_for_operator(
@@ -125,7 +327,7 @@ def add_task_member(task_id):
         )
         return jsonify({'message': '成員新增成功'}), 201
     except TaskOperationError as err:
-        return jsonify({'error': err.message}), err.status_code
+        return error_from_exception(err)
 
 @tasks_bp.route('/<int:task_id>/members/<int:member_id>', methods=['DELETE'])
 @jwt_required()
@@ -137,7 +339,7 @@ def remove_task_member(task_id, member_id):
         remove_task_member_for_owner(task_id, member_id)
         return jsonify({'message': '成員移除成功'}), 200
     except TaskOperationError as err:
-        return jsonify({'error': err.message}), err.status_code
+        return error_from_exception(err)
 
 
 @tasks_bp.route('/<int:task_id>/members/<int:member_id>', methods=['PATCH'])
@@ -148,28 +350,20 @@ def update_task_member_role(task_id, member_id):
     payload, error = _get_json_dict_or_400()
     if error:
         return error
-
-    if 'role' not in payload:
-        return jsonify({'error': '請提供 role 欄位'}), 400
-
-    try:
-        new_role = int(payload.get('role'))
-    except (TypeError, ValueError):
-        return jsonify({'error': 'role 必須是數字'}), 400
-
-    if new_role not in (0, 1):
-        return jsonify({'error': 'role 只允許 0(負責人) 或 1(協作者)'}), 400
+    payload, error = _validate_payload_or_400(TaskMemberRoleUpdatePayload, payload)
+    if error:
+        return error
 
     try:
         update_task_member_role_for_operator(
             task_id=task_id,
             member_id=member_id,
-            new_role=new_role,
+            new_role=payload['role'],
             operator_user_id=int(get_jwt_identity()),
         )
         return jsonify({'message': '成員角色更新成功'}), 200
     except TaskOperationError as err:
-        return jsonify({'error': err.message}), err.status_code
+        return error_from_exception(err)
 
 # ===== 任務留言 API =====
 
@@ -189,7 +383,7 @@ def summarize_task_comments(task_id):
     try:
         return jsonify(summarize_task_comments_for_member(task_id)), 200
     except TaskOperationError as err:
-        return jsonify({'error': err.message}), err.status_code
+        return error_from_exception(err)
 
 @tasks_bp.route('/<int:task_id>/comments', methods=['POST'])
 @jwt_required()
@@ -200,12 +394,15 @@ def add_task_comment(task_id):
     data, error = _get_json_dict_or_400()
     if error:
         return error
+    data, error = _validate_payload_or_400(TaskCommentPayload, data)
+    if error:
+        return error
 
     try:
         payload = add_task_comment_for_member(task_id, user_id, data)
         return jsonify(payload), 201
     except TaskOperationError as err:
-        return jsonify({'error': err.message}), err.status_code
+        return error_from_exception(err)
 
 @tasks_bp.route('/<int:task_id>/comments/<int:comment_id>', methods=['DELETE'])
 @jwt_required()
@@ -216,7 +413,7 @@ def delete_task_comment(task_id, comment_id):
         soft_delete_task_comment_for_user(task_id, comment_id, int(get_jwt_identity()))
         return jsonify({'message': '留言刪除成功'}), 200
     except TaskOperationError as err:
-        return jsonify({'error': err.message}), err.status_code
+        return error_from_exception(err)
 
 
 # ===== 任務檔案 API =====
@@ -236,14 +433,14 @@ def upload_task_file(task_id):
     user_id = int(get_jwt_identity())
 
     if 'file' not in request.files:
-        return jsonify({'error': '沒有選擇檔案'}), 400
+        return error_response("BAD_REQUEST", "沒有選擇檔案", 400)
     file = request.files['file']
 
     try:
         payload = upload_task_file_for_member(task_id, user_id, file)
         return jsonify(payload), 201
     except TaskOperationError as err:
-        return jsonify({'error': err.message}), err.status_code
+        return error_from_exception(err)
 
 @tasks_bp.route('/<int:task_id>/files/<int:file_id>', methods=['DELETE'])
 @jwt_required()
@@ -253,7 +450,7 @@ def delete_task_file(task_id, file_id):
         delete_task_file_for_user(task_id, file_id, int(get_jwt_identity()))
         return jsonify({'message': '檔案刪除成功'}), 200
     except TaskOperationError as err:
-        return jsonify({'error': err.message}), err.status_code
+        return error_from_exception(err)
 
 @tasks_bp.route('/files/<filename>', methods=['GET'])
 @jwt_required()
@@ -267,7 +464,7 @@ def download_task_file(filename):
         )
         return send_from_directory(upload_folder, safe_name, as_attachment=False, download_name=original_name)
     except TaskOperationError as err:
-        return jsonify({'error': err.message}), err.status_code
+        return error_from_exception(err)
 
 @tasks_bp.route('/<int:task_id>/subtasks', methods=['GET'])
 @jwt_required()
@@ -284,13 +481,16 @@ def create_subtask(task_id):
     data, error = _get_json_dict_or_400()
     if error:
         return error
+    data, error = _validate_payload_or_400(SubtaskCreatePayload, data)
+    if error:
+        return error
 
 
     try:
-        subtask = create_subtask_for_task(task_id, data.get('name'))
+        subtask = create_subtask_for_task(task_id, data['name'])
         return jsonify({'message': '子任務新增成功', 'subtask': subtask}), 201
     except TaskOperationError as err:
-        return jsonify({'error': err.message}), err.status_code
+        return error_from_exception(err)
 
 @tasks_bp.route('/<int:task_id>/subtasks/<int:subtask_id>', methods=['PUT'])
 @jwt_required()
@@ -301,12 +501,15 @@ def update_subtask(task_id, subtask_id):
     data, error = _get_json_dict_or_400()
     if error:
         return error
+    data, error = _validate_payload_or_400(SubtaskUpdatePayload, data)
+    if error:
+        return error
 
     try:
         subtask = update_subtask_for_task(task_id, subtask_id, data)
         return jsonify({'message': '子任務更新成功', 'subtask': subtask}), 200
     except TaskOperationError as err:
-        return jsonify({'error': err.message}), err.status_code
+        return error_from_exception(err)
 
 @tasks_bp.route('/<int:task_id>/subtasks/<int:subtask_id>', methods=['DELETE'])
 @jwt_required()
@@ -318,7 +521,7 @@ def delete_subtask(task_id, subtask_id):
         delete_subtask_for_task(task_id, subtask_id)
         return jsonify({'message': '子任務刪除成功'}), 200
     except TaskOperationError as err:
-        return jsonify({'error': err.message}), err.status_code
+        return error_from_exception(err)
 
 @tasks_bp.route('/<int:task_id>/subtasks/<int:subtask_id>/toggle', methods=['PATCH'])
 @jwt_required()
@@ -330,7 +533,7 @@ def toggle_subtask(task_id, subtask_id):
         subtask = toggle_subtask_for_task(task_id, subtask_id)
         return jsonify({'message': '狀態更新成功', 'subtask': subtask}), 200
     except TaskOperationError as err:
-        return jsonify({'error': err.message}), err.status_code
+        return error_from_exception(err)
 
 
 # ===== 任務狀態更新 API (看板用) =====
@@ -344,12 +547,15 @@ def update_task_status(task_id):
     data, error = _get_json_dict_or_400()
     if error:
         return error
+    data, error = _validate_payload_or_400(TaskStatusPayload, data)
+    if error:
+        return error
 
     try:
-        status_payload = update_task_status_for_member(task_id, data.get('status'))
+        status_payload = update_task_status_for_member(task_id, data['status'])
         return jsonify({'message': '狀態更新成功', **status_payload}), 200
     except TaskOperationError as err:
-        return jsonify({'error': err.message}), err.status_code
+        return error_from_exception(err)
 
 
 @tasks_bp.route('/upcoming', methods=['GET'])

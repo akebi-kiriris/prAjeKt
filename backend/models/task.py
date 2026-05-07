@@ -27,6 +27,14 @@ class Task(db.Model):
     completed_at = db.Column(db.DateTime, nullable=True)
     depends_on_task_ids = db.Column(db.JSON, nullable=True)
     updated_at = db.Column(db.DateTime, default=utcnow_naive, onupdate=utcnow_naive)
+
+    def change_status(self, new_status, completed_at_fallback=None):
+        self.status = new_status
+        self.completed = (new_status == 'completed')
+        if self.completed:
+            self.completed_at = self.completed_at or completed_at_fallback or utcnow_naive()
+        else:
+            self.completed_at = None
     
     def __repr__(self):
         return f'<Task {self.name}>'

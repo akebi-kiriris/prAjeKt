@@ -1,5 +1,7 @@
-﻿from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
+from pydantic import BaseModel, ConfigDict, field_validator
+from blueprints.validation import error_from_exception, error_response, validate_payload_or_400
 from services.todo_service import (
     TodoOperationError,
     create_todo_for_user,
@@ -13,11 +15,41 @@ from services.todo_service import (
 todos_bp = Blueprint('todos', __name__)
 
 
+class TodoCreatePayload(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    title: str
+    content: str
+    type: str | None = None
+    deadline: str | None = None
+    priority: int | None = None
+
+    @field_validator('title', 'content')
+    @classmethod
+    def validate_text(cls, value):
+        if not str(value).strip():
+            raise ValueError('請確認是否有填入事項名稱或內容')
+        return value
+
+
+class TodoUpdatePayload(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    title: str | None = None
+    content: str | None = None
+    type: str | None = None
+    deadline: str | None = None
+    priority: int | None = None
+    completed: bool | None = None
+
+
 def _get_json_dict_or_400():
     data = request.get_json(silent=True)
     if not isinstance(data, dict):
-        return None, (jsonify({'error': '請提供正確的 JSON 物件'}), 400)
+        return None, error_response("BAD_REQUEST", "請提供正確的 JSON 物件", 400)
     return data, None
+
+
+def _validate_payload_or_400(model_cls, payload):
+    return validate_payload_or_400(model_cls, payload)
 
 @todos_bp.route('', methods=['GET'])
 @jwt_required()
@@ -30,7 +62,7 @@ def get_todos():
         todos = list_todos_for_user(user_id, todo_id=todo_id)
         return jsonify([todo_to_dict(t) for t in todos]), 200
     except TodoOperationError as err:
-        return jsonify({'error': err.message}), err.status_code
+        return error_from_exception(err)
 
 @todos_bp.route('', methods=['POST'])
 @jwt_required()
@@ -40,12 +72,15 @@ def create_todo():
     data, error = _get_json_dict_or_400()
     if error:
         return error
+    data, error = _validate_payload_or_400(TodoCreatePayload, data)
+    if error:
+        return error
 
     try:
         todo_id = create_todo_for_user(user_id, data)
         return jsonify({'message': '待辦事項新增成功', 'id': todo_id}), 201
     except TodoOperationError as err:
-        return jsonify({'error': err.message}), err.status_code
+        return error_from_exception(err)
 
 @todos_bp.route('/<int:todo_id>', methods=['PUT'])
 @jwt_required()
@@ -55,12 +90,15 @@ def update_todo(todo_id):
     data, error = _get_json_dict_or_400()
     if error:
         return error
+    data, error = _validate_payload_or_400(TodoUpdatePayload, data)
+    if error:
+        return error
 
     try:
         update_todo_for_user(todo_id, user_id, data)
         return jsonify({'message': '待辦事項更新成功'}), 200
     except TodoOperationError as err:
-        return jsonify({'error': err.message}), err.status_code
+        return error_from_exception(err)
 
 @todos_bp.route('/<int:todo_id>', methods=['DELETE'])
 @jwt_required()
@@ -72,7 +110,7 @@ def delete_todo(todo_id):
         soft_delete_todo_for_user(todo_id, user_id)
         return jsonify({'message': '待辦事項刪除成功'}), 200
     except TodoOperationError as err:
-        return jsonify({'error': err.message}), err.status_code
+        return error_from_exception(err)
 
 @todos_bp.route('/<int:todo_id>/toggle', methods=['PATCH'])
 @jwt_required()
@@ -84,4 +122,5 @@ def toggle_todo(todo_id):
         completed = toggle_todo_for_user(todo_id, user_id)
         return jsonify({'message': '狀態更新成功', 'completed': completed}), 200
     except TodoOperationError as err:
-        return jsonify({'error': err.message}), err.status_code
+        return error_from_exception(err)
+

@@ -5,6 +5,8 @@ export interface ApiResponse<T = unknown> {
 
 export interface ApiErrorPayload {
   error?: string;
+  error_code?: string;
+  error_details?: Record<string, unknown>;
 }
 
 export interface ApiMutationResponse {

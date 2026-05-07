@@ -1,5 +1,6 @@
 import axios, { type InternalAxiosRequestConfig, type AxiosResponse } from 'axios';
 import router from '../router';
+import { shouldRedirectToLogin } from '../utils/apiError';
 
 // 統一管理 baseURL
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
@@ -20,6 +21,7 @@ type FailedQueueItem = {
 
 type JwtErrorPayload = {
   msg?: string;
+  error_code?: string;
 };
 
 const api = axios.create({
@@ -83,7 +85,9 @@ const isJwtErrorMessage = (message: string): boolean => {
 const shouldHandleJwtAuthFailure = (
   statusCode: number | undefined,
   message: string,
+  errorCode: string | undefined,
 ): boolean => {
+  if (shouldRedirectToLogin(errorCode)) return true;
   if (!statusCode) return false;
 
   if (statusCode === 401) return true;
@@ -122,9 +126,11 @@ api.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config as RetryableAxiosRequestConfig;
     const statusCode: number | undefined = error.response?.status;
-    const message = String((error.response?.data as JwtErrorPayload | undefined)?.msg || '');
+    const payload = (error.response?.data as JwtErrorPayload | undefined);
+    const message = String(payload?.msg || '');
+    const errorCode = payload?.error_code;
 
-    const shouldHandle = shouldHandleJwtAuthFailure(statusCode, message);
+    const shouldHandle = shouldHandleJwtAuthFailure(statusCode, message, errorCode);
 
     // 如果是 JWT 驗證錯誤且還沒重試過
     if (shouldHandle && !originalRequest._retry) {
