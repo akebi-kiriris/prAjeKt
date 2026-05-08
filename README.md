@@ -335,6 +335,12 @@ pytest --cov=blueprints --cov=services --cov=models --cov-report=term-missing --
 - **錯誤碼契約**：請參考 `docs/API_錯誤碼表.md`，前端流程判斷請優先依 `error_code`
 - **文件同步流程**：請參考 `docs/文件更新與發布流程.md`
 
+## 核心工程文件（架構/契約/Runbook）
+
+- `架構與責任邊界.md`
+- `API_契約與錯誤處理.md`
+- `本地開發測試部署_Runbook.md`
+
 ## Roadmap（近程）
 
 - **Phase 5（已完成）**：
