@@ -1,6 +1,6 @@
 """add project_id to knowledge tables
 
-Revision ID: g_add_project_id_to_knowledge_tables
+Revision ID: g20260506
 Revises: d7a2c9b1e4f6
 Create Date: 2026-05-06
 """
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision = "g_add_project_id_to_knowledge_tables"
+revision = "g20260506"
 down_revision = "d7a2c9b1e4f6"
 branch_labels = None
 depends_on = None

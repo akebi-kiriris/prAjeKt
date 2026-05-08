@@ -1,7 +1,7 @@
 """add project knowledge storage columns and events table
 
-Revision ID: h_proj_kb_storage_evt
-Revises: g_add_project_id_to_knowledge_tables
+Revision ID: h20260507
+Revises: g20260506
 Create Date: 2026-05-07
 """
 
@@ -9,8 +9,8 @@ from alembic import op
 import sqlalchemy as sa
 
 
-revision = "h_proj_kb_storage_evt"
-down_revision = "g_add_project_id_to_knowledge_tables"
+revision = "h20260507"
+down_revision = "g20260506"
 branch_labels = None
 depends_on = None
 
