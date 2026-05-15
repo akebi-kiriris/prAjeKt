@@ -17,7 +17,11 @@ from chains import (
     generate_conflict_suggestion,
 )
 from services.critical_path_service import build_critical_path_analysis_payload
+from services.transactions import transaction
 from repositories.timeline_repository import (
+    build_timeline_entity,
+    build_timeline_member_entity,
+    build_timeline_task_entity,
     get_active_incomplete_tasks_by_timeline_id,
     get_active_tasks_by_timeline_id,
     get_active_tasks_by_timeline_ids,
@@ -42,6 +46,7 @@ from repositories.timeline_repository import (
     get_user_by_id,
     get_users_by_ids,
 )
+from repositories.session_repository import add_entity, flush_session
 
 TIMELINE_UPDATE_ALLOWED_FIELDS = {'name', 'start_date', 'end_date', 'remark'}
 WEEKLY_REPORT_AI_TIMEOUT_SEC = float(os.getenv('WEEKLY_REPORT_AI_TIMEOUT_SEC', '35'))
@@ -61,14 +66,6 @@ class TimelineOperationError(Exception):
         super().__init__(message)
         self.message = message
         self.status_code = status_code
-
-
-def _commit_or_raise_timeline_error(error_message):
-    try:
-        db.session.commit()
-    except Exception as exc:
-        db.session.rollback()
-        raise TimelineOperationError(error_message, 500) from exc
 
 
 def find_unknown_fields(payload, allowed_fields):
@@ -338,7 +335,7 @@ def create_timeline_for_user(user_id, data):
         except ValueError:
             raise TimelineOperationError('結束日期格式錯誤，請用 YYYY-MM-DD', 400)
 
-    new_timeline = Timeline(
+    new_timeline = build_timeline_entity(
         user_id=user_id,
         name=name.strip(),
         start_date=start_date,
@@ -346,15 +343,11 @@ def create_timeline_for_user(user_id, data):
         remark=remark,
     )
 
-    try:
-        db.session.add(new_timeline)
-        db.session.flush()
-        db.session.add(TimelineUser(timeline_id=new_timeline.id, user_id=user_id, role=0))
-        db.session.commit()
-        return new_timeline.id
-    except Exception as exc:
-        db.session.rollback()
-        raise TimelineOperationError('專案新增失敗，請稍後再試', 500) from exc
+    with transaction(TimelineOperationError, '專案新增失敗，請稍後再試'):
+        add_entity(new_timeline)
+        flush_session()
+        add_entity(build_timeline_member_entity(timeline_id=new_timeline.id, user_id=user_id, role=0))
+    return new_timeline.id
 
 
 def update_timeline_for_member(timeline_id, data):
@@ -364,48 +357,47 @@ def update_timeline_for_member(timeline_id, data):
     if unknown_fields:
         raise TimelineOperationError(f'不允許的欄位: {", ".join(unknown_fields)}', 400)
 
-    if 'name' in data:
-        if not data['name'] or not data['name'].strip():
-            raise TimelineOperationError('專案名稱不可為空', 400)
-        timeline.name = data['name'].strip()
+    with transaction(TimelineOperationError, '專案更新失敗，請稍後再試'):
+        if 'name' in data:
+            if not data['name'] or not data['name'].strip():
+                raise TimelineOperationError('專案名稱不可為空', 400)
+            timeline.name = data['name'].strip()
 
-    if 'start_date' in data:
-        start_date_value = data['start_date']
-        if start_date_value and isinstance(start_date_value, str) and start_date_value.strip():
-            try:
-                timeline.start_date = datetime.fromisoformat(start_date_value)
-            except ValueError:
+        if 'start_date' in data:
+            start_date_value = data['start_date']
+            if start_date_value and isinstance(start_date_value, str) and start_date_value.strip():
+                try:
+                    timeline.start_date = datetime.fromisoformat(start_date_value)
+                except ValueError:
+                    raise TimelineOperationError('開始日期格式錯誤', 400)
+            elif start_date_value in (None, ''):
+                timeline.start_date = None
+            else:
                 raise TimelineOperationError('開始日期格式錯誤', 400)
-        elif start_date_value in (None, ''):
-            timeline.start_date = None
-        else:
-            raise TimelineOperationError('開始日期格式錯誤', 400)
 
-    if 'end_date' in data:
-        end_date_value = data['end_date']
-        if end_date_value and isinstance(end_date_value, str) and end_date_value.strip():
-            try:
-                timeline.end_date = datetime.fromisoformat(end_date_value)
-            except ValueError:
+        if 'end_date' in data:
+            end_date_value = data['end_date']
+            if end_date_value and isinstance(end_date_value, str) and end_date_value.strip():
+                try:
+                    timeline.end_date = datetime.fromisoformat(end_date_value)
+                except ValueError:
+                    raise TimelineOperationError('結束日期格式錯誤', 400)
+            elif end_date_value in (None, ''):
+                timeline.end_date = None
+            else:
                 raise TimelineOperationError('結束日期格式錯誤', 400)
-        elif end_date_value in (None, ''):
-            timeline.end_date = None
-        else:
-            raise TimelineOperationError('結束日期格式錯誤', 400)
 
-    if 'remark' in data:
-        timeline.remark = data['remark']
-
-    _commit_or_raise_timeline_error('專案更新失敗，請稍後再試')
+        if 'remark' in data:
+            timeline.remark = data['remark']
 
 
 def soft_delete_timeline_for_owner(timeline_id):
     timeline = get_active_timeline_or_404(timeline_id)
 
-    deleted_at = _utcnow_naive()
-    timeline.deleted_at = deleted_at
-    soft_delete_tasks_by_timeline_id(timeline_id, deleted_at)
-    _commit_or_raise_timeline_error('專案刪除失敗，請稍後再試')
+    with transaction(TimelineOperationError, '專案刪除失敗，請稍後再試'):
+        deleted_at = _utcnow_naive()
+        timeline.deleted_at = deleted_at
+        soft_delete_tasks_by_timeline_id(timeline_id, deleted_at)
 
 
 def list_timeline_tasks_detail(timeline_id, viewer_user_id=None):
@@ -760,7 +752,7 @@ def trigger_timeline_risk_notifications(timeline_id):
         f'請至專案風險分析確認 impact 與建議動作。'
     )
 
-    try:
+    with transaction(TimelineOperationError, '風險通知發送失敗，請稍後再試'):
         for user_id in notified_user_ids:
             db.session.add(
                 Notification(
@@ -771,10 +763,6 @@ def trigger_timeline_risk_notifications(timeline_id):
                     link='/timelines',
                 )
             )
-        db.session.commit()
-    except Exception as exc:
-        db.session.rollback()
-        raise TimelineOperationError('風險通知發送失敗，請稍後再試', 500) from exc
 
     return {
         'message': '風險通知已發送',
@@ -1291,8 +1279,8 @@ def update_timeline_remark_for_member(timeline_id, remark):
     if not isinstance(remark, str):
         raise TimelineOperationError('備註必須是字串', 400)
 
-    timeline.remark = remark
-    _commit_or_raise_timeline_error('備註更新失敗，請稍後再試')
+    with transaction(TimelineOperationError, '備註更新失敗，請稍後再試'):
+        timeline.remark = remark
 
 
 def search_timeline_user_by_email(timeline_id, requester_user_id, email):
@@ -1330,7 +1318,7 @@ def add_timeline_member_for_owner(timeline_id, invited_user_id, role, actor_user
     if not invited_user_id:
         raise TimelineOperationError('請提供使用者 ID', 400)
 
-    try:
+    with transaction(TimelineOperationError, '成員新增失敗，請稍後再試'):
         member = TimelineUser(timeline_id=timeline_id, user_id=invited_user_id, role=role)
         db.session.add(member)
 
@@ -1350,10 +1338,6 @@ def add_timeline_member_for_owner(timeline_id, invited_user_id, role, actor_user
             link='/timelines',
         )
         db.session.add(notif)
-        db.session.commit()
-    except Exception as exc:
-        db.session.rollback()
-        raise TimelineOperationError('成員新增失敗，請稍後再試', 500) from exc
 
 
 def remove_timeline_member_for_owner(timeline_id, member_user_id, operator_user_id):
@@ -1364,8 +1348,8 @@ def remove_timeline_member_for_owner(timeline_id, member_user_id, operator_user_
     if not member or member.role == 0:
         raise TimelineOperationError('找不到該成員，或無法移除負責人', 404)
 
-    db.session.delete(member)
-    _commit_or_raise_timeline_error('成員移除失敗，請稍後再試')
+    with transaction(TimelineOperationError, '成員移除失敗，請稍後再試'):
+        db.session.delete(member)
 
 
 def batch_create_tasks_for_timeline(timeline_id, user_id, task_payloads):
@@ -1374,7 +1358,7 @@ def batch_create_tasks_for_timeline(timeline_id, user_id, task_payloads):
     if not isinstance(task_payloads, list) or len(task_payloads) == 0:
         raise TimelineOperationError('請提供至少一個任務', 400)
 
-    try:
+    with transaction(TimelineOperationError, '批次建立任務失敗，請稍後再試'):
         existing_tasks = get_active_tasks_by_timeline_id(timeline_id)
         all_existing_task_ids = [task.task_id for task in existing_tasks]
         existing_task_id_set = set(all_existing_task_ids)
@@ -1413,7 +1397,7 @@ def batch_create_tasks_for_timeline(timeline_id, user_id, task_payloads):
                 estimated_days = 3
             end_date = current_date + timedelta(days=estimated_days)
 
-            new_task = Task(
+            new_task = build_timeline_task_entity(
                 user_id=user_id,
                 timeline_id=timeline_id,
                 name=task_data.get('name', '未命名任務'),
@@ -1422,10 +1406,9 @@ def batch_create_tasks_for_timeline(timeline_id, user_id, task_payloads):
                 task_remark=task_data.get('task_remark', ''),
                 start_date=current_date,
                 end_date=end_date,
-                completed=False,
-                isWork=1,
+                is_work=1,
             )
-            db.session.add(new_task)
+            add_entity(new_task)
             created_task_names.append(new_task.name)
             pending_dependency_records.append(
                 {
@@ -1436,7 +1419,7 @@ def batch_create_tasks_for_timeline(timeline_id, user_id, task_payloads):
             )
             current_date = end_date
 
-        db.session.flush()
+        flush_session()
 
         name_to_task_ids = defaultdict(list)
         for task in retained_existing_tasks:
@@ -1482,30 +1465,23 @@ def batch_create_tasks_for_timeline(timeline_id, user_id, task_payloads):
 
             task.depends_on_task_ids = normalized_dependency_ids
 
-        db.session.commit()
-        message = (
-            f'保留 {len(selected_existing_task_ids)} 個舊任務，'
-            f'刪除 {len(tasks_to_delete)} 個舊任務，新增 {len(created_task_names)} 個任務'
-        )
-        if ignored_dependency_ref_count > 0:
-            message += f'，忽略 {ignored_dependency_ref_count} 個無法解析的前置依賴'
-        if ignored_dependency_id_count > 0:
-            message += f'，忽略 {ignored_dependency_id_count} 個無效的前置依賴 ID'
+    message = (
+        f'保留 {len(selected_existing_task_ids)} 個舊任務，'
+        f'刪除 {len(tasks_to_delete)} 個舊任務，新增 {len(created_task_names)} 個任務'
+    )
+    if ignored_dependency_ref_count > 0:
+        message += f'，忽略 {ignored_dependency_ref_count} 個無法解析的前置依賴'
+    if ignored_dependency_id_count > 0:
+        message += f'，忽略 {ignored_dependency_id_count} 個無效的前置依賴 ID'
 
-        return {
-            'message': message,
-            'kept': len(selected_existing_task_ids),
-            'deleted': len(tasks_to_delete),
-            'created': len(created_task_names),
-            'ignored_dependency_refs': ignored_dependency_ref_count,
-            'ignored_dependency_ids': ignored_dependency_id_count,
-        }
-    except TimelineOperationError:
-        db.session.rollback()
-        raise
-    except Exception as exc:
-        db.session.rollback()
-        raise TimelineOperationError('批次建立任務失敗，請稍後再試', 500) from exc
+    return {
+        'message': message,
+        'kept': len(selected_existing_task_ids),
+        'deleted': len(tasks_to_delete),
+        'created': len(created_task_names),
+        'ignored_dependency_refs': ignored_dependency_ref_count,
+        'ignored_dependency_ids': ignored_dependency_id_count,
+    }
 
 
 def list_upcoming_timelines_for_user(user_id):

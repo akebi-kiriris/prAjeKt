@@ -7,7 +7,6 @@ import time
 import uuid
 
 from models import db
-from models.notification import Notification
 from models.subtask import Subtask
 from models.task import Task
 from models.task_comment import TaskComment
@@ -15,7 +14,11 @@ from models.task_user import TaskUser
 from models.timeline import TaskFile
 from werkzeug.utils import secure_filename
 from services.ai_provider import get_ai_provider
+from services.transactions import transaction
 from repositories.task_repository import (
+    build_notification_entity,
+    build_task_entity,
+    build_task_member_entity,
     demote_task_members_to_collaborator,
     get_active_task_by_id,
     get_active_task_comment,
@@ -44,6 +47,7 @@ from repositories.task_repository import (
     list_timeline_members,
     remove_task_member,
 )
+from repositories.session_repository import add_entity, flush_session
 
 TASK_CREATE_ALLOWED_FIELDS = {
     'name',
@@ -103,14 +107,6 @@ class TaskOperationError(Exception):
         super().__init__(message)
         self.message = message
         self.status_code = status_code
-
-
-def _commit_or_raise_task_error(error_message):
-    try:
-        db.session.commit()
-    except Exception as exc:
-        db.session.rollback()
-        raise TaskOperationError(error_message, 500) from exc
 
 
 def find_unknown_fields(payload, allowed_fields):
@@ -188,17 +184,103 @@ def validate_dependency_task_ids(timeline_id, depends_on_task_ids, current_task_
         raise TaskOperationError('depends_on_task_ids 包含非同專案任務', 400)
 
 
+def _build_task_create_payload(data):
+    status = data.get('status', 'pending')
+    if status not in TASK_STATUS_VALUES:
+        raise TaskOperationError('status 欄位值不合法', 400)
+
+    try:
+        priority = int(data.get('priority', 2))
+    except (TypeError, ValueError):
+        raise TaskOperationError('priority 必須是數字', 400)
+
+    if priority < 1 or priority > 3:
+        raise TaskOperationError('priority 必須介於 1 到 3', 400)
+
+    try:
+        start_date = datetime.fromisoformat(data['start_date']) if data.get('start_date') else None
+    except ValueError:
+        raise TaskOperationError('start_date 格式錯誤', 400)
+
+    try:
+        end_date = datetime.fromisoformat(data['end_date'])
+    except (TypeError, ValueError):
+        raise TaskOperationError('end_date 格式錯誤', 400)
+
+    return {
+        'status': status,
+        'priority': priority,
+        'start_date': start_date,
+        'end_date': end_date,
+        'assignee_user_ids': normalize_assignee_user_ids(data.get('assignee_user_ids')),
+        'depends_on_task_ids': normalize_depends_on_task_ids(data.get('depends_on_task_ids')),
+        'timeline_id': data.get('timeline_id'),
+    }
+
+
+def _validate_task_create_membership(timeline_id, assignee_user_ids):
+    if not timeline_id or not assignee_user_ids:
+        return
+
+    timeline_member_ids = {member.user_id for member in list_timeline_members(timeline_id)}
+    invalid_assignees = [member_id for member_id in assignee_user_ids if member_id not in timeline_member_ids]
+    if invalid_assignees:
+        raise TaskOperationError('指派名單包含非專案成員', 400)
+
+
+def _create_task_with_members_and_notifications(user_id, data, payload):
+    with transaction(TaskOperationError, '任務新增失敗，請稍後再試'):
+        new_task = build_task_entity(
+            user_id=user_id,
+            name=data['name'],
+            timeline_id=payload['timeline_id'],
+            priority=payload['priority'],
+            status=payload['status'],
+            tags=data.get('tags'),
+            estimated_hours=data.get('estimated_hours'),
+            start_date=payload['start_date'],
+            end_date=payload['end_date'],
+            task_remark=data.get('task_remark'),
+            is_work=data.get('isWork', 0),
+            depends_on_task_ids=payload['depends_on_task_ids'],
+        )
+        new_task.change_status(payload['status'], completed_at_fallback=_utcnow_naive())
+
+        add_entity(new_task)
+        flush_session()
+
+        add_entity(build_task_member_entity(task_id=new_task.task_id, user_id=user_id, role=0))
+
+        actor = get_user_by_id(user_id)
+        actor_name = actor.name if actor else '某人'
+
+        for member_id in payload['assignee_user_ids']:
+            if member_id == user_id:
+                continue
+
+            add_entity(build_task_member_entity(task_id=new_task.task_id, user_id=member_id, role=1))
+            create_notification(
+                user_id=member_id,
+                ntype='task_assigned',
+                title=f'你被指派到任務「{new_task.name}」',
+                content=f'{actor_name} 在建立任務時將你加入「{new_task.name}」',
+                link='/tasks',
+            )
+
+        return new_task.task_id
+
+
 def create_notification(user_id, ntype, title, content=None, link=None):
     """建立通知的工具函式，失敗時靜默不影響主流程。"""
     try:
-        notif = Notification(
+        notif = build_notification_entity(
             user_id=user_id,
-            type=ntype,
+            ntype=ntype,
             title=title,
             content=content,
             link=link,
         )
-        db.session.add(notif)
+        add_entity(notif)
     except Exception:
         pass
 
@@ -370,86 +452,13 @@ def create_task_for_user(user_id, data):
     if not data.get('name') or not data.get('end_date'):
         raise TaskOperationError('請提供標題和截止日期', 400)
 
-    status = data.get('status', 'pending')
-    if status not in TASK_STATUS_VALUES:
-        raise TaskOperationError('status 欄位值不合法', 400)
-
-    try:
-        priority = int(data.get('priority', 2))
-    except (TypeError, ValueError):
-        raise TaskOperationError('priority 必須是數字', 400)
-
-    if priority < 1 or priority > 3:
-        raise TaskOperationError('priority 必須介於 1 到 3', 400)
-
-    try:
-        start_date = datetime.fromisoformat(data['start_date']) if data.get('start_date') else None
-    except ValueError:
-        raise TaskOperationError('start_date 格式錯誤', 400)
-
-    try:
-        end_date = datetime.fromisoformat(data['end_date'])
-    except (TypeError, ValueError):
-        raise TaskOperationError('end_date 格式錯誤', 400)
-
-    assignee_user_ids = normalize_assignee_user_ids(data.get('assignee_user_ids'))
-    depends_on_task_ids = normalize_depends_on_task_ids(data.get('depends_on_task_ids'))
-
-    timeline_id = data.get('timeline_id')
-    if timeline_id and assignee_user_ids:
-        timeline_member_ids = {member.user_id for member in list_timeline_members(timeline_id)}
-        invalid_assignees = [member_id for member_id in assignee_user_ids if member_id not in timeline_member_ids]
-        if invalid_assignees:
-            raise TaskOperationError('指派名單包含非專案成員', 400)
-
-    validate_dependency_task_ids(timeline_id, depends_on_task_ids)
-
-    new_task = Task(
-        user_id=user_id,
-        name=data['name'],
-        completed=False,
-        completed_at=None,
-        timeline_id=timeline_id,
-        priority=priority,
-        status=status,
-        tags=data.get('tags'),
-        estimated_hours=data.get('estimated_hours'),
-        start_date=start_date,
-        end_date=end_date,
-        task_remark=data.get('task_remark'),
-        isWork=data.get('isWork', 0),
-        depends_on_task_ids=depends_on_task_ids,
+    payload = _build_task_create_payload(data)
+    _validate_task_create_membership(
+        timeline_id=payload['timeline_id'],
+        assignee_user_ids=payload['assignee_user_ids'],
     )
-    new_task.change_status(status, completed_at_fallback=_utcnow_naive())
-
-    try:
-        db.session.add(new_task)
-        db.session.flush()
-
-        task_owner = TaskUser(task_id=new_task.task_id, user_id=user_id, role=0)
-        db.session.add(task_owner)
-
-        actor = get_user_by_id(user_id)
-        actor_name = actor.name if actor else '某人'
-
-        for member_id in assignee_user_ids:
-            if member_id == user_id:
-                continue
-
-            db.session.add(TaskUser(task_id=new_task.task_id, user_id=member_id, role=1))
-            create_notification(
-                user_id=member_id,
-                ntype='task_assigned',
-                title=f'你被指派到任務「{new_task.name}」',
-                content=f'{actor_name} 在建立任務時將你加入「{new_task.name}」',
-                link='/tasks',
-            )
-
-        db.session.commit()
-        return new_task.task_id
-    except Exception as exc:
-        db.session.rollback()
-        raise TaskOperationError('任務新增失敗，請稍後再試', 500) from exc
+    validate_dependency_task_ids(payload['timeline_id'], payload['depends_on_task_ids'])
+    return _create_task_with_members_and_notifications(user_id=user_id, data=data, payload=payload)
 
 
 def update_task_for_member(task_id, data):
@@ -462,94 +471,92 @@ def update_task_for_member(task_id, data):
     if 'status' in data and data['status'] not in TASK_STATUS_VALUES:
         raise TaskOperationError('status 欄位值不合法', 400)
 
-    if 'priority' in data:
-        try:
-            priority = int(data['priority'])
-        except (TypeError, ValueError):
-            raise TaskOperationError('priority 必須是數字', 400)
-        if priority < 1 or priority > 3:
-            raise TaskOperationError('priority 必須介於 1 到 3', 400)
-        task.priority = priority
+    with transaction(TaskOperationError, '任務更新失敗，請稍後再試'):
+        if 'priority' in data:
+            try:
+                priority = int(data['priority'])
+            except (TypeError, ValueError):
+                raise TaskOperationError('priority 必須是數字', 400)
+            if priority < 1 or priority > 3:
+                raise TaskOperationError('priority 必須介於 1 到 3', 400)
+            task.priority = priority
 
-    if 'name' in data:
-        if not data['name'] or not str(data['name']).strip():
-            raise TaskOperationError('name 不可為空', 400)
-        task.name = str(data['name']).strip()
+        if 'name' in data:
+            if not data['name'] or not str(data['name']).strip():
+                raise TaskOperationError('name 不可為空', 400)
+            task.name = str(data['name']).strip()
 
-    target_timeline_id = task.timeline_id
-    if 'timeline_id' in data:
-        target_timeline_id = data['timeline_id']
-        task.timeline_id = target_timeline_id
+        target_timeline_id = task.timeline_id
+        if 'timeline_id' in data:
+            target_timeline_id = data['timeline_id']
+            task.timeline_id = target_timeline_id
 
-    if 'depends_on_task_ids' in data:
-        depends_on_task_ids = normalize_depends_on_task_ids(data.get('depends_on_task_ids'))
-        validate_dependency_task_ids(
-            target_timeline_id,
-            depends_on_task_ids,
-            current_task_id=task.task_id,
-        )
-        task.depends_on_task_ids = depends_on_task_ids
-    elif 'timeline_id' in data:
-        if target_timeline_id in (None, ''):
-            task.depends_on_task_ids = []
-        else:
+        if 'depends_on_task_ids' in data:
+            depends_on_task_ids = normalize_depends_on_task_ids(data.get('depends_on_task_ids'))
             validate_dependency_task_ids(
                 target_timeline_id,
-                task.depends_on_task_ids or [],
+                depends_on_task_ids,
                 current_task_id=task.task_id,
             )
+            task.depends_on_task_ids = depends_on_task_ids
+        elif 'timeline_id' in data:
+            if target_timeline_id in (None, ''):
+                task.depends_on_task_ids = []
+            else:
+                validate_dependency_task_ids(
+                    target_timeline_id,
+                    task.depends_on_task_ids or [],
+                    current_task_id=task.task_id,
+                )
 
-    if 'status' in data:
-        next_status = data['status']
-        task.change_status(next_status, completed_at_fallback=_utcnow_naive())
+        if 'status' in data:
+            next_status = data['status']
+            task.change_status(next_status, completed_at_fallback=_utcnow_naive())
 
-    if 'tags' in data:
-        task.tags = data['tags']
+        if 'tags' in data:
+            task.tags = data['tags']
 
-    if 'estimated_hours' in data:
-        task.estimated_hours = data['estimated_hours']
+        if 'estimated_hours' in data:
+            task.estimated_hours = data['estimated_hours']
 
-    if 'actual_hours' in data:
-        task.actual_hours = data['actual_hours']
+        if 'actual_hours' in data:
+            task.actual_hours = data['actual_hours']
 
-    if 'task_remark' in data:
-        task.task_remark = data['task_remark']
+        if 'task_remark' in data:
+            task.task_remark = data['task_remark']
 
-    if 'isWork' in data:
-        task.isWork = data['isWork']
+        if 'isWork' in data:
+            task.isWork = data['isWork']
 
-    if 'start_date' in data:
-        if data['start_date']:
-            try:
-                task.start_date = datetime.fromisoformat(data['start_date'])
-            except ValueError:
-                raise TaskOperationError('start_date 格式錯誤', 400)
-        else:
-            task.start_date = None
+        if 'start_date' in data:
+            if data['start_date']:
+                try:
+                    task.start_date = datetime.fromisoformat(data['start_date'])
+                except ValueError:
+                    raise TaskOperationError('start_date 格式錯誤', 400)
+            else:
+                task.start_date = None
 
-    if 'end_date' in data:
-        if data['end_date']:
-            try:
-                task.end_date = datetime.fromisoformat(data['end_date'])
-            except ValueError:
-                raise TaskOperationError('end_date 格式錯誤', 400)
-        else:
-            task.end_date = None
-
-    _commit_or_raise_task_error('任務更新失敗，請稍後再試')
+        if 'end_date' in data:
+            if data['end_date']:
+                try:
+                    task.end_date = datetime.fromisoformat(data['end_date'])
+                except ValueError:
+                    raise TaskOperationError('end_date 格式錯誤', 400)
+            else:
+                task.end_date = None
 
 
 def soft_delete_task_for_owner(task_id):
     task = _find_active_task_or_404(task_id)
-    task.deleted_at = _utcnow_naive()
-    _commit_or_raise_task_error('任務刪除失敗，請稍後再試')
+    with transaction(TaskOperationError, '任務刪除失敗，請稍後再試'):
+        task.deleted_at = _utcnow_naive()
 
 
 def toggle_task_for_member(task_id):
     task = _find_active_task_or_404(task_id)
-    task.change_status('pending' if task.completed else 'completed', completed_at_fallback=_utcnow_naive())
-
-    _commit_or_raise_task_error('狀態更新失敗，請稍後再試')
+    with transaction(TaskOperationError, '狀態更新失敗，請稍後再試'):
+        task.change_status('pending' if task.completed else 'completed', completed_at_fallback=_utcnow_naive())
     return task.completed
 
 
@@ -608,7 +615,7 @@ def add_task_member_for_operator(task_id, operator_user_id, new_user_id, role=1)
     if existing:
         raise TaskOperationError('該使用者已是任務成員', 409)
 
-    try:
+    with transaction(TaskOperationError, '成員新增失敗，請稍後再試'):
         task_member = TaskUser(task_id=task_id, user_id=new_user_id, role=role)
         db.session.add(task_member)
 
@@ -623,11 +630,7 @@ def add_task_member_for_operator(task_id, operator_user_id, new_user_id, role=1)
             content=f'{actor_name} 將你加入任務「{task_name}」',
             link='/tasks',
         )
-        db.session.commit()
-        return {'message': '成員新增成功'}
-    except Exception as exc:
-        db.session.rollback()
-        raise TaskOperationError('成員新增失敗，請稍後再試', 500) from exc
+    return {'message': '成員新增成功'}
 
 
 def remove_task_member_for_owner(task_id, member_id):
@@ -635,12 +638,8 @@ def remove_task_member_for_owner(task_id, member_id):
     if target and target.role == 0:
         raise TaskOperationError('無法移除負責人', 400)
 
-    try:
+    with transaction(TaskOperationError, '成員移除失敗，請稍後再試'):
         remove_task_member(task_id, member_id)
-        db.session.commit()
-    except Exception as exc:
-        db.session.rollback()
-        raise TaskOperationError('成員移除失敗，請稍後再試', 500) from exc
 
 
 def update_task_member_role_for_operator(task_id, member_id, new_role, operator_user_id):
@@ -655,29 +654,24 @@ def update_task_member_role_for_operator(task_id, member_id, new_role, operator_
         raise TaskOperationError('只有任務負責人、任務建立者或專案負責人可執行此操作', 403)
 
     target = get_task_member(task_id, member_id)
-    if not target:
-        if task.timeline_id:
-            timeline_member = get_timeline_member(task.timeline_id, member_id)
-            if timeline_member is None:
-                raise TaskOperationError('該使用者不是此專案成員，無法設為主責人', 400)
-        else:
-            raise TaskOperationError('該使用者尚未加入任務，請先指派為成員', 400)
-
-        target = TaskUser(task_id=task_id, user_id=member_id, role=1)
-        db.session.add(target)
-
-    if target.role == 0 and new_role == 1:
+    if target and target.role == 0 and new_role == 1:
         raise TaskOperationError('無法直接降級現任負責人，請先指定新負責人', 400)
 
-    try:
+    with transaction(TaskOperationError, '成員角色更新失敗，請稍後再試'):
+        if not target:
+            if task.timeline_id:
+                timeline_member = get_timeline_member(task.timeline_id, member_id)
+                if timeline_member is None:
+                    raise TaskOperationError('該使用者不是此專案成員，無法設為主責人', 400)
+            else:
+                raise TaskOperationError('該使用者尚未加入任務，請先指派為成員', 400)
+
+            target = TaskUser(task_id=task_id, user_id=member_id, role=1)
+            db.session.add(target)
+
         if new_role == 0:
             demote_task_members_to_collaborator(task_id)
             target.role = 0
-
-        db.session.commit()
-    except Exception as exc:
-        db.session.rollback()
-        raise TaskOperationError('成員角色更新失敗，請稍後再試', 500) from exc
 
 
 def list_task_comments_for_member(task_id):
@@ -695,7 +689,7 @@ def add_task_comment_for_member(task_id, user_id, data):
     if not message:
         raise TaskOperationError('請提供留言內容', 400)
 
-    try:
+    with transaction(TaskOperationError, '留言新增失敗，請稍後再試'):
         comment = TaskComment(
             task_id=task_id,
             user_id=user_id,
@@ -724,19 +718,14 @@ def add_task_comment_for_member(task_id, user_id, data):
                 link='/tasks',
             )
 
-        db.session.commit()
-
-        user = get_user_by_id(user_id)
-        return {
-            'comment_id': comment.comment_id,
-            'user_id': user_id,
-            'user_name': user.name if user else '未知',
-            'task_message': message,
-            'created_at': comment.created_at.isoformat() + 'Z' if comment.created_at else None,
-        }
-    except Exception as exc:
-        db.session.rollback()
-        raise TaskOperationError('留言新增失敗，請稍後再試', 500) from exc
+    user = get_user_by_id(user_id)
+    return {
+        'comment_id': comment.comment_id,
+        'user_id': user_id,
+        'user_name': user.name if user else '未知',
+        'task_message': message,
+        'created_at': comment.created_at.isoformat() + 'Z' if comment.created_at else None,
+    }
 
 
 def soft_delete_task_comment_for_user(task_id, comment_id, user_id):
@@ -748,8 +737,8 @@ def soft_delete_task_comment_for_user(task_id, comment_id, user_id):
     if comment.user_id != user_id:
         raise TaskOperationError('只能刪除自己的留言', 403)
 
-    comment.deleted_at = _utcnow_naive()
-    _commit_or_raise_task_error('留言刪除失敗，請稍後再試')
+    with transaction(TaskOperationError, '留言刪除失敗，請稍後再試'):
+        comment.deleted_at = _utcnow_naive()
 
 
 def list_subtasks_for_task(task_id):
@@ -763,13 +752,13 @@ def create_subtask_for_task(task_id, name):
 
     max_order = get_max_subtask_sort_order(task_id)
 
-    subtask = Subtask(
-        task_id=task_id,
-        name=name.strip(),
-        sort_order=max_order + 1,
-    )
-    db.session.add(subtask)
-    _commit_or_raise_task_error('子任務新增失敗，請稍後再試')
+    with transaction(TaskOperationError, '子任務新增失敗，請稍後再試'):
+        subtask = Subtask(
+            task_id=task_id,
+            name=name.strip(),
+            sort_order=max_order + 1,
+        )
+        db.session.add(subtask)
     return subtask.to_dict()
 
 
@@ -783,29 +772,27 @@ def _find_subtask_or_404(task_id, subtask_id):
 def update_subtask_for_task(task_id, subtask_id, data):
     subtask = _find_subtask_or_404(task_id, subtask_id)
 
-    if 'name' in data:
-        subtask.name = data['name']
-    if 'completed' in data:
-        subtask.completed = data['completed']
-    if 'sort_order' in data:
-        subtask.sort_order = data['sort_order']
-
-    _commit_or_raise_task_error('子任務更新失敗，請稍後再試')
+    with transaction(TaskOperationError, '子任務更新失敗，請稍後再試'):
+        if 'name' in data:
+            subtask.name = data['name']
+        if 'completed' in data:
+            subtask.completed = data['completed']
+        if 'sort_order' in data:
+            subtask.sort_order = data['sort_order']
     return subtask.to_dict()
 
 
 def delete_subtask_for_task(task_id, subtask_id):
     subtask = _find_subtask_or_404(task_id, subtask_id)
 
-    db.session.delete(subtask)
-    _commit_or_raise_task_error('子任務刪除失敗，請稍後再試')
+    with transaction(TaskOperationError, '子任務刪除失敗，請稍後再試'):
+        db.session.delete(subtask)
 
 
 def toggle_subtask_for_task(task_id, subtask_id):
     subtask = _find_subtask_or_404(task_id, subtask_id)
-    subtask.completed = not subtask.completed
-
-    _commit_or_raise_task_error('狀態更新失敗，請稍後再試')
+    with transaction(TaskOperationError, '狀態更新失敗，請稍後再試'):
+        subtask.completed = not subtask.completed
     return subtask.to_dict()
 
 
@@ -816,9 +803,8 @@ def update_task_status_for_member(task_id, new_status):
     if new_status not in valid_statuses:
         raise TaskOperationError(f'無效的狀態，有效值為: {valid_statuses}', 400)
 
-    task.change_status(new_status, completed_at_fallback=_utcnow_naive())
-
-    _commit_or_raise_task_error('狀態更新失敗，請稍後再試')
+    with transaction(TaskOperationError, '狀態更新失敗，請稍後再試'):
+        task.change_status(new_status, completed_at_fallback=_utcnow_naive())
     return {
         'status': task.status,
         'completed': task.completed,
@@ -872,6 +858,20 @@ def is_allowed_task_file(filename):
 
 def _task_upload_folder():
     return os.path.join(os.path.dirname(__file__), '..', 'uploads', 'task_files')
+
+
+def _remove_file_if_exists(file_path):
+    if not file_path or not os.path.exists(file_path):
+        return
+    try:
+        os.remove(file_path)
+    except OSError:
+        pass
+
+
+def _cleanup_task_upload_files(*file_paths):
+    for file_path in file_paths:
+        _remove_file_if_exists(file_path)
 
 
 def list_task_files_for_member(task_id):
@@ -929,8 +929,8 @@ def upload_task_file_for_member(task_id, user_id, file_storage):
     )
 
     try:
-        db.session.add(task_file)
-        db.session.commit()
+        with transaction(TaskOperationError, '檔案上傳失敗，請稍後再試'):
+            db.session.add(task_file)
         os.replace(temp_file_path, file_path)
         return {
             'id': task_file.id,
@@ -941,22 +941,7 @@ def upload_task_file_for_member(task_id, user_id, file_storage):
             'uploaded_at': task_file.uploaded_at.isoformat() + 'Z' if task_file.uploaded_at else None,
         }
     except Exception as exc:
-        db.session.rollback()
-        if os.path.exists(temp_file_path):
-            try:
-                os.remove(temp_file_path)
-            except OSError:
-                pass
-        if os.path.exists(file_path):
-            try:
-                os.remove(file_path)
-            except OSError:
-                pass
-        try:
-            db.session.delete(task_file)
-            db.session.commit()
-        except Exception:
-            db.session.rollback()
+        _cleanup_task_upload_files(temp_file_path, file_path)
         raise TaskOperationError('檔案上傳失敗，請稍後再試', 500) from exc
 
 
@@ -973,14 +958,10 @@ def delete_task_file_for_user(task_id, file_id, user_id):
         raise TaskOperationError('只有上傳者或負責人可刪除檔案', 403)
 
     file_path = task_file.file_path
-    db.session.delete(task_file)
-    _commit_or_raise_task_error('檔案刪除失敗，請稍後再試')
+    with transaction(TaskOperationError, '檔案刪除失敗，請稍後再試'):
+        db.session.delete(task_file)
 
-    if file_path and os.path.exists(file_path):
-        try:
-            os.remove(file_path)
-        except OSError:
-            pass
+    _remove_file_if_exists(file_path)
 
 
 def resolve_task_file_download_for_user(filename, user_id):

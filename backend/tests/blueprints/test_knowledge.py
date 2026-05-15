@@ -85,3 +85,41 @@ def test_knowledge_documents_blueprint_flow(client, monkeypatch):
     deleted = client.delete("/api/knowledge/documents/10", headers=headers)
     assert deleted.status_code == 200
     assert deleted.get_json()["document_id"] == 10
+
+
+def test_batch_delete_rejects_empty_document_ids(client, monkeypatch):
+    _create_user(
+        email="knowledge-batch-empty@example.com",
+        password="Password123!",
+        username="knowledge_batch_empty",
+    )
+    headers = _get_auth_headers(client, "knowledge-batch-empty@example.com", "Password123!")
+    monkeypatch.setattr("blueprints.knowledge._require_project_membership", lambda user_id: (1, None))
+
+    response = client.post(
+        "/api/knowledge/documents/batch-delete?project_id=1",
+        headers=headers,
+        json={"document_ids": []},
+    )
+
+    assert response.status_code == 400
+    assert response.get_json()["error_code"] == "BAD_REQUEST"
+
+
+def test_batch_reindex_rejects_empty_document_ids(client, monkeypatch):
+    _create_user(
+        email="knowledge-batch-reindex-empty@example.com",
+        password="Password123!",
+        username="knowledge_batch_reindex_empty",
+    )
+    headers = _get_auth_headers(client, "knowledge-batch-reindex-empty@example.com", "Password123!")
+    monkeypatch.setattr("blueprints.knowledge._require_project_membership", lambda user_id: (1, None))
+
+    response = client.post(
+        "/api/knowledge/documents/batch-reindex?project_id=1",
+        headers=headers,
+        json={"document_ids": []},
+    )
+
+    assert response.status_code == 400
+    assert response.get_json()["error_code"] == "BAD_REQUEST"

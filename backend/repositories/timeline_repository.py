@@ -116,6 +116,20 @@ def get_timeline_by_id(timeline_id):
     return db.session.get(Timeline, timeline_id)
 
 
+def build_timeline_entity(*, user_id, name, start_date, end_date, remark):
+    return Timeline(
+        user_id=user_id,
+        name=name,
+        start_date=start_date,
+        end_date=end_date,
+        remark=remark,
+    )
+
+
+def build_timeline_member_entity(*, timeline_id, user_id, role):
+    return TimelineUser(timeline_id=timeline_id, user_id=user_id, role=role)
+
+
 def soft_delete_tasks_by_timeline_id(timeline_id, deleted_at):
     return Task.query.filter_by(timeline_id=timeline_id).update(
         {'deleted_at': deleted_at},
@@ -240,3 +254,29 @@ def list_active_tasks_for_assignee(
         query = query.filter(Task.task_id != excluded_task_id)
 
     return query.all()
+
+
+def build_timeline_task_entity(
+    *,
+    user_id,
+    timeline_id,
+    name,
+    priority,
+    status,
+    task_remark,
+    start_date,
+    end_date,
+    is_work=1,
+):
+    return Task(
+        user_id=user_id,
+        timeline_id=timeline_id,
+        name=name,
+        priority=priority,
+        status=status,
+        task_remark=task_remark,
+        start_date=start_date,
+        end_date=end_date,
+        completed=False,
+        isWork=is_work,
+    )

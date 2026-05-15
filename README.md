@@ -2,7 +2,7 @@
 
 基於 Vue 3 + Flask 的專案管理與協作平台，整合 Google Gemini AI 實現智能任務生成。
 
-> **開發狀態**：Phase 1~6.6+ 已完成 ✅；Phase 7.1、7.2 已完成核心功能 ✅；Phase 7.3 核心閉環已完成 ✅（個人知識庫頁、專案檔案區、RAG 規劃 API 與來源契約已串接；後續聚焦生成品質與評測收斂）。
+> **開發狀態**：Phase 1~6.6+ 已完成 ✅；Phase 7.1、7.2 已完成核心功能 ✅；Phase 7.3 核心閉環已完成 ✅；Phase 8 後端抽象與交易邊界收斂已完成 ✅（下一步保留 RAG 品質評測與 Unit of Work 研讀後再評估）。
 
 ## 功能模組
 
@@ -21,6 +21,7 @@
 - **個人知識庫（Phase 7.3）**：`/knowledge` 支援 md/txt/pdf 上傳、列表、狀態、搜尋、篩選、排序、刪除與重建索引，採 per-user 隔離檢索
 - **專案檔案區（Phase 7.3）**：Timeline 詳情內可管理 project-scoped knowledge files，支援上傳、篩選、批次刪除/重建、下載、預覽與最近操作紀錄
 - **AI 規劃建議（Phase 7.3）**：`/api/timelines/ai-suggest-plan` 會整合歷史任務、個人知識與專案文件，回傳可追溯 `source_references`，並具備文字 fallback 與 LLM timeout fallback
+- **後端抽象收斂（Phase 8）**：knowledge/task/timeline 主線已收斂 `commit/rollback` 至 transaction helper，任務與專案建立流程逐步改用 repository/entity builder 與共用 session helper
 - **Copilot + MCP 整合**：自然語言 AI 路由至後端工具，無需 Inspector；支援任務知識摘要、群組快照、自動化創建
 - **垃圾桶回收機制**：已刪任務 / 專案暫存，支援還原或永久刪除；非建立者唯讀
 - **通知系統**：任務指派 / 專案邀請通知、鈴鐺 30 秒輪詢更新、主頁即將到期提醒區塊（3 天內截止或進度 ≥80%）
@@ -56,8 +57,8 @@ prajekt/
 ├── backend/
 │   ├── app.py                    # Flask 應用入口
 │   ├── blueprints/               # Route 層
-│   ├── services/                 # Business 層
-│   ├── repositories/             # 資料查詢層（2026/04 收斂）
+│   ├── services/                 # Use case / Business 層（transaction helper 已收斂主線）
+│   ├── repositories/             # 查詢、ORM entity builder 與 session helper（Phase 8 收斂）
 │   ├── chains/                   # LangChain chains/workflows（Phase 6.6）
 │   ├── prompts/                  # PromptTemplate 管理（Phase 6.6）
 │   ├── models/                   # SQLAlchemy ORM
@@ -194,6 +195,12 @@ pytest --cov=blueprints --cov=services --cov=models --cov-report=term-missing --
 - 前端：`npm run test -- timelineService.test.ts KnowledgeBaseView.test.ts TimelineDetailDialog.phase7.test.ts`（3 files / 11 tests passed）
 - 後端：`venv\Scripts\python.exe -m pytest`（189 passed，僅 `.pytest_cache` 權限 warning）
 - 後端語法檢查：`python -m py_compile services\rag_planning_service.py repositories\knowledge_repository.py services\knowledge_service.py`
+
+### 本輪 Phase 8 聚焦驗證（2026/05/16）
+
+- 後端：`venv\Scripts\python.exe -m pytest tests/services/test_task_service.py tests/services/test_timeline_service_access.py tests/services/test_timeline_service_conflicts.py tests/services/test_timeline_service_reporting.py tests/services/test_timeline_service_ai.py tests/services/test_knowledge_service.py tests/blueprints/test_knowledge.py`
+- 結果：43 passed（僅 `.pytest_cache` 權限 warning）
+- 驗證重點：transaction helper、knowledge/task/timeline 主線 commit/rollback 收斂、task/timeline entity builder 與共用 session helper
 
 ## API 端點
 
@@ -367,6 +374,11 @@ pytest --cov=blueprints --cov=services --cov=models --cov-report=term-missing --
 	- 7.3：核心閉環完成（個人知識庫 `/knowledge` + Project Files + RAG 規劃 API + source references）✅
 	- 7.3+：後端測試工程化收斂（models/task/timeline 大型測試檔拆分），全量後端回歸 `185 passed` ✅
 	- 7.3 後續：RAG 生成品質、評測資料集、來源排序與 prompt 調校 🟡
+- **Phase 8 後端抽象與交易邊界收斂（已完成）**：
+	- 8.1：新增 `transaction(...)` helper，knowledge/task/timeline 主線不再直接散落 `commit()/rollback()` ✅
+	- 8.2：整理 knowledge upload/reindex 狀態流轉，保留 uploaded -> indexing -> ready/failed 可觀測流程 ✅
+	- 8.3：task/timeline 建立流程改用 repository entity builder + 共用 session helper ✅
+	- 8.x：Unit of Work 暫緩，待 Architecture Patterns with Python 後續章節讀完再評估 📝
 
 ## 環境需求
 

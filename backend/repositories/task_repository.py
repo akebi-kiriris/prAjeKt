@@ -1,6 +1,7 @@
 from sqlalchemy import or_
 
 from models import db
+from models.notification import Notification
 from models.subtask import Subtask
 from models.task import Task
 from models.task_comment import TaskComment
@@ -160,3 +161,50 @@ def get_users_by_ids(user_ids):
 
 def get_user_by_id(user_id):
     return db.session.get(User, user_id)
+
+
+def build_task_entity(
+    *,
+    user_id,
+    name,
+    timeline_id,
+    priority,
+    status,
+    tags,
+    estimated_hours,
+    start_date,
+    end_date,
+    task_remark,
+    is_work,
+    depends_on_task_ids,
+):
+    return Task(
+        user_id=user_id,
+        name=name,
+        completed=False,
+        completed_at=None,
+        timeline_id=timeline_id,
+        priority=priority,
+        status=status,
+        tags=tags,
+        estimated_hours=estimated_hours,
+        start_date=start_date,
+        end_date=end_date,
+        task_remark=task_remark,
+        isWork=is_work,
+        depends_on_task_ids=depends_on_task_ids,
+    )
+
+
+def build_task_member_entity(task_id, user_id, role):
+    return TaskUser(task_id=task_id, user_id=user_id, role=role)
+
+
+def build_notification_entity(*, user_id, ntype, title, content=None, link=None):
+    return Notification(
+        user_id=user_id,
+        type=ntype,
+        title=title,
+        content=content,
+        link=link,
+    )

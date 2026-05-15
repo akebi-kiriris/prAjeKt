@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta, timezone
 from io import BytesIO
+import os
 
 import pytest
 from werkzeug.datastructures import FileStorage
@@ -663,6 +664,8 @@ def test_task_service_file_operations_and_validation(app):
     )
     file_id = uploaded["id"]
     stored_filename = uploaded["filename"]
+    stored_path = db.session.get(TaskFile, file_id).file_path
+    assert os.path.exists(stored_path)
 
     listed = list_task_files_for_member(task.task_id)
     assert any(item["id"] == file_id for item in listed)
@@ -698,5 +701,5 @@ def test_task_service_file_operations_and_validation(app):
 
     delete_task_file_for_user(task.task_id, file_id, owner.id)
     assert db.session.get(TaskFile, file_id) is None
-
+    assert not os.path.exists(stored_path)
 

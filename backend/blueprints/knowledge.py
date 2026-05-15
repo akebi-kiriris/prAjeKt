@@ -161,9 +161,9 @@ def _require_project_membership(user_id):
 @jwt_required()
 def batch_delete_knowledge_documents_api():
     user_id = int(get_jwt_identity())
-    project_id, error_response = _require_project_membership(user_id)
-    if error_response:
-        return error_response
+    project_id, membership_error = _require_project_membership(user_id)
+    if membership_error:
+        return membership_error
     payload = request.get_json(silent=True) or {}
     payload, payload_error = _validate_payload_or_400(KnowledgeBatchPayload, payload)
     if payload_error:
@@ -182,9 +182,9 @@ def batch_delete_knowledge_documents_api():
 @jwt_required()
 def batch_reindex_knowledge_documents_api():
     user_id = int(get_jwt_identity())
-    project_id, error_response = _require_project_membership(user_id)
-    if error_response:
-        return error_response
+    project_id, membership_error = _require_project_membership(user_id)
+    if membership_error:
+        return membership_error
     payload = request.get_json(silent=True) or {}
     payload, payload_error = _validate_payload_or_400(KnowledgeBatchPayload, payload)
     if payload_error:
@@ -203,9 +203,9 @@ def batch_reindex_knowledge_documents_api():
 @jwt_required()
 def download_knowledge_document_api(document_id):
     user_id = int(get_jwt_identity())
-    project_id, error_response = _require_project_membership(user_id)
-    if error_response:
-        return error_response
+    project_id, membership_error = _require_project_membership(user_id)
+    if membership_error:
+        return membership_error
     try:
         document = get_project_knowledge_document_file(
             user_id=user_id,
@@ -227,9 +227,9 @@ def download_knowledge_document_api(document_id):
 @jwt_required()
 def preview_knowledge_document_api(document_id):
     user_id = int(get_jwt_identity())
-    project_id, error_response = _require_project_membership(user_id)
-    if error_response:
-        return error_response
+    project_id, membership_error = _require_project_membership(user_id)
+    if membership_error:
+        return membership_error
     try:
         document = get_project_knowledge_document_file(
             user_id=user_id,
@@ -253,9 +253,9 @@ def preview_knowledge_document_api(document_id):
 @jwt_required()
 def list_knowledge_document_events_api():
     user_id = int(get_jwt_identity())
-    project_id, error_response = _require_project_membership(user_id)
-    if error_response:
-        return error_response
+    project_id, membership_error = _require_project_membership(user_id)
+    if membership_error:
+        return membership_error
     limit, limit_error = _parse_int_query_arg_or_400("limit", 50)
     if limit_error:
         return limit_error
