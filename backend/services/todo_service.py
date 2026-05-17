@@ -1,11 +1,12 @@
 from datetime import datetime, timezone
 
-from models import db
 from models.todo import Todo
+from repositories.session_repository import add_entity
 from repositories.todo_repository import (
     get_active_todo_by_id_for_user,
     list_active_todos_for_user,
 )
+from services.transactions import transaction
 
 TODO_CREATE_ALLOWED_FIELDS = {'title', 'content', 'type', 'deadline', 'priority'}
 TODO_UPDATE_ALLOWED_FIELDS = {'title', 'content', 'type', 'deadline', 'priority', 'completed'}
@@ -99,12 +100,8 @@ def create_todo_for_user(user_id, data):
         priority=priority,
     )
 
-    try:
-        db.session.add(new_todo)
-        db.session.commit()
-    except Exception as exc:
-        db.session.rollback()
-        raise TodoOperationError('待辦事項新增失敗，請稍後再試', 500) from exc
+    with transaction(TodoOperationError, '待辦事項新增失敗，請稍後再試'):
+        add_entity(new_todo)
 
     return new_todo.id
 
@@ -143,22 +140,15 @@ def update_todo_for_user(todo_id, user_id, data):
         todo.completed = data['completed']
         todo.completed_at = _utcnow_naive() if data['completed'] else None
 
-    try:
-        db.session.commit()
-    except Exception as exc:
-        db.session.rollback()
-        raise TodoOperationError('待辦事項更新失敗，請稍後再試', 500) from exc
+    with transaction(TodoOperationError, '待辦事項更新失敗，請稍後再試'):
+        pass
 
 
 def soft_delete_todo_for_user(todo_id, user_id):
     todo = _find_active_todo_or_404(todo_id, user_id)
 
-    try:
+    with transaction(TodoOperationError, '待辦事項刪除失敗，請稍後再試'):
         todo.deleted_at = _utcnow_naive()
-        db.session.commit()
-    except Exception as exc:
-        db.session.rollback()
-        raise TodoOperationError('待辦事項刪除失敗，請稍後再試', 500) from exc
 
 
 def toggle_todo_for_user(todo_id, user_id):
@@ -166,10 +156,7 @@ def toggle_todo_for_user(todo_id, user_id):
     todo.completed = not todo.completed
     todo.completed_at = _utcnow_naive() if todo.completed else None
 
-    try:
-        db.session.commit()
-    except Exception as exc:
-        db.session.rollback()
-        raise TodoOperationError('狀態更新失敗，請稍後再試', 500) from exc
+    with transaction(TodoOperationError, '狀態更新失敗，請稍後再試'):
+        pass
 
     return todo.completed

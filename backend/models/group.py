@@ -22,6 +22,9 @@ class Group(db.Model):
 
 class GroupMember(db.Model):
     __tablename__ = 'group_members'
+    __table_args__ = (
+        db.UniqueConstraint('group_id', 'user_id', name='uq_group_members_group_user'),
+    )
     
     id = db.Column(db.Integer, primary_key=True)
     group_id = db.Column(db.Integer, db.ForeignKey('groups.group_id'))

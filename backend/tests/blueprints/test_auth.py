@@ -76,6 +76,65 @@ def test_register_duplicate_email_returns_409(client):
     assert response.status_code == 409
 
 
+def test_register_duplicate_username_returns_409(client):
+    _create_user(
+        email="dup-username-a@example.com",
+        password="Password123!",
+        username="dup_username_user",
+    )
+
+    response = client.post(
+        "/api/auth/register",
+        json={
+            "name": "Another User",
+            "username": "dup_username_user",
+            "email": "dup-username-b@example.com",
+            "password": "Password123!",
+        },
+    )
+
+    assert response.status_code == 409
+
+
+def test_register_username_optional_and_phone_supported(client):
+    response = client.post(
+        "/api/auth/register",
+        json={
+            "name": "No Username User",
+            "email": "no-username@example.com",
+            "password": "Password123!",
+            "phone": "0911222333",
+        },
+    )
+
+    assert response.status_code == 201
+    payload = response.get_json()
+    saved = db.session.get(User, payload["user_id"])
+    assert saved is not None
+    assert saved.username is None
+    assert saved.phone == "0911222333"
+
+
+def test_register_normalizes_email_before_duplicate_check(client):
+    _create_user(
+        email="normalize-email@example.com",
+        password="Password123!",
+        username="normalize_email_user",
+    )
+
+    response = client.post(
+        "/api/auth/register",
+        json={
+            "name": "Normalize Email",
+            "username": "normalize_email_user_2",
+            "email": "  NORMALIZE-EMAIL@EXAMPLE.COM  ",
+            "password": "Password123!",
+        },
+    )
+
+    assert response.status_code == 409
+
+
 def test_login_success_returns_tokens_and_user_payload(client):
     _create_user(
         email="login-success@example.com",

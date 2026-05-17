@@ -5,7 +5,6 @@ import hashlib
 import os
 import time
 
-from models import db
 from models.notification import Notification
 from models.task import Task
 from models.timeline import Timeline
@@ -46,7 +45,7 @@ from repositories.timeline_repository import (
     get_user_by_id,
     get_users_by_ids,
 )
-from repositories.session_repository import add_entity, flush_session
+from repositories.session_repository import add_entity, delete_entity, flush_session
 
 TIMELINE_UPDATE_ALLOWED_FIELDS = {'name', 'start_date', 'end_date', 'remark'}
 WEEKLY_REPORT_AI_TIMEOUT_SEC = float(os.getenv('WEEKLY_REPORT_AI_TIMEOUT_SEC', '35'))
@@ -754,7 +753,7 @@ def trigger_timeline_risk_notifications(timeline_id):
 
     with transaction(TimelineOperationError, '風險通知發送失敗，請稍後再試'):
         for user_id in notified_user_ids:
-            db.session.add(
+            add_entity(
                 Notification(
                     user_id=user_id,
                     type='risk_alert',
@@ -1320,7 +1319,7 @@ def add_timeline_member_for_owner(timeline_id, invited_user_id, role, actor_user
 
     with transaction(TimelineOperationError, '成員新增失敗，請稍後再試'):
         member = TimelineUser(timeline_id=timeline_id, user_id=invited_user_id, role=role)
-        db.session.add(member)
+        add_entity(member)
 
         actor = get_user_by_id(actor_user_id)
         timeline = get_active_timeline_by_id(timeline_id)
@@ -1337,7 +1336,7 @@ def add_timeline_member_for_owner(timeline_id, invited_user_id, role, actor_user
             content=f'{actor_name} 邀請你加入「{timeline_name}」',
             link='/timelines',
         )
-        db.session.add(notif)
+        add_entity(notif)
 
 
 def remove_timeline_member_for_owner(timeline_id, member_user_id, operator_user_id):
@@ -1349,7 +1348,7 @@ def remove_timeline_member_for_owner(timeline_id, member_user_id, operator_user_
         raise TimelineOperationError('找不到該成員，或無法移除負責人', 404)
 
     with transaction(TimelineOperationError, '成員移除失敗，請稍後再試'):
-        db.session.delete(member)
+        delete_entity(member)
 
 
 def batch_create_tasks_for_timeline(timeline_id, user_id, task_payloads):

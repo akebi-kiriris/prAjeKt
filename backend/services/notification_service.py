@@ -1,10 +1,11 @@
-from models import db
 from repositories.notification_repository import (
     count_unread_notifications_for_user,
     get_notification_for_user,
     list_notifications_for_user,
     mark_all_unread_notifications_as_read,
 )
+from repositories.session_repository import delete_entity
+from services.transactions import transaction
 
 
 class NotificationOperationError(Exception):
@@ -39,13 +40,13 @@ def mark_notification_as_read(notification_id, user_id):
     if not notification:
         raise NotificationOperationError('找不到通知', 404)
 
-    notification.is_read = True
-    db.session.commit()
+    with transaction(NotificationOperationError, '標記通知失敗，請稍後再試'):
+        notification.is_read = True
 
 
 def mark_all_notifications_as_read(user_id):
-    mark_all_unread_notifications_as_read(user_id)
-    db.session.commit()
+    with transaction(NotificationOperationError, '標記全部通知失敗，請稍後再試'):
+        mark_all_unread_notifications_as_read(user_id)
 
 
 def delete_notification_for_user(notification_id, user_id):
@@ -53,5 +54,5 @@ def delete_notification_for_user(notification_id, user_id):
     if not notification:
         raise NotificationOperationError('找不到通知', 404)
 
-    db.session.delete(notification)
-    db.session.commit()
+    with transaction(NotificationOperationError, '刪除通知失敗，請稍後再試'):
+        delete_entity(notification)

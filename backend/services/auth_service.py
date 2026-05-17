@@ -1,7 +1,9 @@
 from werkzeug.security import check_password_hash, generate_password_hash
-from models import db
+from sqlalchemy.exc import IntegrityError
 from models.user import User
 from repositories.auth_repository import get_user_by_email, get_user_by_id, get_user_by_username
+from repositories.session_repository import add_entity
+from services.transactions import transaction
 
 
 class AuthOperationError(Exception):
@@ -31,11 +33,13 @@ def current_user_to_dict(user):
 
 
 def register_user(data):
-    name = data.get('name')
+    name = (data.get('name') or '').strip()
     username = data.get('username')
-    email = data.get('email')
+    email = (data.get('email') or '').strip().lower()
     password = data.get('password')
     phone = data.get('phone')
+    username = username.strip() if isinstance(username, str) and username.strip() else None
+    phone = phone.strip() if isinstance(phone, str) and phone.strip() else None
 
     if not all([name, email, password]):
         raise AuthOperationError('缺少必要欄位', 400)
@@ -55,19 +59,27 @@ def register_user(data):
     )
 
     try:
-        db.session.add(new_user)
-        db.session.commit()
+        with transaction(AuthOperationError, '註冊失敗，請稍後再試'):
+            add_entity(new_user)
         return new_user.id
-    except Exception as exc:
-        db.session.rollback()
-        raise AuthOperationError('註冊失敗，請稍後再試', 500) from exc
+    except AuthOperationError as err:
+        cause = getattr(err, '__cause__', None)
+        if isinstance(cause, IntegrityError):
+            error_message = str(getattr(cause, 'orig', cause)).lower()
+            if 'username' in error_message:
+                raise AuthOperationError('此用戶名已被使用', 409) from cause
+            if 'email' in error_message:
+                raise AuthOperationError('此 email 已被註冊', 409) from cause
+            raise AuthOperationError('帳號資料重複，請確認後再試', 409) from cause
+        raise
 
 
 def authenticate_user(email, password):
-    if not email or not password:
+    normalized_email = email.strip().lower() if isinstance(email, str) else ''
+    if not normalized_email or not password:
         raise AuthOperationError('請提供 email 和密碼', 400)
 
-    user = get_user_by_email(email)
+    user = get_user_by_email(normalized_email)
     if not user or not check_password_hash(user.password, password):
         raise AuthOperationError('帳號或密碼錯誤', 401)
 

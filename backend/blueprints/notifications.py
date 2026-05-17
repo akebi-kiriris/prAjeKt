@@ -49,8 +49,11 @@ def mark_as_read(notification_id):
 def mark_all_as_read():
     """標記所有通知為已讀"""
     user_id = int(get_jwt_identity())
-    mark_all_notifications_as_read(user_id)
-    return jsonify({'message': '全部標記為已讀'}), 200
+    try:
+        mark_all_notifications_as_read(user_id)
+        return jsonify({'message': '全部標記為已讀'}), 200
+    except NotificationOperationError as err:
+        return error_from_exception(err)
 
 
 @notifications_bp.route('/<int:notification_id>', methods=['DELETE'])

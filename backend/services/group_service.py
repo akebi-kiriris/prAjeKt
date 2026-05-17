@@ -6,7 +6,7 @@ import random
 import threading
 import uuid
 
-from models import db
+from sqlalchemy.exc import IntegrityError
 from models.group import Group
 from models.group import GroupMember
 from models.group_ai_snapshot import GroupAISnapshot
@@ -21,7 +21,9 @@ from repositories.group_repository import (
     list_group_messages_for_snapshot,
     list_groups_for_user_query,
 )
+from repositories.session_repository import add_entity, delete_entity, flush_session
 from services.ai_provider import get_ai_provider
+from services.transactions import transaction
 
 
 class GroupOperationError(Exception):
@@ -66,6 +68,14 @@ def get_snapshot_async_threshold():
 
 def get_snapshot_window_days_default():
     return max(1, _get_int_env('SNAPSHOT_WINDOW_DAYS', 30))
+
+
+def get_snapshot_job_ttl_seconds():
+    return max(60, _get_int_env('SNAPSHOT_JOB_TTL_SECONDS', 3600))
+
+
+def get_snapshot_job_max_records():
+    return max(50, _get_int_env('SNAPSHOT_JOB_MAX_RECORDS', 500))
 
 
 def generate_unique_invite_code():
@@ -123,26 +133,34 @@ def create_group_for_user(user_id, group_name):
     if not normalized_name:
         raise GroupOperationError('請輸入群組名稱', 400)
 
-    invite_code = generate_unique_invite_code()
-    new_group = Group(
-        group_name=normalized_name,
-        group_type='task',
-        group_inviteCode=invite_code,
-        created_by=user_id,
-    )
+    max_attempts = 3
+    for _ in range(max_attempts):
+        invite_code = generate_unique_invite_code()
+        new_group = Group(
+            group_name=normalized_name,
+            group_type='task',
+            group_inviteCode=invite_code,
+            created_by=user_id,
+        )
 
-    try:
-        db.session.add(new_group)
-        db.session.flush()
-        db.session.add(GroupMember(group_id=new_group.group_id, user_id=user_id))
-        db.session.commit()
-        return {
-            'group_id': new_group.group_id,
-            'invite_code': invite_code,
-        }
-    except Exception as exc:
-        db.session.rollback()
-        raise GroupOperationError('建立群組失敗，請稍後再試', 500) from exc
+        try:
+            with transaction(GroupOperationError, '建立群組失敗，請稍後再試'):
+                add_entity(new_group)
+                flush_session()
+                add_entity(GroupMember(group_id=new_group.group_id, user_id=user_id))
+            return {
+                'group_id': new_group.group_id,
+                'invite_code': invite_code,
+            }
+        except GroupOperationError as err:
+            cause = getattr(err, '__cause__', None)
+            if isinstance(cause, IntegrityError):
+                message = str(getattr(cause, 'orig', cause)).lower()
+                if 'group_invite' in message or 'invite' in message:
+                    continue
+            raise
+
+    raise GroupOperationError('建立群組失敗，請稍後再試', 500)
 
 
 def join_group_by_invite_code(user_id, invite_code):
@@ -159,11 +177,15 @@ def join_group_by_invite_code(user_id, invite_code):
         raise GroupOperationError('您已經是該群組成員', 409)
 
     try:
-        db.session.add(GroupMember(group_id=group.group_id, user_id=user_id))
-        db.session.commit()
-    except Exception as exc:
-        db.session.rollback()
-        raise GroupOperationError('加入群組失敗，請稍後再試', 500) from exc
+        with transaction(GroupOperationError, '加入群組失敗，請稍後再試'):
+            add_entity(GroupMember(group_id=group.group_id, user_id=user_id))
+    except GroupOperationError as err:
+        cause = getattr(err, '__cause__', None)
+        if isinstance(cause, IntegrityError):
+            message = str(getattr(cause, 'orig', cause)).lower()
+            if 'uq_group_members_group_user' in message or 'group_members' in message:
+                raise GroupOperationError('您已經是該群組成員', 409) from cause
+        raise
 
 
 def leave_group_for_user(group_id, user_id):
@@ -171,12 +193,8 @@ def leave_group_for_user(group_id, user_id):
     if not member:
         raise GroupOperationError('您不是該群組成員', 404)
 
-    try:
-        db.session.delete(member)
-        db.session.commit()
-    except Exception as exc:
-        db.session.rollback()
-        raise GroupOperationError('離開群組失敗，請稍後再試', 500) from exc
+    with transaction(GroupOperationError, '離開群組失敗，請稍後再試'):
+        delete_entity(member)
 
 
 def list_group_members_payload(group_id, include_email=False):
@@ -206,13 +224,9 @@ def send_group_message_for_member(group_id, user_id, content):
         content=normalized_content,
     )
 
-    try:
-        db.session.add(new_message)
-        db.session.commit()
-        return new_message.message_id
-    except Exception as exc:
-        db.session.rollback()
-        raise GroupOperationError('發送訊息失敗，請稍後再試', 500) from exc
+    with transaction(GroupOperationError, '發送訊息失敗，請稍後再試'):
+        add_entity(new_message)
+    return new_message.message_id
 
 
 def group_snapshot_to_dict(snapshot):
@@ -597,13 +611,9 @@ def persist_snapshot(group_id, snapshot_payload, created_by, source_count, model
         metadata_json=metadata_json,
     )
 
-    try:
-        db.session.add(snapshot)
-        db.session.commit()
-        return group_snapshot_to_dict(snapshot)
-    except Exception as exc:
-        db.session.rollback()
-        raise GroupOperationError('儲存群組快照失敗，請稍後再試', 500) from exc
+    with transaction(GroupOperationError, '儲存群組快照失敗，請稍後再試'):
+        add_entity(snapshot)
+    return group_snapshot_to_dict(snapshot)
 
 
 def generate_group_snapshot(group_id, window_days=30, created_by=None, force=False):
@@ -681,6 +691,43 @@ def _set_snapshot_job(job_id, patch_payload):
         _snapshot_jobs[job_id]['updated_at'] = _to_iso_z(_utcnow_naive())
 
 
+def _cleanup_snapshot_jobs_locked():
+    now = _utcnow_naive()
+    ttl = timedelta(seconds=get_snapshot_job_ttl_seconds())
+
+    expired_job_ids = []
+    for job_id, payload in _snapshot_jobs.items():
+        status = payload.get('status')
+        if status not in {'completed', 'failed'}:
+            continue
+
+        updated_at_raw = payload.get('updated_at')
+        if not isinstance(updated_at_raw, str):
+            continue
+
+        try:
+            updated_at = datetime.fromisoformat(updated_at_raw.replace('Z', ''))
+        except ValueError:
+            continue
+
+        if now - updated_at > ttl:
+            expired_job_ids.append(job_id)
+
+    for job_id in expired_job_ids:
+        _snapshot_jobs.pop(job_id, None)
+
+    max_records = get_snapshot_job_max_records()
+    if len(_snapshot_jobs) <= max_records:
+        return
+
+    sorted_jobs = sorted(
+        _snapshot_jobs.items(),
+        key=lambda item: item[1].get('updated_at') or item[1].get('created_at') or '',
+    )
+    for job_id, _payload in sorted_jobs[: len(_snapshot_jobs) - max_records]:
+        _snapshot_jobs.pop(job_id, None)
+
+
 def _run_snapshot_job(app, job_id, group_id, user_id, window_days):
     _set_snapshot_job(job_id, {'status': 'running'})
     try:
@@ -725,6 +772,7 @@ def enqueue_snapshot_job(app, group_id, user_id, window_days=30):
     }
 
     with _snapshot_jobs_lock:
+        _cleanup_snapshot_jobs_locked()
         _snapshot_jobs[job_id] = payload
 
     _snapshot_executor.submit(_run_snapshot_job, app, job_id, group_id, user_id, window_days)
@@ -733,6 +781,7 @@ def enqueue_snapshot_job(app, group_id, user_id, window_days=30):
 
 def get_snapshot_job_status(job_id, requester_user_id=None):
     with _snapshot_jobs_lock:
+        _cleanup_snapshot_jobs_locked()
         payload = dict(_snapshot_jobs.get(job_id, {}))
 
     if not payload:

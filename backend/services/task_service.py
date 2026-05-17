@@ -6,7 +6,6 @@ import re
 import time
 import uuid
 
-from models import db
 from models.subtask import Subtask
 from models.task import Task
 from models.task_comment import TaskComment
@@ -47,7 +46,7 @@ from repositories.task_repository import (
     list_timeline_members,
     remove_task_member,
 )
-from repositories.session_repository import add_entity, flush_session
+from repositories.session_repository import add_entity, delete_entity, flush_session
 
 TASK_CREATE_ALLOWED_FIELDS = {
     'name',
@@ -617,7 +616,7 @@ def add_task_member_for_operator(task_id, operator_user_id, new_user_id, role=1)
 
     with transaction(TaskOperationError, '成員新增失敗，請稍後再試'):
         task_member = TaskUser(task_id=task_id, user_id=new_user_id, role=role)
-        db.session.add(task_member)
+        add_entity(task_member)
 
         actor = get_user_by_id(operator_user_id)
         actor_name = actor.name if actor else '某人'
@@ -667,7 +666,7 @@ def update_task_member_role_for_operator(task_id, member_id, new_role, operator_
                 raise TaskOperationError('該使用者尚未加入任務，請先指派為成員', 400)
 
             target = TaskUser(task_id=task_id, user_id=member_id, role=1)
-            db.session.add(target)
+            add_entity(target)
 
         if new_role == 0:
             demote_task_members_to_collaborator(task_id)
@@ -695,7 +694,7 @@ def add_task_comment_for_member(task_id, user_id, data):
             user_id=user_id,
             task_message=message,
         )
-        db.session.add(comment)
+        add_entity(comment)
 
         actor = get_user_by_id(user_id)
         task = get_task_by_id(task_id)
@@ -758,7 +757,7 @@ def create_subtask_for_task(task_id, name):
             name=name.strip(),
             sort_order=max_order + 1,
         )
-        db.session.add(subtask)
+        add_entity(subtask)
     return subtask.to_dict()
 
 
@@ -786,7 +785,7 @@ def delete_subtask_for_task(task_id, subtask_id):
     subtask = _find_subtask_or_404(task_id, subtask_id)
 
     with transaction(TaskOperationError, '子任務刪除失敗，請稍後再試'):
-        db.session.delete(subtask)
+        delete_entity(subtask)
 
 
 def toggle_subtask_for_task(task_id, subtask_id):
@@ -930,7 +929,7 @@ def upload_task_file_for_member(task_id, user_id, file_storage):
 
     try:
         with transaction(TaskOperationError, '檔案上傳失敗，請稍後再試'):
-            db.session.add(task_file)
+            add_entity(task_file)
         os.replace(temp_file_path, file_path)
         return {
             'id': task_file.id,
@@ -959,7 +958,7 @@ def delete_task_file_for_user(task_id, file_id, user_id):
 
     file_path = task_file.file_path
     with transaction(TaskOperationError, '檔案刪除失敗，請稍後再試'):
-        db.session.delete(task_file)
+        delete_entity(task_file)
 
     _remove_file_if_exists(file_path)
 

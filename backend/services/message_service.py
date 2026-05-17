@@ -7,6 +7,8 @@ from repositories.message_repository import (
     count_unread_messages_for_user,
     get_user_by_id,
 )
+from repositories.session_repository import add_entity
+from services.transactions import transaction
 
 
 class MessageOperationError(Exception):
@@ -47,11 +49,8 @@ def mark_all_unread_messages_as_read(user_id):
         ]
     )
 
-    try:
-        db.session.commit()
-    except Exception as exc:
-        db.session.rollback()
-        raise MessageOperationError('標記訊息失敗，請稍後再試', 500) from exc
+    with transaction(MessageOperationError, '標記訊息失敗，請稍後再試'):
+        pass
 
 
 def serialize_group_message(message, sender_name):
@@ -71,6 +70,6 @@ def create_group_message(group_id, sender_id, content):
         raise ValueError('使用者不存在')
 
     message = Message(group_id=group_id, sender_id=sender_id, content=content)
-    db.session.add(message)
-    db.session.commit()
+    with transaction(MessageOperationError, '建立訊息失敗，請稍後再試'):
+        add_entity(message)
     return serialize_group_message(message, sender.name)

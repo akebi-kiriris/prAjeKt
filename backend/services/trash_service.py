@@ -1,6 +1,5 @@
 import os
 
-from models import db
 from repositories.trash_repository import (
     get_deleted_task_by_owner,
     get_deleted_timeline_by_owner,
@@ -12,6 +11,8 @@ from repositories.trash_repository import (
     list_member_timeline_ids,
     list_tasks_by_timeline_id,
 )
+from repositories.session_repository import delete_entity
+from services.transactions import transaction
 
 
 class TrashOperationError(Exception):
@@ -44,9 +45,21 @@ def trash_timeline_to_dict(timeline, user_id):
 
 
 def remove_task_files(task):
+    for file_path in get_task_file_paths(task):
+        remove_file_if_exists(file_path)
+
+
+def get_task_file_paths(task):
+    paths = []
     for task_file in task.files:
-        if task_file.file_path and os.path.exists(task_file.file_path):
-            os.remove(task_file.file_path)
+        if task_file.file_path:
+            paths.append(task_file.file_path)
+    return paths
+
+
+def remove_file_if_exists(file_path):
+    if file_path and os.path.exists(file_path):
+        os.remove(file_path)
 
 
 def get_trash_payload(user_id):
@@ -74,12 +87,8 @@ def restore_task_for_owner(task_id, user_id):
     if not task:
         raise TrashOperationError('找不到該任務，或你沒有權限還原', 404)
 
-    try:
+    with transaction(TrashOperationError, '任務還原失敗，請稍後再試'):
         task.deleted_at = None
-        db.session.commit()
-    except Exception as exc:
-        db.session.rollback()
-        raise TrashOperationError('任務還原失敗，請稍後再試', 500) from exc
 
 
 def permanently_delete_task_for_owner(task_id, user_id):
@@ -87,13 +96,11 @@ def permanently_delete_task_for_owner(task_id, user_id):
     if not task:
         raise TrashOperationError('找不到該任務，或你沒有權限刪除', 404)
 
-    try:
-        remove_task_files(task)
-        db.session.delete(task)
-        db.session.commit()
-    except Exception as exc:
-        db.session.rollback()
-        raise TrashOperationError('任務永久刪除失敗，請稍後再試', 500) from exc
+    file_paths = get_task_file_paths(task)
+    with transaction(TrashOperationError, '任務永久刪除失敗，請稍後再試'):
+        delete_entity(task)
+    for file_path in file_paths:
+        remove_file_if_exists(file_path)
 
 
 def restore_timeline_for_owner(timeline_id, user_id):
@@ -101,12 +108,8 @@ def restore_timeline_for_owner(timeline_id, user_id):
     if not timeline:
         raise TrashOperationError('找不到該專案，或你沒有權限還原', 404)
 
-    try:
+    with transaction(TrashOperationError, '專案還原失敗，請稍後再試'):
         timeline.deleted_at = None
-        db.session.commit()
-    except Exception as exc:
-        db.session.rollback()
-        raise TrashOperationError('專案還原失敗，請稍後再試', 500) from exc
 
 
 def permanently_delete_timeline_for_owner(timeline_id, user_id):
@@ -114,14 +117,15 @@ def permanently_delete_timeline_for_owner(timeline_id, user_id):
     if not timeline:
         raise TrashOperationError('找不到該專案，或你沒有權限刪除', 404)
 
-    try:
-        tasks = list_tasks_by_timeline_id(timeline_id)
-        for task in tasks:
-            remove_task_files(task)
-            db.session.delete(task)
+    file_paths = []
+    tasks = list_tasks_by_timeline_id(timeline_id)
+    for task in tasks:
+        file_paths.extend(get_task_file_paths(task))
 
-        db.session.delete(timeline)
-        db.session.commit()
-    except Exception as exc:
-        db.session.rollback()
-        raise TrashOperationError('專案永久刪除失敗，請稍後再試', 500) from exc
+    with transaction(TrashOperationError, '專案永久刪除失敗，請稍後再試'):
+        for task in tasks:
+            delete_entity(task)
+
+        delete_entity(timeline)
+    for file_path in file_paths:
+        remove_file_if_exists(file_path)

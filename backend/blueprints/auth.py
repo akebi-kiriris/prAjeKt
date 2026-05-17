@@ -17,13 +17,23 @@ auth_bp = Blueprint('auth', __name__)
 class RegisterPayload(BaseModel):
     model_config = ConfigDict(extra='forbid')
     name: str
-    username: str
+    username: str | None = None
     email: str
     password: str
+    phone: str | None = None
 
-    @field_validator('name', 'username', 'email', 'password')
+    @field_validator('name', 'email', 'password')
     @classmethod
     def validate_required_text(cls, value):
+        if not str(value).strip():
+            raise ValueError('欄位不可為空')
+        return value
+
+    @field_validator('username', 'phone')
+    @classmethod
+    def validate_optional_text(cls, value):
+        if value is None:
+            return value
         if not str(value).strip():
             raise ValueError('欄位不可為空')
         return value

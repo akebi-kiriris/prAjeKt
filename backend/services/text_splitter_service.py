@@ -5,6 +5,7 @@ from repositories.knowledge_repository import (
     get_knowledge_document_by_id,
     update_knowledge_document_status,
 )
+from services.transactions import transaction
 
 
 class TextSplitterOperationError(Exception):
@@ -232,12 +233,12 @@ class TextSplitterService:
 
     def _mark_document_failed(self, user_id, document_id):
         try:
-            document = update_knowledge_document_status(
-                user_id=user_id,
-                document_id=document_id,
-                status="failed",
-            )
-            if document is not None:
-                db.session.commit()
-        except Exception:
-            db.session.rollback()
+            with transaction(TextSplitterOperationError, "更新知識文件失敗狀態失敗", 500):
+                update_knowledge_document_status(
+                    user_id=user_id,
+                    document_id=document_id,
+                    status="failed",
+                )
+        except TextSplitterOperationError:
+            # 失敗補償不應覆蓋原始 split 失敗錯誤
+            pass

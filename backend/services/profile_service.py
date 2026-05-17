@@ -2,7 +2,6 @@ from datetime import datetime, timedelta, timezone
 
 from werkzeug.security import check_password_hash, generate_password_hash
 
-from models import db
 from repositories.profile_repository import (
     get_user_by_email_excluding_id,
     get_user_by_id,
@@ -13,6 +12,7 @@ from repositories.profile_repository import (
     list_timeline_ids_for_user,
     search_user_by_username_or_email,
 )
+from services.transactions import transaction
 
 
 PROFILE_UPDATE_ALLOWED_FIELDS = {
@@ -81,9 +81,14 @@ def update_profile_for_user(user_id, data):
         user.name = data['name']
 
     if 'username' in data:
-        if data['username'] and get_user_by_username_excluding_id(data['username'], user_id):
+        normalized_username = (
+            data['username'].strip()
+            if isinstance(data['username'], str) and data['username'].strip()
+            else None
+        )
+        if normalized_username and get_user_by_username_excluding_id(normalized_username, user_id):
             raise ProfileOperationError('此用戶名已被使用', 409)
-        user.username = data['username'] if data['username'] else None
+        user.username = normalized_username
 
     if 'phone' in data:
         user.phone = data['phone']
@@ -91,7 +96,7 @@ def update_profile_for_user(user_id, data):
     if 'email' in data:
         if not isinstance(data['email'], str) or not data['email'].strip():
             raise ProfileOperationError('email 必須是非空字串', 400)
-        normalized_email = data['email'].strip()
+        normalized_email = data['email'].strip().lower()
         if get_user_by_email_excluding_id(normalized_email, user_id):
             raise ProfileOperationError('此 email 已被使用', 409)
         user.email = normalized_email
@@ -109,11 +114,8 @@ def update_profile_for_user(user_id, data):
             raise ProfileOperationError('目前密碼錯誤', 401)
         user.password = generate_password_hash(data['new_password'])
 
-    try:
-        db.session.commit()
-    except Exception as exc:
-        db.session.rollback()
-        raise ProfileOperationError('更新個人資料失敗，請稍後再試', 500) from exc
+    with transaction(ProfileOperationError, '更新個人資料失敗，請稍後再試'):
+        pass
 
 
 def search_user_by_query(query):

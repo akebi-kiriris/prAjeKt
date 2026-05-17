@@ -2,7 +2,7 @@
 
 基於 Vue 3 + Flask 的專案管理與協作平台，整合 Google Gemini AI 實現智能任務生成。
 
-> **開發狀態**：Phase 1~6.6+ 已完成 ✅；Phase 7.1、7.2 已完成核心功能 ✅；Phase 7.3 核心閉環已完成 ✅；Phase 8 後端抽象與交易邊界收斂已完成 ✅（下一步保留 RAG 品質評測與 Unit of Work 研讀後再評估）。
+> **開發狀態**：Phase 1~6.6+ 已完成 ✅；Phase 7.1、7.2 已完成核心功能 ✅；Phase 7.3 核心閉環已完成 ✅；Phase 8 後端抽象與交易邊界收斂已完成 ✅（含 2026/05/17 收尾強化：session helper 一致性、group unique constraint、防重覆加入與 normalize 對齊；下一步保留 RAG 品質評測與 Unit of Work 研讀後再評估）。
 
 ## 功能模組
 
@@ -21,7 +21,7 @@
 - **個人知識庫（Phase 7.3）**：`/knowledge` 支援 md/txt/pdf 上傳、列表、狀態、搜尋、篩選、排序、刪除與重建索引，採 per-user 隔離檢索
 - **專案檔案區（Phase 7.3）**：Timeline 詳情內可管理 project-scoped knowledge files，支援上傳、篩選、批次刪除/重建、下載、預覽與最近操作紀錄
 - **AI 規劃建議（Phase 7.3）**：`/api/timelines/ai-suggest-plan` 會整合歷史任務、個人知識與專案文件，回傳可追溯 `source_references`，並具備文字 fallback 與 LLM timeout fallback
-- **後端抽象收斂（Phase 8）**：knowledge/task/timeline 主線已收斂 `commit/rollback` 至 transaction helper，任務與專案建立流程逐步改用 repository/entity builder 與共用 session helper
+- **後端抽象收斂（Phase 8）**：knowledge/task/timeline 主線已收斂 `commit/rollback` 至 transaction helper；任務與專案建立流程改用 repository/entity builder；service 層 session 操作統一走 `add_entity/flush_session/delete_entity` helper，並補上群組唯一性約束與防重覆加入策略
 - **Copilot + MCP 整合**：自然語言 AI 路由至後端工具，無需 Inspector；支援任務知識摘要、群組快照、自動化創建
 - **垃圾桶回收機制**：已刪任務 / 專案暫存，支援還原或永久刪除；非建立者唯讀
 - **通知系統**：任務指派 / 專案邀請通知、鈴鐺 30 秒輪詢更新、主頁即將到期提醒區塊（3 天內截止或進度 ≥80%）
@@ -201,6 +201,12 @@ pytest --cov=blueprints --cov=services --cov=models --cov-report=term-missing --
 - 後端：`venv\Scripts\python.exe -m pytest tests/services/test_task_service.py tests/services/test_timeline_service_access.py tests/services/test_timeline_service_conflicts.py tests/services/test_timeline_service_reporting.py tests/services/test_timeline_service_ai.py tests/services/test_knowledge_service.py tests/blueprints/test_knowledge.py`
 - 結果：43 passed（僅 `.pytest_cache` 權限 warning）
 - 驗證重點：transaction helper、knowledge/task/timeline 主線 commit/rollback 收斂、task/timeline entity builder 與共用 session helper
+
+### 本輪 Phase 8 收尾驗證（2026/05/17）
+
+- 後端：`venv\Scripts\python.exe -m pytest tests/services/test_auth_service.py tests/services/test_profile_service.py tests/services/test_group_service.py tests/services/test_trash_service.py tests/services/test_group_snapshot.py`
+- 結果：`55 passed`（`50 + 5`，僅 `.pytest_cache` 權限 warning）
+- 驗證重點：session helper 一致化、group unique constraint + 409 防重覆加入、email normalize 對齊、snapshot job 清理、trash 永久刪除流程語義
 
 ## API 端點
 
