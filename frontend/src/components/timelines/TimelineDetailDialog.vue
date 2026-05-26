@@ -354,84 +354,28 @@
             </div>
           </div>
 
-          <div class="mb-4 p-4 bg-indigo-50 border border-indigo-200 rounded-xl">
-            <div class="flex items-center justify-between gap-3 mb-3">
-              <div>
-                <p class="text-sm font-semibold text-indigo-700">專案檔案區</p>
-                <p class="text-xs text-indigo-500">支援上傳、批次操作與 RAG 引用來源</p>
-              </div>
-              <div class="flex items-center gap-2">
-                <input
-                  ref="projectKnowledgeInput"
-                  type="file"
-                  class="hidden"
-                  @change="handleProjectKnowledgeUpload"
-                />
-                <button
-                  type="button"
-                  class="px-3 py-1.5 text-xs font-medium rounded-lg bg-white border border-indigo-200 text-indigo-600 hover:bg-indigo-100 transition-colors disabled:opacity-60"
-                  :disabled="projectKnowledgeUploading"
-                  @click="projectKnowledgeInput?.click()"
-                >
-                  {{ projectKnowledgeUploading ? '上傳中...' : '上傳檔案' }}
-                </button>
-                <button type="button" class="px-3 py-1.5 text-xs font-medium rounded-lg bg-white border border-indigo-200 text-indigo-600 hover:bg-indigo-100 transition-colors" @click="fetchProjectKnowledgeDocuments">刷新</button>
-              </div>
-            </div>
-            <div class="grid md:grid-cols-3 gap-2 mb-3">
-              <input v-model="projectKnowledgeQuery" type="text" placeholder="搜尋檔名" class="px-3 py-2 text-xs border border-indigo-200 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none" />
-              <select v-model="projectKnowledgeSort" class="px-3 py-2 text-xs border border-indigo-200 rounded-lg bg-white focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none">
-                <option value="created_desc">最新建立</option>
-                <option value="created_asc">最早建立</option>
-                <option value="name_asc">檔名 A-Z</option>
-                <option value="name_desc">檔名 Z-A</option>
-                <option value="status_asc">狀態</option>
-              </select>
-              <select v-model="projectKnowledgeStatus" class="px-3 py-2 text-xs border border-indigo-200 rounded-lg bg-white focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none">
-                <option value="">全部狀態</option>
-                <option value="uploaded">uploaded</option>
-                <option value="indexing">indexing</option>
-                <option value="ready">ready</option>
-                <option value="failed">failed</option>
-              </select>
-            </div>
-            <div class="flex items-center gap-2 mb-3">
-              <button type="button" class="px-3 py-1.5 text-xs rounded-lg border border-red-200 text-red-600 bg-white hover:bg-red-50 disabled:opacity-40" :disabled="projectKnowledgeSelectedIds.length===0" @click="batchDeleteProjectKnowledge">批次刪除</button>
-              <button type="button" class="px-3 py-1.5 text-xs rounded-lg border border-amber-200 text-amber-700 bg-white hover:bg-amber-50 disabled:opacity-40" :disabled="projectKnowledgeSelectedIds.length===0" @click="batchReindexProjectKnowledge">批次重建</button>
-              <button type="button" class="px-3 py-1.5 text-xs rounded-lg border border-indigo-200 text-indigo-700 bg-white hover:bg-indigo-50" @click="fetchProjectKnowledgeDocuments">套用篩選</button>
-            </div>
-            <p v-if="projectKnowledgeError" class="mb-2 text-xs text-red-600">{{ projectKnowledgeError }}</p>
-            <div v-if="projectKnowledgeLoading" class="text-xs text-indigo-500">載入中...</div>
-            <div v-else-if="projectKnowledgeDocuments.length===0" class="text-xs text-indigo-400">目前沒有檔案</div>
-            <div v-else class="space-y-2 mb-3">
-              <div v-for="doc in projectKnowledgeDocuments" :key="`pk-doc-${doc.id}`" class="p-2.5 bg-white border border-indigo-100 rounded-lg text-xs flex items-start gap-2">
-                <input type="checkbox" class="mt-0.5" :checked="projectKnowledgeSelectedIds.includes(doc.id)" @change="toggleKnowledgeSelection(doc.id)" />
-                <div class="flex-1 min-w-0">
-                  <div class="flex items-center gap-2">
-                    <p class="font-medium text-indigo-700 truncate">{{ doc.original_filename || doc.filename }}</p>
-                    <span class="px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700">{{ doc.status }}</span>
-                  </div>
-                  <p class="text-indigo-500 mt-0.5">
-                    {{ typeof doc.chunk_count === 'number' ? `${doc.chunk_count} chunks` : '索引數未知' }}
-                  </p>
-                  <p v-if="doc.error_message" class="text-red-500 mt-0.5">{{ doc.error_message }}</p>
-                </div>
-                <div class="flex items-center gap-1">
-                  <button type="button" class="px-2 py-1 border border-indigo-200 rounded text-indigo-700 hover:bg-indigo-50" @click="downloadProjectKnowledgeDocument(doc)">下載</button>
-                  <button type="button" class="px-2 py-1 border border-indigo-200 rounded text-indigo-700 hover:bg-indigo-50" @click="previewProjectKnowledgeDocument(doc)">預覽</button>
-                </div>
-              </div>
-            </div>
-            <div>
-              <p class="text-xs font-semibold text-indigo-700 mb-1">最近操作</p>
-              <div v-if="projectKnowledgeEvents.length===0" class="text-xs text-indigo-400">尚無紀錄</div>
-              <div v-else class="space-y-1 max-h-24 overflow-y-auto pr-1">
-                <p v-for="evt in projectKnowledgeEvents" :key="`pk-evt-${evt.id}`" class="text-xs text-indigo-600">
-                  {{ evt.event_type }} · #{{ evt.document_id || '-' }} · {{ formatDateTime(evt.created_at || '') }}
-                </p>
-              </div>
-            </div>
-          </div>
+          <ProjectKnowledgePanel
+            :documents="projectKnowledgeDocuments"
+            :events="projectKnowledgeEvents"
+            :loading="projectKnowledgeLoading"
+            :uploading="projectKnowledgeUploading"
+            :selected-ids="projectKnowledgeSelectedIds"
+            :query="projectKnowledgeQuery"
+            :sort="projectKnowledgeSort"
+            :status="projectKnowledgeStatus"
+            :error="projectKnowledgeError"
+            :format-date-time="formatDateTime"
+            @upload="handleProjectKnowledgeUpload"
+            @refresh="fetchProjectKnowledgeDocuments"
+            @batch-delete="batchDeleteProjectKnowledge"
+            @batch-reindex="batchReindexProjectKnowledge"
+            @toggle-selection="toggleKnowledgeSelection"
+            @download="downloadProjectKnowledgeDocument"
+            @preview="previewProjectKnowledgeDocument"
+            @update:query="projectKnowledgeQuery = $event"
+            @update:sort="projectKnowledgeSort = $event"
+            @update:status="projectKnowledgeStatus = $event"
+          />
 
           <!-- 任務列表 -->
           <div class="space-y-2">
@@ -754,232 +698,42 @@
           </h2>
           <button @click="showTaskDetail = false" class="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">&times;</button>
         </div>
-        <div class="p-6 space-y-6">
-          <!-- 基本資訊 -->
-          <div class="grid grid-cols-2 gap-4 p-4 bg-gray-50 rounded-xl">
-            <div><p class="text-xs text-gray-500 mb-1">開始日期</p><p class="font-medium text-gray-800">{{ formatDate(selectedTask.start_date) || '未設定' }}</p></div>
-            <div><p class="text-xs text-gray-500 mb-1">截止日期</p><p class="font-medium text-gray-800">{{ formatDate(selectedTask.end_date) || '未設定' }}</p></div>
-          </div>
-          <div v-if="selectedTask.task_remark" class="p-4 bg-yellow-50 rounded-xl">
-            <h4 class="font-semibold text-gray-700 mb-2">📝 備註</h4>
-            <p class="text-gray-600 text-sm">{{ selectedTask.task_remark }}</p>
-          </div>
-          <div class="p-4 bg-slate-50 rounded-xl">
-            <h4 class="font-semibold text-gray-700 mb-2">🔗 前置依賴</h4>
-            <select
-              v-model="selectedTaskDependencyIds"
-              multiple
-              class="w-full min-h-30 px-3 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none bg-white text-sm"
-            >
-              <option
-                v-for="taskOption in selectedTaskDependencyOptions"
-                :key="`detail-dependency-option-${taskOption.task_id}`"
-                :value="taskOption.task_id"
-              >
-                {{ taskOption.name }}
-              </option>
-            </select>
-            <p class="text-[11px] text-gray-500 mt-1.5">僅可依賴本專案任務；會自動去重與驗證。</p>
-            <div v-if="selectedTaskDependencyIds.length > 0" class="mt-2 flex flex-wrap gap-1.5">
-              <span
-                v-for="dependencyId in selectedTaskDependencyIds"
-                :key="`detail-dependency-chip-${dependencyId}`"
-                class="px-2.5 py-1 text-xs rounded-full bg-slate-200 text-slate-700"
-              >
-                {{ getTaskNameById(dependencyId) }}
-              </span>
-            </div>
-            <div class="mt-3 flex justify-end">
-              <button
-                type="button"
-                @click="saveSelectedTaskDependencies"
-                :disabled="isSavingTaskDependencies"
-                class="px-3 py-1.5 text-xs font-medium rounded-lg bg-white border border-slate-300 text-slate-700 hover:bg-slate-100 transition-colors disabled:opacity-50"
-              >
-                {{ isSavingTaskDependencies ? '儲存中...' : '儲存前置依賴' }}
-              </button>
-            </div>
-          </div>
-
-          <!-- ── 成員指派區 ── -->
-          <div v-if="canManageTaskMembers(selectedTask)" class="p-4 bg-indigo-50/60 rounded-xl">
-            <h4 class="font-semibold text-gray-700 mb-3 flex items-center gap-2">
-              <span>👥</span> 指派成員
-            </h4>
-            <!-- 已指派成員 -->
-            <div v-if="taskMembersForAssign.length > 0" class="flex flex-wrap gap-2 mb-3">
-              <div
-                v-for="member in taskMembersForAssign"
-                :key="member.user_id"
-                class="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium"
-                :class="member.role === 0 ? 'bg-primary/20 text-primary' : 'bg-white border border-gray-200 text-gray-700'"
-              >
-                <span>{{ member.name }}</span>
-                <span class="text-gray-400 text-[10px]">{{ member.role === 0 ? '負責人' : '協作者' }}</span>
-                <button
-                  v-if="member.role !== 0"
-                  @click="setAssignedTaskOwner(member)"
-                  class="ml-0.5 px-1.5 py-0.5 text-[10px] rounded-md bg-amber-100 text-amber-700 hover:bg-amber-200 transition-colors"
-                >主責</button>
-                <button
-                  v-if="member.role !== 0"
-                  @click="kickAssignedMember(member)"
-                  class="ml-0.5 text-gray-400 hover:text-red-500 transition-colors leading-none"
-                >✕</button>
-              </div>
-            </div>
-            <div v-else class="text-xs text-gray-400 mb-3">尚未指派任何成員</div>
-            <!-- 專案成員快速指派 -->
-            <div v-if="timelineMembers.length > 0">
-              <p class="text-xs text-gray-500 mb-2">快速指派專案成員：</p>
-              <div class="flex flex-wrap gap-2">
-                <button
-                  v-for="m in timelineMembers.filter(m => !taskMembersForAssign.some(tm => tm.user_id === m.user_id))"
-                  :key="m.user_id"
-                  @click="quickAssignTaskMember(m)"
-                  class="flex items-center gap-1.5 px-3 py-1 bg-white border border-indigo-200 text-indigo-700 text-xs font-medium rounded-full hover:bg-indigo-100 transition-colors"
-                >
-                  <span class="w-5 h-5 bg-indigo-100 rounded-full flex items-center justify-center font-bold text-[10px]">{{ (m.username || m.name || '?')[0].toUpperCase() }}</span>
-                  {{ m.username || m.name }}
-                </button>
-                <span v-if="timelineMembers.filter(m => !taskMembersForAssign.some(tm => tm.user_id === m.user_id)).length === 0" class="text-xs text-gray-400">所有成員已加入</span>
-              </div>
-            </div>
-          </div>
-
-          <!-- ── 子任務區 ── -->
-          <div>
-            <h4 class="font-semibold text-gray-700 mb-3 flex items-center gap-2">
-              <span>📋</span> 子任務
-              <span class="text-sm font-normal text-gray-500">({{ taskSubtasks.filter(s => s.completed).length }}/{{ taskSubtasks.length }})</span>
-            </h4>
-            <div v-if="taskSubtasks.length > 0" class="h-2 bg-gray-200 rounded-full overflow-hidden mb-4">
-              <div class="h-full bg-primary rounded-full transition-all duration-300" :style="{ width: subtaskProgress + '%' }"></div>
-            </div>
-            <div class="space-y-2 mb-3">
-              <div v-for="subtask in taskSubtasks" :key="subtask.id" class="flex items-center gap-3 p-3 bg-gray-50 rounded-lg group hover:bg-gray-100 transition-colors">
-                <input type="checkbox" :checked="subtask.completed" @change="toggleSubtask(subtask)" class="w-5 h-5 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer" />
-                <span :class="['flex-1 text-sm', subtask.completed ? 'line-through text-gray-400' : 'text-gray-700']">{{ subtask.name }}</span>
-                <button @click="deleteSubtask(subtask)" class="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-600 transition-all">🗑️</button>
-              </div>
-              <div v-if="taskSubtasks.length === 0" class="text-center py-4 text-gray-400 text-sm">尚無子任務</div>
-            </div>
-            <div class="flex gap-2">
-              <input v-model="newSubtaskName" type="text" placeholder="輸入子任務名稱..." @keyup.enter="addSubtask" class="flex-1 px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none" />
-              <button @click="addSubtask" class="px-4 py-2 bg-primary text-white rounded-xl hover:brightness-110 transition-all">新增</button>
-            </div>
-          </div>
-
-          <!-- ── 附件區 ── -->
-          <div>
-            <div class="flex items-center justify-between mb-3">
-              <h4 class="font-semibold text-gray-700 flex items-center gap-2">
-                <span>📎</span> 附件
-                <span class="text-xs text-gray-400 font-normal">({{ taskFiles.length }})</span>
-              </h4>
-              <label class="cursor-pointer flex items-center gap-1.5 px-3 py-1.5 bg-primary/10 text-primary text-sm font-medium rounded-lg hover:bg-primary/20 transition-colors">
-                <span>＋</span> 上傳檔案
-                <input ref="fileInput" type="file" class="hidden"
-                  accept=".jpg,.jpeg,.png,.gif,.webp,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip,.csv,.mp4,.mov"
-                  @change="handleFileUpload" />
-              </label>
-            </div>
-            <div v-if="taskFiles.length === 0" class="text-center py-6 text-gray-400 text-sm bg-gray-50 rounded-xl border border-dashed border-gray-200">
-              尚無附件，點擊「上傳檔案」新增
-            </div>
-            <div v-else class="space-y-2">
-              <div v-for="file in taskFiles" :key="file.id"
-                class="flex items-center gap-3 p-3 bg-gray-50 rounded-xl border border-gray-200 hover:bg-gray-100 transition-colors group">
-                <img v-if="isImageFile(file.original_filename)"
-                  :src="`${apiBaseUrl}/tasks/files/${file.filename}`"
-                  class="w-12 h-12 object-cover rounded-lg border border-gray-200 shrink-0"
-                  :alt="file.original_filename" />
-                <span v-else class="text-3xl shrink-0">{{ getFileIcon(file.original_filename) }}</span>
-                <div class="flex-1 min-w-0">
-                  <p class="text-sm font-medium text-gray-700 truncate">{{ file.original_filename }}</p>
-                  <p class="text-xs text-gray-400">{{ formatFileSize(file.file_size) }} · {{ formatDateTime(file.uploaded_at) }}</p>
-                </div>
-                <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button @click="downloadFile(`${apiBaseUrl}/tasks/files/${file.filename}`, file.original_filename)"
-                    class="w-8 h-8 flex items-center justify-center text-primary hover:bg-primary/10 rounded-lg transition-colors"
-                    title="下載">⬇️</button>
-                  <button @click="deleteFile(file.id)"
-                    class="w-8 h-8 flex items-center justify-center text-red-400 hover:bg-red-50 hover:text-red-600 rounded-lg transition-colors"
-                    title="刪除">🗑️</button>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- ── 留言區 ── -->
-          <div>
-            <div class="mb-4 flex items-center justify-between gap-3">
-              <h4 class="font-semibold text-gray-700 flex items-center gap-2">
-                <span>💬</span> 留言
-                <span class="text-xs text-gray-400 font-normal">({{ taskComments.length }})</span>
-              </h4>
-              <button
-                @click="summarizeComments"
-                :disabled="isSummarizingComments"
-                class="px-3 py-1.5 bg-violet-100 text-violet-700 text-xs font-semibold rounded-lg hover:bg-violet-200 transition-colors disabled:opacity-50"
-              >
-                {{ isSummarizingComments ? '摘要中...' : '🤖 AI 摘要' }}
-              </button>
-            </div>
-
-            <div v-if="commentSummary" class="mb-4 p-4 bg-violet-50 border border-violet-100 rounded-xl text-sm text-gray-700 space-y-3">
-              <div>
-                <p class="font-semibold text-violet-800 mb-1">決議</p>
-                <ul v-if="commentSummary.decisions.length" class="list-disc list-inside space-y-1">
-                  <li v-for="(item, idx) in commentSummary.decisions" :key="`d-${idx}`">{{ item }}</li>
-                </ul>
-                <p v-else class="text-gray-400">暫無</p>
-              </div>
-              <div>
-                <p class="font-semibold text-violet-800 mb-1">風險</p>
-                <ul v-if="commentSummary.risks.length" class="list-disc list-inside space-y-1">
-                  <li v-for="(item, idx) in commentSummary.risks" :key="`r-${idx}`">{{ item }}</li>
-                </ul>
-                <p v-else class="text-gray-400">暫無</p>
-              </div>
-              <div>
-                <p class="font-semibold text-violet-800 mb-1">下一步</p>
-                <ul v-if="commentSummary.next_actions.length" class="list-disc list-inside space-y-1">
-                  <li v-for="(item, idx) in commentSummary.next_actions" :key="`n-${idx}`">{{ item }}</li>
-                </ul>
-                <p v-else class="text-gray-400">暫無</p>
-              </div>
-              <p v-if="commentSummaryMeta?.truncated" class="text-xs text-violet-600">
-                已自動截斷較舊留言，摘要以最近 {{ commentSummaryMeta.used_comments }} / {{ commentSummaryMeta.total_comments }} 筆為主。
-              </p>
-            </div>
-
-            <div class="space-y-3 max-h-60 overflow-y-auto mb-4">
-              <div v-for="comment in taskComments" :key="comment.comment_id" class="flex gap-3 p-3 bg-gray-50 rounded-xl group">
-                <div class="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center text-sm font-bold text-primary shrink-0">
-                  {{ comment.user_name?.charAt(0)?.toUpperCase() }}
-                </div>
-                <div class="flex-1">
-                  <div class="flex items-center gap-2 mb-1">
-                    <span class="text-sm font-medium text-gray-700">{{ comment.user_name }}</span>
-                    <span class="text-xs text-gray-400">{{ formatDateTime(comment.created_at) }}</span>
-                  </div>
-                  <p class="text-sm text-gray-600">{{ comment.task_message }}</p>
-                </div>
-                <button @click="deleteComment(comment.comment_id)"
-                  class="opacity-0 group-hover:opacity-100 w-7 h-7 flex items-center justify-center text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all shrink-0"
-                  title="刪除留言">✕</button>
-              </div>
-              <div v-if="taskComments.length === 0" class="text-center py-4 text-gray-400 text-sm">尚無留言</div>
-            </div>
-            <div class="flex gap-2">
-              <input v-model="newComment" type="text" placeholder="新增留言..." @keyup.enter="addComment"
-                class="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none" />
-              <button @click="addComment" :disabled="!newComment.trim()"
-                class="px-4 py-2.5 bg-primary text-white font-medium rounded-xl hover:brightness-110 transition-all disabled:opacity-50">傳送</button>
-            </div>
-          </div>
-        </div>
+        <TaskDetailPanel
+          :selected-task="selectedTask"
+          :selected-task-dependency-ids="selectedTaskDependencyIds"
+          :selected-task-dependency-options="selectedTaskDependencyOptions"
+          :is-saving-task-dependencies="isSavingTaskDependencies"
+          :get-task-name-by-id="getTaskNameById"
+          :can-manage-task-members="canManageTaskMembers"
+          :task-members-for-assign="taskMembersForAssign"
+          :timeline-members="timelineMembers"
+          :task-subtasks="taskSubtasks"
+          :subtask-progress="subtaskProgress"
+          :new-subtask-name="newSubtaskName"
+          :task-files="taskFiles"
+          :api-base-url="apiBaseUrl"
+          :task-comments="taskComments"
+          :is-summarizing-comments="isSummarizingComments"
+          :comment-summary="commentSummary"
+          :comment-summary-meta="commentSummaryMeta"
+          :new-comment="newComment"
+          @update:selected-task-dependency-ids="selectedTaskDependencyIds = $event"
+          @save-dependencies="saveSelectedTaskDependencies"
+          @set-owner="setAssignedTaskOwner"
+          @kick-member="kickAssignedMember"
+          @quick-assign="quickAssignTaskMember"
+          @toggle-subtask="toggleSubtask"
+          @delete-subtask="deleteSubtask"
+          @update:new-subtask-name="newSubtaskName = $event"
+          @add-subtask="addSubtask"
+          @file-upload="handleFileUpload"
+          @download-file="(file) => downloadFile(`${apiBaseUrl}/tasks/files/${file.filename}`, file.original_filename)"
+          @delete-file="deleteFile"
+          @summarize-comments="summarizeComments"
+          @delete-comment="deleteComment"
+          @update:new-comment="newComment = $event"
+          @add-comment="addComment"
+        />
       </div>
     </div>
 
@@ -993,107 +747,33 @@
           </h2>
           <button @click="showAiGenerateModal = false" class="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">&times;</button>
         </div>
-        <div class="p-6">
-          <div v-if="isGeneratingAi" class="text-center py-12">
-            <div class="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-4 animate-spin">
-              <span class="text-2xl">🤖</span>
-            </div>
-            <p class="text-gray-600 font-medium">AI 正在生成任務建議...</p>
-            <p class="text-gray-400 text-sm mt-2">請稍候，正在分析專案內容</p>
-          </div>
-          <div v-else-if="aiGeneratedTasks.length === 0" class="py-8">
-            <p class="text-gray-500 mb-4 text-center">可輸入需求情境，讓 AI 透過 MCP 生成更貼近專案的任務建議</p>
-            <div class="space-y-3 mb-5">
-              <label class="block text-sm font-medium text-gray-700">需求描述（可選）</label>
-              <textarea
-                v-model="aiPrompt"
-                rows="4"
-                placeholder="例如：這個月要完成登入流程重構，請拆成後端 API、前端頁面、測試與上線準備"
-                class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none resize-none"
-              ></textarea>
-              <div class="flex flex-wrap items-center gap-4 text-sm text-gray-600">
-                <label class="inline-flex items-center gap-2 cursor-pointer select-none">
-                  <input v-model="useRagPlanning" type="checkbox" class="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary" />
-                  使用 RAG 規劃建議
-                </label>
-                <label v-if="!useRagPlanning" class="inline-flex items-center gap-2 cursor-pointer select-none">
-                  <input v-model="useCopilotMcp" type="checkbox" class="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary" />
-                  優先使用 AI + MCP 工具路由
-                </label>
-                <label v-if="useRagPlanning" class="inline-flex items-center gap-2 cursor-pointer select-none">
-                  <input v-model="usePersonalKnowledge" type="checkbox" class="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary" />
-                  納入個人知識庫
-                </label>
-                <label v-if="useRagPlanning" class="inline-flex items-center gap-2 cursor-pointer select-none">
-                  <input v-model="useProjectKnowledge" type="checkbox" class="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary" @change="useProjectKnowledgeTouched = true" />
-                  納入專案檔案
-                </label>
-                <label class="inline-flex items-center gap-2 cursor-pointer select-none">
-                  <input v-model="autoCreateAfterGenerate" type="checkbox" class="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary" />
-                  生成後直接建立任務
-                </label>
-              </div>
-              <p v-if="ragErrorMessage" class="text-sm text-red-600">{{ ragErrorMessage }}</p>
-            </div>
-            <div class="text-center">
-              <button @click="generateTasksWithAi" class="px-6 py-3 bg-linear-to-r from-purple-500 to-indigo-500 text-white font-semibold rounded-xl hover:brightness-110 transition-all shadow-lg shadow-purple-200">
-                {{ useRagPlanning ? '📚 RAG 規劃生成' : (useCopilotMcp ? '✨ AI 智慧生成' : '🤖 開始生成') }}
-              </button>
-            </div>
-          </div>
-          <div v-else class="space-y-4">
-            <div class="flex items-center justify-between mb-4">
-              <p class="text-sm text-gray-600">共 {{ aiGeneratedTasks.length }} 個建議任務，已選 {{ selectedAiTasks.length }} 個</p>
-              <div class="flex gap-2">
-                <button @click="toggleAllAiTasks" class="text-sm text-primary hover:underline">{{ selectedAiTasks.length === aiGeneratedTasks.length ? '全部取消' : '全部選取' }}</button>
-                <button @click="aiGeneratedTasks = []; selectedAiTasks = []" class="text-sm text-gray-400 hover:text-gray-600">重新生成</button>
-              </div>
-            </div>
-            <div v-if="ragSourceReferences.length > 0" class="p-3 rounded-xl border border-indigo-100 bg-indigo-50/60">
-              <p class="text-xs font-semibold text-indigo-700 mb-2">來源依據（{{ ragSourceReferences.length }}）</p>
-              <p v-if="ragSummary" class="text-xs text-indigo-600 mb-2">{{ ragSummary }}</p>
-              <div class="space-y-2 max-h-40 overflow-y-auto pr-1">
-                <div v-for="ref in ragSourceReferences" :key="`${ref.source_type}-${ref.source_id}`" class="text-xs text-indigo-700 bg-white/80 border border-indigo-100 rounded-lg p-2">
-                  <p class="font-medium">{{ getSourceReferenceLabel(ref.source_type) }} · score {{ Number(ref.score || 0).toFixed(2) }}</p>
-                  <p class="truncate">{{ ref.title }}</p>
-                  <p class="text-indigo-500 line-clamp-2">{{ ref.snippet }}</p>
-                </div>
-              </div>
-            </div>
-            <div class="space-y-3 max-h-80 overflow-y-auto">
-              <div v-for="(task, index) in aiGeneratedTasks" :key="index"
-                @click="toggleAiTaskSelection(index)"
-                :class="['p-4 rounded-xl border-2 cursor-pointer transition-all', selectedAiTasks.includes(index) ? 'border-purple-400 bg-purple-50' : 'border-gray-200 hover:border-gray-300']"
-              >
-                <div class="flex items-start gap-3">
-                  <div :class="['w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 mt-0.5', selectedAiTasks.includes(index) ? 'border-purple-500 bg-purple-500' : 'border-gray-300']">
-                    <span v-if="selectedAiTasks.includes(index)" class="text-white text-xs">✓</span>
-                  </div>
-                  <div class="flex-1">
-                    <div class="flex items-center gap-2 mb-1">
-                      <span class="font-medium text-gray-800">{{ task.name }}</span>
-                      <span :class="['text-xs px-2 py-0.5 rounded-full font-medium', getAiPriorityClass(task.priority)]">{{ getPriorityLabel(task.priority) }}</span>
-                    </div>
-                    <div class="flex items-center gap-3 text-xs text-gray-500">
-                      <span>📅 {{ formatDate(task.start_date) }} - {{ formatDate(task.end_date) }}</span>
-                      <span v-if="task.tags">🏷️ {{ task.tags }}</span>
-                    </div>
-                    <p v-if="(task.depends_on_task_refs || []).length > 0" class="text-xs text-indigo-600 mt-1">
-                      🔗 前置：{{ (task.depends_on_task_refs || []).join('、') }}
-                    </p>
-                    <p v-if="task.remark" class="text-sm text-gray-500 mt-1">{{ task.remark }}</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div class="flex gap-3 pt-2">
-              <button @click="showAiGenerateModal = false" class="flex-1 py-2.5 border border-gray-200 text-gray-600 font-medium rounded-xl hover:bg-gray-50 transition-colors">取消</button>
-              <button @click="batchCreateAiTasks" :disabled="selectedAiTasks.length === 0" :class="['flex-1 py-2.5 font-semibold rounded-xl transition-all', selectedAiTasks.length > 0 ? 'bg-linear-to-r from-purple-500 to-indigo-500 text-white hover:brightness-110 shadow-lg shadow-purple-200' : 'bg-gray-100 text-gray-400 cursor-not-allowed']">
-                新增選取任務 ({{ selectedAiTasks.length }})
-              </button>
-            </div>
-          </div>
-        </div>
+        <AiTaskGeneratePanel
+          :is-generating-ai="isGeneratingAi"
+          :ai-generated-tasks="aiGeneratedTasks"
+          :selected-ai-tasks="selectedAiTasks"
+          :ai-prompt="aiPrompt"
+          :use-rag-planning="useRagPlanning"
+          :use-copilot-mcp="useCopilotMcp"
+          :use-personal-knowledge="usePersonalKnowledge"
+          :use-project-knowledge="useProjectKnowledge"
+          :auto-create-after-generate="autoCreateAfterGenerate"
+          :rag-error-message="ragErrorMessage"
+          :rag-source-references="ragSourceReferences"
+          :rag-summary="ragSummary"
+          @close="showAiGenerateModal = false"
+          @generate="generateTasksWithAi"
+          @toggle-all="toggleAllAiTasks"
+          @toggle-task="toggleAiTaskSelection"
+          @reset-generated="aiGeneratedTasks = []; selectedAiTasks = []"
+          @batch-create="batchCreateAiTasks"
+          @touch-project-knowledge="useProjectKnowledgeTouched = true"
+          @update:ai-prompt="aiPrompt = $event"
+          @update:use-rag-planning="useRagPlanning = $event"
+          @update:use-copilot-mcp="useCopilotMcp = $event"
+          @update:use-personal-knowledge="usePersonalKnowledge = $event"
+          @update:use-project-knowledge="useProjectKnowledge = $event"
+          @update:auto-create-after-generate="autoCreateAfterGenerate = $event"
+        />
       </div>
     </div>
   </div>
@@ -1105,18 +785,19 @@ import { toast } from 'vue-sonner';
 import { taskService } from '../../services/taskService';
 import { timelineService } from '../../services/timelineService';
 import { copilotService } from '../../services/copilotService';
-import { formatDate, formatDateTime, formatFileSize, isImageFile, getFileIcon } from '../../utils/formatters';
+import { formatDate, formatDateTime } from '../../utils/formatters';
 import { downloadFileFromUrl, loadTaskDetailResourcesWithMembers } from '../../utils/taskDetails';
 import { useConfirm } from '../../composables/useConfirm';
 import { getApiErrorMessage } from '../../utils/apiError';
 import { mapToCreateTaskPayload } from '../../utils/payloadMappers';
+import ProjectKnowledgePanel from './ProjectKnowledgePanel.vue';
+import AiTaskGeneratePanel from './AiTaskGeneratePanel.vue';
+import TaskDetailPanel from './TaskDetailPanel.vue';
 import {
   collectTasksWithPotentiallyDroppedDependencies,
-  getAiPriorityClass,
   getDefaultWeeklyReportRange,
   getPriorityBadgeClass,
   getPriorityLabel,
-  getSourceReferenceLabel,
   getWeeklyReportAiSummarySourceLabel,
   mapRagResponseToGeneratedTasks,
   normalizeGeneratedTasks,
@@ -1169,7 +850,6 @@ const taskComments = ref<TaskComment[]>([]);
 const taskFiles = ref<TaskFile[]>([]);
 const taskSubtasks = ref<Subtask[]>([]);
 const newSubtaskName = ref('');
-const fileInput = ref<HTMLInputElement | null>(null);
 
 const subtaskProgress = computed(() => {
   if (!taskSubtasks.value.length) return 0;
@@ -1198,7 +878,6 @@ const projectKnowledgeQuery = ref('');
 const projectKnowledgeSort = ref<'created_desc' | 'created_asc' | 'name_asc' | 'name_desc' | 'status_asc'>('created_desc');
 const projectKnowledgeStatus = ref('');
 const projectKnowledgeError = ref('');
-const projectKnowledgeInput = ref<HTMLInputElement | null>(null);
 const isEditingRemark = ref(false);
 const timelineRemark = ref('');
 const localRemark = ref('');
@@ -2019,8 +1698,6 @@ const handleFileUpload = async (event: Event) => {
     taskFiles.value = res.data || [];
   } catch (err: unknown) {
     toast.error(getApiErrorMessage(err, '上傳失敗'));
-  } finally {
-    if (fileInput.value) fileInput.value.value = '';
   }
 };
 
@@ -2392,7 +2069,6 @@ const handleProjectKnowledgeUpload = async (event: Event) => {
     toast.error(getApiErrorMessage(err, '上傳失敗'));
   } finally {
     projectKnowledgeUploading.value = false;
-    if (projectKnowledgeInput.value) projectKnowledgeInput.value.value = '';
   }
 };
 

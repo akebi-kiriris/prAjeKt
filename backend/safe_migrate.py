@@ -12,7 +12,7 @@ import subprocess
 import sys
 from typing import Set
 
-from sqlalchemy import create_engine, inspect
+from sqlalchemy import create_engine, inspect, text
 from dotenv import load_dotenv
 
 
@@ -28,6 +28,9 @@ APP_TABLE_SENTINELS: Set[str] = {
 # Legacy databases may already contain app tables created outside Alembic.
 # Stamp to this known baseline, then run upgrade so newer migrations still apply.
 LEGACY_BASELINE_REVISION = "c1d2e3f4a5bb"
+LEGACY_REVISION_ALIASES = {
+    "h_proj_kb_storage_evt": "h20260507",
+}
 
 
 def _load_db_env() -> None:
@@ -83,7 +86,52 @@ def _run_flask_db(*args: str) -> int:
     return result.returncode
 
 
+def _remap_legacy_revision_aliases() -> None:
+    _load_db_env()
+    database_url = os.getenv("DATABASE_URL")
+    if not database_url:
+        return
+
+    database_url = _normalize_database_url(database_url)
+    engine = create_engine(database_url, pool_pre_ping=True)
+
+    try:
+        with engine.begin() as conn:
+            inspector = inspect(conn)
+            if "alembic_version" not in set(inspector.get_table_names()):
+                return
+
+            rows = conn.execute(text("SELECT version_num FROM alembic_version")).fetchall()
+            updated = False
+            for (version_num,) in rows:
+                replacement = LEGACY_REVISION_ALIASES.get(version_num)
+                if not replacement:
+                    continue
+                conn.execute(
+                    text(
+                        "UPDATE alembic_version "
+                        "SET version_num = :replacement "
+                        "WHERE version_num = :original"
+                    ),
+                    {"replacement": replacement, "original": version_num},
+                )
+                print(
+                    "[safe_migrate] Remapped legacy alembic revision "
+                    f"{version_num} -> {replacement}."
+                )
+                updated = True
+
+            if updated:
+                print("[safe_migrate] Legacy revision alias remap completed.")
+    except Exception as exc:
+        print(f"[safe_migrate] Revision alias remap skipped due to error: {exc}")
+    finally:
+        engine.dispose()
+
+
 def main() -> int:
+    _remap_legacy_revision_aliases()
+
     if _should_stamp_legacy_baseline():
         stamp_code = _run_flask_db("stamp", LEGACY_BASELINE_REVISION)
         if stamp_code != 0:

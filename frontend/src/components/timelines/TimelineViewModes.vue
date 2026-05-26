@@ -1,584 +1,126 @@
 <template>
   <div>
-    <!-- Kanban View -->
-    <div v-if="viewMode === 'kanban'" class="px-4 pb-8">
-      <div class="mb-6 flex flex-wrap items-center gap-4">
-        <div class="flex-1 min-w-50">
-          <label class="block text-sm font-medium text-gray-600 mb-2">選擇專案</label>
-          <select 
-            v-model="selectedKanbanTimeline"
-            class="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none shadow-sm"
-          >
-            <option :value="null">📁 全部專案</option>
-            <option v-for="t in timelines" :key="t.id" :value="t.id">📋 {{ t.name }}</option>
-          </select>
-        </div>
-        <div class="flex-1 min-w-50">
-          <label class="block text-sm font-medium text-gray-600 mb-2">搜尋任務</label>
-          <div class="relative">
-            <input 
-              v-model="searchQuery"
-              type="text"
-              placeholder="輸入任務名稱..."
-              class="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none shadow-sm"
-            />
-            <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">🔍</span>
-          </div>
-        </div>
-        <div class="flex items-end gap-2">
-          <button 
-            @click="showFilterPanel = !showFilterPanel"
-            :class="[
-              'px-4 py-2.5 rounded-xl border transition-all flex items-center gap-2 shadow-sm',
-              hasActiveFilters ? 'bg-linear-to-r from-primary to-blue-600 text-white border-transparent' : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50 hover:border-gray-300'
-            ]"
-          >
-            <span>🎯</span> 篩選
-            <span v-if="hasActiveFilters" class="w-5 h-5 bg-white text-primary text-xs font-bold rounded-full flex items-center justify-center shadow">{{ activeFilterCount }}</span>
-          </button>
-        </div>
-      </div>
-
-      <div v-if="showFilterPanel" class="mb-6 p-5 bg-linear-to-r from-white to-gray-50/50 rounded-2xl border border-gray-200 shadow-lg">
-        <h4 class="text-sm font-bold text-gray-700 mb-4 flex items-center gap-2">
-          <span class="w-6 h-6 bg-primary/10 rounded-lg flex items-center justify-center text-xs">🎯</span>
-          進階篩選
-        </h4>
-        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div>
-            <label class="block text-sm font-medium text-gray-600 mb-2">優先級</label>
-            <select v-model="filterPriority" class="w-full px-3 py-2.5 border border-gray-200 rounded-xl bg-white shadow-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none">
-              <option :value="null">全部優先級</option>
-              <option :value="1">🔴 高優先</option>
-              <option :value="2">🟡 中優先</option>
-              <option :value="3">🟢 低優先</option>
-            </select>
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-600 mb-2">標籤</label>
-            <input 
-              v-model="filterTag"
-              type="text"
-              placeholder="輸入標籤關鍵字..."
-              class="w-full px-3 py-2.5 border border-gray-200 rounded-xl bg-white shadow-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
-            />
-          </div>
-          <div class="flex items-end">
-            <button @click="clearFilters" class="px-4 py-2.5 text-gray-500 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all flex items-center gap-2">
-              <span>🗑️</span> 清除篩選
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <!-- 待辦欄 -->
-        <div class="bg-linear-to-b from-slate-100 to-slate-50 rounded-2xl p-4 shadow-sm">
-          <div class="flex items-center justify-between mb-4">
-            <h3 class="font-bold text-gray-700 flex items-center gap-2">
-              <span class="w-3 h-3 rounded-full bg-slate-400 animate-pulse"></span>
-              待辦
-              <span class="text-sm font-normal bg-slate-200 text-slate-600 px-2 py-0.5 rounded-full">{{ pendingTasks.length }}</span>
-            </h3>
-          </div>
-          <draggable
-            v-model="pendingTasksList"
-            group="kanban"
-            item-key="task_id"
-            :animation="200"
-            ghost-class="kanban-ghost"
-            drag-class="kanban-drag"
-            @start="isDragging = true"
-            @end="isDragging = false"
-            @change="onPendingChange"
-            class="space-y-3 min-h-50"
-          >
-            <template #item="{ element: task }">
-              <div 
-                @click="viewKanbanTaskDetail(task)"
-                class="kanban-card bg-white rounded-xl p-4 shadow-sm border-l-4 border-slate-300 cursor-grab hover:shadow-lg hover:-translate-y-1 active:cursor-grabbing transition-all duration-200"
-              >
-                <div class="flex items-start justify-between mb-2">
-                  <span class="font-medium text-gray-800 text-sm line-clamp-2">{{ task.name }}</span>
-                  <span :class="getPriorityBadgeClass(task.priority)" class="text-xs px-2 py-0.5 rounded-full shrink-0 ml-2 font-medium">
-                    {{ getPriorityLabel(task.priority) }}
-                  </span>
-                </div>
-                <div v-if="task.tags" class="flex flex-wrap gap-1 mb-2">
-                  <span v-for="tag in task.tags.split(',').slice(0, 3)" :key="tag" class="text-xs px-2 py-0.5 bg-linear-to-r from-blue-100 to-indigo-100 text-blue-700 rounded-full">{{ tag.trim() }}</span>
-                  <span v-if="task.tags.split(',').length > 3" class="text-xs text-gray-400">+{{ task.tags.split(',').length - 3 }}</span>
-                </div>
-                <div v-if="task.subtasks && task.subtasks.length > 0" class="mb-2">
-                  <div class="flex items-center gap-2 text-xs text-gray-500">
-                    <div class="flex-1 h-1.5 bg-gray-200 rounded-full overflow-hidden">
-                      <div class="h-full bg-linear-to-r from-primary to-blue-400 rounded-full transition-all duration-300" :style="{ width: getSubtaskProgress(task) + '%' }"></div>
-                    </div>
-                    <span class="font-medium">{{ getCompletedSubtaskCount(task) }}/{{ task.subtasks.length }}</span>
-                  </div>
-                </div>
-                <div class="flex items-center justify-between text-xs text-gray-500 pt-2 border-t border-gray-100">
-                  <span class="flex items-center gap-1 bg-gray-100 px-2 py-1 rounded-md">📅 {{ formatDate(task.end_date) }}</span>
-                  <span v-if="getTaskTimelineName(task)" class="truncate max-w-20 text-primary font-medium">📁 {{ getTaskTimelineName(task) }}</span>
-                </div>
-              </div>
-            </template>
-          </draggable>
-          <div v-if="pendingTasks.length === 0 && !isDragging" class="text-center py-12 text-gray-400">
-            <span class="text-3xl mb-2 block">📋</span>
-            <span class="text-sm">拖曳任務到這裡</span>
-          </div>
-        </div>
-
-        <!-- 進行中欄 -->
-        <div class="bg-linear-to-b from-blue-100 to-blue-50 rounded-2xl p-4 shadow-sm">
-          <div class="flex items-center justify-between mb-4">
-            <h3 class="font-bold text-blue-700 flex items-center gap-2">
-              <span class="w-3 h-3 rounded-full bg-blue-500 animate-pulse"></span>
-              進行中
-              <span class="text-sm font-normal bg-blue-200 text-blue-700 px-2 py-0.5 rounded-full">{{ inProgressTasks.length }}</span>
-            </h3>
-          </div>
-          <draggable
-            v-model="inProgressTasksList"
-            group="kanban"
-            item-key="task_id"
-            :animation="200"
-            ghost-class="kanban-ghost"
-            drag-class="kanban-drag"
-            @start="isDragging = true"
-            @end="isDragging = false"
-            @change="onInProgressChange"
-            class="space-y-3 min-h-50"
-          >
-            <template #item="{ element: task }">
-              <div 
-                @click="viewKanbanTaskDetail(task)"
-                class="kanban-card bg-white rounded-xl p-4 shadow-sm border-l-4 border-blue-400 cursor-grab hover:shadow-lg hover:-translate-y-1 active:cursor-grabbing transition-all duration-200"
-              >
-                <div class="flex items-start justify-between mb-2">
-                  <span class="font-medium text-gray-800 text-sm line-clamp-2">{{ task.name }}</span>
-                  <span :class="getPriorityBadgeClass(task.priority)" class="text-xs px-2 py-0.5 rounded-full shrink-0 ml-2 font-medium">
-                    {{ getPriorityLabel(task.priority) }}
-                  </span>
-                </div>
-                <div v-if="task.tags" class="flex flex-wrap gap-1 mb-2">
-                  <span v-for="tag in task.tags.split(',').slice(0, 3)" :key="tag" class="text-xs px-2 py-0.5 bg-linear-to-r from-blue-100 to-indigo-100 text-blue-700 rounded-full">{{ tag.trim() }}</span>
-                  <span v-if="task.tags.split(',').length > 3" class="text-xs text-gray-400">+{{ task.tags.split(',').length - 3 }}</span>
-                </div>
-                <div v-if="task.subtasks && task.subtasks.length > 0" class="mb-2">
-                  <div class="flex items-center gap-2 text-xs text-gray-500">
-                    <div class="flex-1 h-1.5 bg-gray-200 rounded-full overflow-hidden">
-                      <div class="h-full bg-linear-to-r from-primary to-blue-400 rounded-full transition-all duration-300" :style="{ width: getSubtaskProgress(task) + '%' }"></div>
-                    </div>
-                    <span class="font-medium">{{ getCompletedSubtaskCount(task) }}/{{ task.subtasks.length }}</span>
-                  </div>
-                </div>
-                <div class="flex items-center justify-between text-xs text-gray-500 pt-2 border-t border-gray-100">
-                  <span class="flex items-center gap-1 bg-blue-100 px-2 py-1 rounded-md text-blue-600">📅 {{ formatDate(task.end_date) }}</span>
-                  <span v-if="getTaskTimelineName(task)" class="truncate max-w-20 text-primary font-medium">📁 {{ getTaskTimelineName(task) }}</span>
-                </div>
-              </div>
-            </template>
-          </draggable>
-          <div v-if="inProgressTasks.length === 0 && !isDragging" class="text-center py-12 text-gray-400">
-            <span class="text-3xl mb-2 block">🚀</span>
-            <span class="text-sm">拖曳任務到這裡</span>
-          </div>
-        </div>
-
-        <!-- 已完成欄 -->
-        <div class="bg-linear-to-b from-green-100 to-green-50 rounded-2xl p-4 shadow-sm">
-          <div class="flex items-center justify-between mb-4">
-            <h3 class="font-bold text-green-700 flex items-center gap-2">
-              <span class="w-3 h-3 rounded-full bg-green-500"></span>
-              已完成
-              <span class="text-sm font-normal bg-green-200 text-green-700 px-2 py-0.5 rounded-full">{{ completedTasks.length }}</span>
-            </h3>
-          </div>
-          <draggable
-            v-model="completedTasksList"
-            group="kanban"
-            item-key="task_id"
-            :animation="200"
-            ghost-class="kanban-ghost"
-            drag-class="kanban-drag"
-            @start="isDragging = true"
-            @end="isDragging = false"
-            @change="onCompletedChange"
-            class="space-y-3 min-h-50"
-          >
-            <template #item="{ element: task }">
-              <div 
-                @click="viewKanbanTaskDetail(task)"
-                class="kanban-card bg-white/80 rounded-xl p-4 shadow-sm border-l-4 border-green-400 cursor-grab hover:shadow-lg hover:-translate-y-1 active:cursor-grabbing transition-all duration-200"
-              >
-                <div class="flex items-start justify-between mb-2">
-                  <span class="font-medium text-gray-500 text-sm line-through line-clamp-2">{{ task.name }}</span>
-                  <span class="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700 shrink-0 ml-2 font-medium">✓ 完成</span>
-                </div>
-                <div class="flex items-center justify-between text-xs text-gray-400 pt-2 border-t border-gray-100">
-                  <span class="flex items-center gap-1 bg-green-100 px-2 py-1 rounded-md text-green-600">📅 {{ formatDate(task.end_date) }}</span>
-                  <span v-if="getTaskTimelineName(task)" class="truncate max-w-20 text-green-600 font-medium">📁 {{ getTaskTimelineName(task) }}</span>
-                </div>
-              </div>
-            </template>
-          </draggable>
-          <div v-if="completedTasks.length === 0 && !isDragging" class="text-center py-12 text-gray-400">
-            <span class="text-3xl mb-2 block">🎉</span>
-            <span class="text-sm">完成的任務會出現在這裡</span>
-          </div>
-        </div>
-      </div>
-    </div>
+    <TimelineKanbanBoard
+      v-if="viewMode === 'kanban'"
+      :timelines="timelines"
+      :selected-kanban-timeline="selectedKanbanTimeline"
+      :search-query="searchQuery"
+      :show-filter-panel="showFilterPanel"
+      :has-active-filters="hasActiveFilters"
+      :active-filter-count="activeFilterCount"
+      :filter-priority="filterPriority"
+      :filter-tag="filterTag"
+      :pending-tasks="pendingTasks"
+      :in-progress-tasks="inProgressTasks"
+      :completed-tasks="completedTasks"
+      :is-dragging="isDragging"
+      :get-priority-badge-class="getPriorityBadgeClass"
+      :get-priority-label="getPriorityLabel"
+      :get-subtask-progress="getSubtaskProgress"
+      :get-completed-subtask-count="getCompletedSubtaskCount"
+      :get-task-timeline-name="getTaskTimelineName"
+      @update:selected-kanban-timeline="selectedKanbanTimeline = $event"
+      @update:search-query="searchQuery = $event"
+      @toggle-filter-panel="showFilterPanel = !showFilterPanel"
+      @update:filter-priority="filterPriority = $event"
+      @update:filter-tag="filterTag = $event"
+      @clear-filters="clearFilters"
+      @drag-start="isDragging = true"
+      @drag-end="isDragging = false"
+      @pending-change="onPendingChange($event as DraggableChangeEvent)"
+      @in-progress-change="onInProgressChange($event as DraggableChangeEvent)"
+      @completed-change="onCompletedChange($event as DraggableChangeEvent)"
+      @open-task="viewKanbanTaskDetail"
+    />
 
     <!-- Calendar View -->
-    <div v-if="viewMode === 'calendar'" class="px-4 pb-8">
-      <div class="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
-        <div class="p-5 border-b border-gray-100 bg-linear-to-r from-primary/5 via-blue-50 to-indigo-50">
-          <div class="flex flex-wrap items-center justify-between gap-4">
-            <h3 class="font-bold text-gray-800 flex items-center gap-2 text-lg">
-              <span class="w-10 h-10 bg-white rounded-xl shadow-sm flex items-center justify-center">📅</span>
-              專案月曆
-            </h3>
-            <div class="flex flex-wrap items-center gap-4 text-sm bg-white/80 backdrop-blur-sm px-4 py-2.5 rounded-xl shadow-sm">
-              <span class="flex items-center gap-2"><span class="w-4 h-4 rounded-md bg-linear-to-r from-green-400 to-green-500 shadow-sm"></span> 已完成</span>
-              <span class="flex items-center gap-2"><span class="w-4 h-4 rounded-md bg-linear-to-r from-red-400 to-red-500 shadow-sm"></span> 已過期</span>
-              <span class="flex items-center gap-2"><span class="w-4 h-4 rounded-md bg-linear-to-r from-orange-400 to-orange-500 shadow-sm"></span> 緊急</span>
-              <span class="flex items-center gap-2"><span class="w-4 h-4 rounded-md bg-linear-to-r from-yellow-400 to-yellow-500 shadow-sm"></span> 即將到期</span>
-              <span class="flex items-center gap-2"><span class="w-4 h-4 rounded-md bg-linear-to-r from-blue-400 to-blue-500 shadow-sm"></span> 進行中</span>
-            </div>
-          </div>
-        </div>
-        <div class="p-6">
-          <FullCalendar ref="calendarRef" :options="calendarOptions" class="fc-custom" />
-        </div>
-      </div>
-
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
-        <div class="bg-white rounded-2xl p-5 shadow-lg border border-gray-100 hover:shadow-xl transition-shadow">
-          <h4 class="text-sm font-bold text-gray-700 mb-4 flex items-center gap-2">
-            <span class="w-8 h-8 bg-orange-100 rounded-lg flex items-center justify-center">📌</span>
-            本週截止
-          </h4>
-          <div class="space-y-2 max-h-36 overflow-y-auto">
-            <div v-for="timeline in thisWeekTimelines" :key="timeline.id" @click="$emit('view-timeline', timeline)" class="flex items-center justify-between p-3 bg-linear-to-r from-orange-50 to-amber-50 rounded-xl cursor-pointer hover:from-orange-100 hover:to-amber-100 transition-all border border-orange-100">
-              <span class="text-sm font-medium text-gray-700 truncate">{{ timeline.name }}</span>
-              <span class="text-xs bg-orange-500 text-white px-2 py-1 rounded-full font-medium">{{ getDaysRemaining(timeline.endDate).text }}</span>
-            </div>
-            <p v-if="thisWeekTimelines.length === 0" class="text-sm text-gray-400 text-center py-4">📋 無專案</p>
-          </div>
-        </div>
-        <div class="bg-white rounded-2xl p-5 shadow-lg border border-gray-100 hover:shadow-xl transition-shadow">
-          <h4 class="text-sm font-bold text-gray-700 mb-4 flex items-center gap-2">
-            <span class="w-8 h-8 bg-red-100 rounded-lg flex items-center justify-center">🔥</span>
-            已過期專案
-          </h4>
-          <div class="space-y-2 max-h-36 overflow-y-auto">
-            <div v-for="timeline in overdueTimelines" :key="timeline.id" @click="$emit('view-timeline', timeline)" class="flex items-center justify-between p-3 bg-linear-to-r from-red-50 to-rose-50 rounded-xl cursor-pointer hover:from-red-100 hover:to-rose-100 transition-all border border-red-100">
-              <span class="text-sm font-medium text-gray-700 truncate">{{ timeline.name }}</span>
-              <span class="text-xs bg-red-500 text-white px-2 py-1 rounded-full font-medium">{{ getDaysRemaining(timeline.endDate).text }}</span>
-            </div>
-            <p v-if="overdueTimelines.length === 0" class="text-sm text-gray-400 text-center py-4">👍 無過期專案</p>
-          </div>
-        </div>
-        <div class="bg-white rounded-2xl p-5 shadow-lg border border-gray-100 hover:shadow-xl transition-shadow">
-          <h4 class="text-sm font-bold text-gray-700 mb-4 flex items-center gap-2">
-            <span class="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center">✅</span>
-            近期完成
-          </h4>
-          <div class="space-y-2 max-h-36 overflow-y-auto">
-            <div v-for="timeline in completedTimelines" :key="timeline.id" @click="$emit('view-timeline', timeline)" class="flex items-center justify-between p-3 bg-linear-to-r from-green-50 to-emerald-50 rounded-xl cursor-pointer hover:from-green-100 hover:to-emerald-100 transition-all border border-green-100">
-              <span class="text-sm font-medium text-gray-700 truncate">{{ timeline.name }}</span>
-              <span class="text-xs bg-green-500 text-white px-2 py-1 rounded-full font-medium">100%</span>
-            </div>
-            <p v-if="completedTimelines.length === 0" class="text-sm text-gray-400 text-center py-4">🎯 尚無完成專案</p>
-          </div>
-        </div>
-      </div>
-    </div>
+    <TimelineCalendarView
+      v-if="viewMode === 'calendar'"
+      :calendar-options="calendarOptions"
+      :this-week-timelines="thisWeekTimelines"
+      :overdue-timelines="overdueTimelines"
+      :completed-timelines="completedTimelines"
+      :get-days-remaining="getDaysRemaining"
+      @view-timeline="$emit('view-timeline', $event)"
+    />
 
     <!-- Timeline (List) View -->
-    <div v-if="viewMode === 'timeline'" class="px-4 pb-8">
-      <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-        <div class="p-4 border-b border-gray-100 bg-gray-50/50">
-          <div class="flex items-center justify-between">
-            <h3 class="font-semibold text-gray-700">📋 專案列表</h3>
-            <span class="text-sm text-gray-500">依結束日期排序</span>
-          </div>
-        </div>
-        <div class="divide-y divide-gray-100">
-          <div v-for="timeline in sortedTimelines" :key="timeline.id" @click="$emit('view-timeline', timeline)" class="p-4 hover:bg-blue-50/50 cursor-pointer transition-colors">
-            <div class="flex items-start gap-4">
-              <div class="shrink-0 w-20 text-center">
-                <div :class="['w-12 h-12 mx-auto rounded-xl flex flex-col items-center justify-center', getTimelineStatus(timeline).bgClass]">
-                  <span class="text-xs font-medium" :class="getTimelineStatus(timeline).textClass">
-                    {{ timeline.endDate ? new Date(timeline.endDate).getMonth() + 1 + '月' : '--' }}
-                  </span>
-                  <span class="text-lg font-bold -mt-1" :class="getTimelineStatus(timeline).textClass">
-                    {{ timeline.endDate ? new Date(timeline.endDate).getDate() : '--' }}
-                  </span>
-                </div>
-                <p class="text-xs text-gray-400 mt-1">{{ getDaysRemaining(timeline.endDate).text }}</p>
-              </div>
-              <div class="flex-1 min-w-0">
-                <div class="flex items-start justify-between gap-2 mb-2">
-                  <h4 class="font-semibold text-gray-800 truncate">{{ timeline.name }}</h4>
-                  <span :class="['shrink-0 px-2 py-0.5 text-xs font-medium rounded-full', getTimelineStatus(timeline).badgeClass]">
-                    {{ getTimelineStatus(timeline).label }}
-                  </span>
-                </div>
-                <div class="mb-2">
-                  <div class="flex items-center gap-2">
-                    <div class="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
-                      <div :class="['h-full rounded-full transition-all duration-500', getProgressBarColor(timeline)]" :style="{ width: getTaskProgress(timeline) + '%' }"></div>
-                    </div>
-                    <span class="text-xs font-medium text-gray-500 w-10 text-right">{{ getTaskProgress(timeline) }}%</span>
-                  </div>
-                </div>
-                <div class="flex items-center gap-4 text-xs text-gray-500">
-                  <span class="flex items-center gap-1"><span>📅</span> {{ formatDate(timeline.startDate) }} - {{ formatDate(timeline.endDate) }}</span>
-                  <span class="flex items-center gap-1"><span>✅</span> {{ timeline.completedTasks || 0 }}/{{ timeline.totalTasks || 0 }}</span>
-                </div>
-              </div>
-              <div class="shrink-0 flex items-center gap-1" @click.stop>
-                <button v-if="timeline.role === 0" @click="$emit('edit-timeline', timeline)" class="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-primary hover:bg-primary/10 rounded-lg transition-colors">✏️</button>
-                <button v-if="timeline.role === 0" @click="$emit('delete-timeline', timeline.id)" class="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors">🗑️</button>
-              </div>
-            </div>
-          </div>
-        </div>
-        <div v-if="timelines.length === 0" class="text-center py-16">
-          <span class="text-5xl block mb-4">📅</span>
-          <p class="text-lg text-gray-600">目前尚無專案</p>
-          <p class="text-sm text-gray-400 mt-1">點擊「新增專案」來建立您的第一個專案</p>
-        </div>
-      </div>
-    </div>
+    <TimelineListView
+      v-if="viewMode === 'timeline'"
+      :sorted-timelines="sortedTimelines"
+      :timelines-count="timelines.length"
+      :get-timeline-status="getTimelineStatus"
+      :get-days-remaining="getDaysRemaining"
+      :get-progress-bar-color="getProgressBarColor"
+      :get-task-progress="getTaskProgress"
+      @view-timeline="$emit('view-timeline', $event)"
+      @edit-timeline="$emit('edit-timeline', $event)"
+      @delete-timeline="$emit('delete-timeline', $event)"
+    />
 
-    <!-- Gantt View -->
-    <div v-if="viewMode === 'gantt'" class="px-4 pb-8">
-      <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-        <div class="p-4 border-b border-gray-100 bg-linear-to-r from-sky-50 via-white to-cyan-50">
-          <div class="flex flex-wrap items-end justify-between gap-3">
-            <div>
-              <h3 class="font-semibold text-gray-800 flex items-center gap-2">
-                <span class="w-8 h-8 bg-white rounded-lg shadow-sm flex items-center justify-center">📈</span>
-                任務甘特圖（frappe-gantt）
-              </h3>
-              <p class="text-xs text-gray-500 mt-1">支援拖曳調整日期；依賴關係使用任務 depends_on_task_ids </p>
-            </div>
-            <div class="flex flex-wrap items-center gap-3 text-xs text-gray-600">
-              <div>
-                <label class="mr-2 text-gray-500">專案篩選</label>
-                <select v-model="selectedGanttTimeline" class="px-3 py-1.5 border border-gray-200 rounded-lg bg-white">
-                  <option value="all">全部專案</option>
-                  <option v-for="timeline in props.timelines" :key="timeline.id" :value="String(timeline.id)">{{ timeline.name }}</option>
-                </select>
-              </div>
-              <div>
-                <label class="mr-2 text-gray-500">時間範圍</label>
-                <select v-model="selectedGanttRange" class="px-3 py-1.5 border border-gray-200 rounded-lg bg-white">
-                  <option value="all">全部</option>
-                  <option value="90d">近 90 天</option>
-                  <option value="30d">近 30 天</option>
-                </select>
-              </div>
-              <div>
-                <label class="mr-2 text-gray-500">縮放</label>
-                <select v-model="selectedGanttViewMode" class="px-3 py-1.5 border border-gray-200 rounded-lg bg-white">
-                  <option value="Day">日</option>
-                  <option value="Week">週</option>
-                  <option value="Month">月</option>
-                </select>
-              </div>
-              <span class="px-2 py-1 bg-blue-100 text-blue-700 rounded-full">任務 {{ ganttRenderableTasks.length }}</span>
-              <span class="px-2 py-1 bg-amber-100 text-amber-700 rounded-full">缺日期 {{ missingGanttTaskDates }}</span>
-            </div>
-          </div>
-        </div>
-
-        <div v-if="ganttRenderableTasks.length === 0" class="text-center py-16">
-          <span class="text-5xl block mb-3">🗓️</span>
-          <p class="text-lg text-gray-700">目前沒有可繪製的任務</p>
-          <p class="text-sm text-gray-400 mt-1">任務需同時有開始與結束日期才能顯示在甘特圖上。</p>
-        </div>
-
-        <div v-else class="p-4">
-          <div ref="ganttContainerRef" class="frappe-gantt-container w-full overflow-x-auto"></div>
-          <div class="mt-3 flex flex-wrap items-center gap-2 text-xs text-gray-500">
-            <span class="px-2 py-1 bg-gray-100 rounded-full">提示：拖曳條形可調整任務時程</span>
-            <span class="px-2 py-1 bg-gray-100 rounded-full">點擊任務可開啟所屬專案面板</span>
-            <span class="px-2 py-1 bg-gray-100 rounded-full">滑鼠移入可檢視任務資訊</span>
-            <span class="px-2 py-1 bg-sky-50 text-sky-700 rounded-full">主責人會用固定顏色區分</span>
-            <span class="px-2 py-1 bg-amber-50 text-amber-700 rounded-full">有協作者的任務會顯示虛線外框</span>
-          </div>
-        </div>
-      </div>
-    </div>
+    <TimelineGanttView
+      v-if="viewMode === 'gantt'"
+      :timelines="props.timelines"
+      :selected-gantt-timeline="selectedGanttTimeline"
+      :selected-gantt-range="selectedGanttRange"
+      :selected-gantt-view-mode="selectedGanttViewMode"
+      :gantt-renderable-task-count="ganttRenderableTasks.length"
+      :missing-gantt-task-dates="missingGanttTaskDates"
+      :set-gantt-container-ref="setGanttContainerRef"
+      @update:selected-gantt-timeline="selectedGanttTimeline = $event"
+      @update:selected-gantt-range="selectedGanttRange = $event"
+      @update:selected-gantt-view-mode="selectedGanttViewMode = $event"
+    />
 
     <!-- Card View -->
-    <div v-if="viewMode === 'card'" class="px-4 pb-24">
-      <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
-        <div 
-          v-for="timeline in sortedTimelines" :key="timeline.id"
-          @click="$emit('view-timeline', timeline)"
-          :class="['group bg-white rounded-2xl shadow-sm border hover:-translate-y-1 hover:shadow-lg transition-all cursor-pointer overflow-hidden', getTimelineStatus(timeline).borderClass]"
-        >
-          <div :class="['h-1.5', getTimelineStatus(timeline).barClass]"></div>
-          <div class="p-5">
-            <div class="flex justify-between items-start mb-4">
-              <div class="flex-1 min-w-0">
-                <h3 class="font-semibold text-gray-800 truncate mb-1">{{ timeline.name }}</h3>
-                <span :class="['inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full', getTimelineStatus(timeline).badgeClass]">
-                  {{ getTimelineStatus(timeline).icon }} {{ getTimelineStatus(timeline).label }}
-                </span>
-              </div>
-              <div class="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity" @click.stop>
-                <button v-if="timeline.role === 0" @click="$emit('edit-timeline', timeline)" class="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-primary hover:bg-primary/10 rounded-lg transition-colors">✏️</button>
-                <button v-if="timeline.role === 0" @click="$emit('delete-timeline', timeline.id)" class="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors">🗑️</button>
-              </div>
-            </div>
-            <div class="flex items-center justify-between mb-4 p-3 bg-gray-50 rounded-xl">
-              <div class="flex items-center gap-2">
-                <span class="text-2xl">{{ getTimelineStatus(timeline).icon }}</span>
-                <div>
-                  <p class="text-xs text-gray-500">剩餘時間</p>
-                  <p :class="['text-lg font-bold', getDaysRemaining(timeline.endDate).colorClass]">{{ getDaysRemaining(timeline.endDate).display }}</p>
-                </div>
-              </div>
-              <div class="text-right">
-                <p class="text-xs text-gray-500">截止日期</p>
-                <p class="text-sm font-medium text-gray-700">{{ formatDate(timeline.endDate) || '未設定' }}</p>
-              </div>
-            </div>
-            <div class="mb-4" v-if="timeline.startDate && timeline.endDate">
-              <div class="flex justify-between text-xs text-gray-400 mb-1">
-                <span>{{ formatDate(timeline.startDate) }}</span>
-                <span>{{ formatDate(timeline.endDate) }}</span>
-              </div>
-              <div class="relative h-2 bg-gray-100 rounded-full overflow-hidden">
-                <div class="absolute left-0 top-0 h-full bg-linear-to-r from-blue-400 to-blue-500 rounded-full transition-all duration-500" :style="{ width: getTimeProgress(timeline) + '%' }"></div>
-                <div v-if="getTimeProgress(timeline) > 0 && getTimeProgress(timeline) < 100" class="absolute top-1/2 -translate-y-1/2 w-3 h-3 bg-white border-2 border-blue-500 rounded-full shadow-sm" :style="{ left: getTimeProgress(timeline) + '%', transform: 'translate(-50%, -50%)' }"></div>
-              </div>
-              <p class="text-xs text-gray-400 text-center mt-1">時程進度 {{ getTimeProgress(timeline) }}%</p>
-            </div>
-            <div class="mb-4">
-              <div class="flex justify-between text-sm mb-1">
-                <span class="text-gray-500">任務完成度</span>
-                <span class="font-semibold" :class="getProgressTextColor(timeline)">{{ timeline.completedTasks || 0 }} / {{ timeline.totalTasks || 0 }}</span>
-              </div>
-              <div class="h-2.5 bg-gray-100 rounded-full overflow-hidden">
-                <div :class="['h-full rounded-full transition-all duration-500', getProgressBarColor(timeline)]" :style="{ width: getTaskProgress(timeline) + '%' }"></div>
-              </div>
-            </div>
-            <div class="flex items-center justify-between pt-3 border-t border-gray-100">
-              <div class="flex items-center gap-2 text-xs text-gray-400"><span>📅 {{ formatDate(timeline.startDate) || '未設定' }}</span></div>
-              <span class="text-xs text-primary font-medium group-hover:underline">查看詳情 →</span>
-            </div>
-          </div>
-        </div>
-      </div>
-      <div v-if="timelines.length === 0" class="text-center py-16 bg-white rounded-2xl border border-dashed border-gray-200">
-        <span class="text-6xl block mb-4">📁</span>
-        <p class="text-xl text-gray-600 mb-2">目前尚無專案</p>
-        <p class="text-sm text-gray-400 mb-6">建立您的第一個專案來開始追蹤進度</p>
-        <button @click="$emit('create-timeline')" class="inline-flex items-center gap-2 px-5 py-2.5 bg-primary text-white font-semibold rounded-xl shadow-lg shadow-primary/25 hover:shadow-xl transition-all">
-          <span>➕</span> 新增專案
-        </button>
-      </div>
-    </div>
+    <TimelineCardView
+      v-if="viewMode === 'card'"
+      :sorted-timelines="sortedTimelines"
+      :timelines-count="timelines.length"
+      :get-timeline-status="getTimelineStatus"
+      :get-days-remaining="getDaysRemaining"
+      :get-time-progress="getTimeProgress"
+      :get-progress-text-color="getProgressTextColor"
+      :get-progress-bar-color="getProgressBarColor"
+      :get-task-progress="getTaskProgress"
+      @view-timeline="$emit('view-timeline', $event)"
+      @edit-timeline="$emit('edit-timeline', $event)"
+      @delete-timeline="$emit('delete-timeline', $event)"
+      @create-timeline="$emit('create-timeline')"
+    />
 
-    <!-- 看板任務詳情 Modal -->
-    <div v-if="showKanbanTaskModal && selectedKanbanTask" class="fixed inset-0 bg-black/50 flex items-center justify-center z-60 p-4">
-      <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto animate-slideUp">
-        <div class="p-5 border-b border-gray-100 flex justify-between items-center bg-linear-to-r from-primary/5 to-transparent sticky top-0 bg-white z-10">
-          <h2 class="text-lg font-semibold text-gray-800 flex items-center gap-2">
-            <span class="w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center">📌</span>
-            {{ selectedKanbanTask.name }}
-          </h2>
-          <button @click="showKanbanTaskModal = false" class="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">&times;</button>
-        </div>
-        <div class="p-6 space-y-6">
-          <div class="flex flex-wrap items-center gap-4">
-            <div class="flex items-center gap-2">
-              <span class="text-sm text-gray-500">狀態：</span>
-              <span :class="['px-3 py-1 text-sm font-medium rounded-full', selectedKanbanTask.status === 'completed' ? 'bg-green-100 text-green-700' : selectedKanbanTask.status === 'in_progress' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-700']">
-                {{ selectedKanbanTask.status === 'completed' ? '✅ 已完成' : selectedKanbanTask.status === 'in_progress' ? '🔄 進行中' : '📋 待辦' }}
-              </span>
-            </div>
-            <div class="flex items-center gap-2">
-              <span class="text-sm text-gray-500">優先級：</span>
-              <select :value="selectedKanbanTask.priority" @change="onPrioritySelect" class="px-3 py-1 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none">
-                <option :value="1">🔴 高優先</option>
-                <option :value="2">🟡 中優先</option>
-                <option :value="3">🟢 低優先</option>
-              </select>
-            </div>
-          </div>
-          <div class="grid grid-cols-2 gap-4 p-4 bg-gray-50 rounded-xl">
-            <div>
-              <p class="text-xs text-gray-500 mb-1">開始日期</p>
-              <p class="font-medium text-gray-800">{{ formatDate(selectedKanbanTask.start_date) || '未設定' }}</p>
-            </div>
-            <div>
-              <p class="text-xs text-gray-500 mb-1">截止日期</p>
-              <p class="font-medium text-gray-800">{{ formatDate(selectedKanbanTask.end_date) || '未設定' }}</p>
-            </div>
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-600 mb-2"><span>🏷️</span> 標籤（逗號分隔）</label>
-            <div class="flex gap-2">
-              <input v-model="selectedKanbanTask.tags" type="text" placeholder="例如：前端, 重要, Bug" class="flex-1 px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none" />
-              <button @click="updateTaskTags" class="px-4 py-2 bg-primary text-white rounded-xl hover:brightness-110 transition-all">儲存</button>
-            </div>
-            <div v-if="selectedKanbanTask.tags" class="flex flex-wrap gap-2 mt-2">
-              <span v-for="tag in selectedKanbanTask.tags.split(',')" :key="tag" class="px-3 py-1 bg-blue-100 text-blue-700 text-sm rounded-full">{{ tag.trim() }}</span>
-            </div>
-          </div>
-          <div>
-            <h4 class="font-semibold text-gray-700 mb-3 flex items-center gap-2">
-              <span>📋</span> 子任務
-              <span class="text-sm font-normal text-gray-500">({{ getCompletedSubtaskCount(selectedKanbanTask) }}/{{ selectedKanbanTask.subtasks?.length || 0 }})</span>
-            </h4>
-            <div v-if="selectedKanbanTask.subtasks && selectedKanbanTask.subtasks.length > 0" class="mb-4">
-              <div class="h-2 bg-gray-200 rounded-full overflow-hidden">
-                <div class="h-full bg-primary rounded-full transition-all duration-300" :style="{ width: getSubtaskProgress(selectedKanbanTask) + '%' }"></div>
-              </div>
-            </div>
-            <div class="space-y-2 mb-4">
-              <div v-for="subtask in selectedKanbanTask.subtasks" :key="subtask.id" class="flex items-center gap-3 p-3 bg-gray-50 rounded-lg group hover:bg-gray-100 transition-colors">
-                <input type="checkbox" :checked="subtask.completed" @change="toggleSubtask(subtask)" class="w-5 h-5 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer" />
-                <span :class="['flex-1 text-sm', subtask.completed ? 'line-through text-gray-400' : 'text-gray-700']">{{ subtask.name }}</span>
-                <button @click="deleteSubtask(subtask)" class="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-600 transition-all">🗑️</button>
-              </div>
-              <div v-if="!selectedKanbanTask.subtasks || selectedKanbanTask.subtasks.length === 0" class="text-center py-4 text-gray-400 text-sm">尚無子任務</div>
-            </div>
-            <div class="flex gap-2">
-              <input v-model="newSubtaskName" type="text" placeholder="輸入子任務名稱..." @keyup.enter="addSubtask" class="flex-1 px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none" />
-              <button @click="addSubtask" class="px-4 py-2 bg-primary text-white rounded-xl hover:brightness-110 transition-all">新增</button>
-            </div>
-          </div>
-          <div v-if="selectedKanbanTask.task_remark" class="p-4 bg-yellow-50 rounded-xl">
-            <h4 class="font-semibold text-gray-700 mb-2 flex items-center gap-2"><span>📝</span> 備註</h4>
-            <p class="text-gray-600 text-sm">{{ selectedKanbanTask.task_remark }}</p>
-          </div>
-        </div>
-      </div>
-    </div>
+    <TimelineKanbanTaskModal
+      :show="showKanbanTaskModal"
+      :task="selectedKanbanTask"
+      :new-subtask-name="newSubtaskName"
+      :get-subtask-progress="getSubtaskProgress"
+      :get-completed-subtask-count="getCompletedSubtaskCount"
+      @close="showKanbanTaskModal = false"
+      @priority-select="onPrioritySelect"
+      @update:tags="selectedKanbanTask && (selectedKanbanTask.tags = $event)"
+      @update-tags="updateTaskTags"
+      @toggle-subtask="toggleSubtask"
+      @delete-subtask="deleteSubtask"
+      @update:new-subtask-name="newSubtaskName = $event"
+      @add-subtask="addSubtask"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, watch, nextTick, onBeforeUnmount } from 'vue';
 import { toast } from 'vue-sonner';
-import { formatDate } from '../../utils/formatters';
-import draggable from 'vuedraggable';
-import FullCalendar from '@fullcalendar/vue3';
 import dayGridPlugin from '@fullcalendar/daygrid';
 import interactionPlugin from '@fullcalendar/interaction';
 import multiMonthPlugin from '@fullcalendar/multimonth';
 import Gantt from 'frappe-gantt';
 import '../../styles/frappe-gantt.css';
+import TimelineKanbanBoard from './TimelineKanbanBoard.vue';
+import TimelineListView from './TimelineListView.vue';
+import TimelineCalendarView from './TimelineCalendarView.vue';
+import TimelineCardView from './TimelineCardView.vue';
+import TimelineGanttView from './TimelineGanttView.vue';
+import TimelineKanbanTaskModal from './TimelineKanbanTaskModal.vue';
 import type { CalendarOptions, EventClickArg, EventMountArg, DayCellMountArg } from '@fullcalendar/core';
 import { taskService } from '../../services/taskService';
 import type { Task, Timeline, Subtask, TaskUpdatePayload, TimelineViewModesProps, DaysRemainingResult } from '../../types';
@@ -613,7 +155,6 @@ const newSubtaskName = ref('');
 type TaskStatus = Task['status'];
 
 // 月曆 ref
-const calendarRef = ref<InstanceType<typeof FullCalendar> | null>(null);
 
 // ────────────── 篩選 computed ──────────────
 const filteredTasks = computed(() => {
@@ -635,10 +176,6 @@ const pendingTasks = computed(() => filteredTasks.value.filter(t => t.status ===
 const inProgressTasks = computed(() => filteredTasks.value.filter(t => t.status === 'in_progress' && !t.completed));
 const completedTasks = computed(() => filteredTasks.value.filter(t => t.status === 'completed' || t.completed));
 
-const pendingTasksList = computed({ get: () => pendingTasks.value, set: () => {} });
-const inProgressTasksList = computed({ get: () => inProgressTasks.value, set: () => {} });
-const completedTasksList = computed({ get: () => completedTasks.value, set: () => {} });
-
 const hasActiveFilters = computed(() => filterPriority.value || filterTag.value);
 const activeFilterCount = computed(() => (filterPriority.value ? 1 : 0) + (filterTag.value ? 1 : 0));
 
@@ -646,6 +183,9 @@ const clearFilters = () => { filterPriority.value = null; filterTag.value = ''; 
 
 // ────────────── 甘特圖相關 ──────────────
 const ganttContainerRef = ref<HTMLElement | null>(null);
+const setGanttContainerRef = (el: Element | null) => {
+  ganttContainerRef.value = el as HTMLElement | null;
+};
 const selectedGanttTimeline = ref<string>('all');
 const selectedGanttRange = ref<'all' | '90d' | '30d'>('90d');
 const selectedGanttViewMode = ref<'Day' | 'Week' | 'Month'>('Week');

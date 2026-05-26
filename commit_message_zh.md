@@ -1,54 +1,42 @@
-refactor: 後端錯誤契約統一、資料層收斂與前端錯誤處理工程化
+refactor(frontend): 完成 Phase 8.4 大型視圖元件拆分與編排層收斂
 
 ## 這次做了什麼
 
-### 1) 後端錯誤回應格式全域統一
-- 新增 `backend/blueprints/validation.py`，集中：
-  - `validate_payload_or_400`
-  - `error_response`
-  - `error_from_exception`
-  - `status_to_error_code`
-- 將 blueprint 錯誤輸出統一為相容 envelope：
-  - `error`（人類可讀訊息）
-  - `error_code`（前端流程判斷主鍵）
-  - `error_details`（可選）
-- 套用到 auth / tasks / timelines / groups / todos / trash / profile / knowledge / notifications / messages / copilot / guards 等路由層
+### 1) TimelineDetailDialog 大型區塊拆分
+- 拆出 `ProjectKnowledgePanel.vue`（專案檔案區）
+- 拆出 `AiTaskGeneratePanel.vue`（AI 生成任務流程）
+- 拆出 `TaskDetailPanel.vue`（任務詳情內容區）
+- `TimelineDetailDialog.vue` 保留為流程編排與狀態協調層，透過 `props/emits` 與子元件互動
 
-### 2) 分層邊界持續收斂（Service -> Repository）
-- 延續既有架構方向，將 service 中資料庫操作進一步下沉到 repository
-- 專注 task / timeline 相關流程，讓 route/service/query 責任邊界更清楚
+### 2) TimelineViewModes 大型視圖拆分
+- 拆出 `TimelineListView.vue`
+- 拆出 `TimelineCalendarView.vue`
+- 拆出 `TimelineCardView.vue`
+- 拆出 `TimelineKanbanBoard.vue`
+- 拆出 `TimelineKanbanTaskModal.vue`
+- 拆出 `TimelineGanttView.vue`
+- `TimelineViewModes.vue` 收斂為「視圖切換 + 行為編排」主殼層
 
-### 3) 前端錯誤處理共用化
-- 新增 `frontend/src/utils/apiError.ts`：
-  - `getApiErrorMessage`
-  - `getApiErrorCode`
-  - `mapErrorCodeToMessage`
-  - `shouldRedirectToLogin`
-- 多個頁面與 store 改為共用錯誤解析，移除重複的 `axios.response?.data?.error` 手寫邏輯
-  - TasksView / TimelinesView / TimelineDetailDialog / KnowledgeBaseView
-  - GroupsView / TrashView / ProfileView / RegisterView
-  - auth store
-- `frontend/src/services/api.ts` 攔截器補上 `UNAUTHORIZED` error_code 對齊 refresh/login flow
+### 3) Gantt 區塊收斂
+- Gantt UI 與控制列移入 `TimelineGanttView.vue`
+- 父層維持 gantt instance/render/update 的流程與資料來源
+- 新增 `setGanttContainerRef` 將容器 ref 經由 props 傳遞，維持現有渲染邏輯
 
-### 4) 契約文件與工程文檔同步
-- 新增/更新 `docs/API_錯誤碼表.md`：
-  - 統一錯誤碼表
-  - 前端建議行為
-  - 建議文案對照
-- 更新重構與追蹤文件（`docs/` 與根目錄雙份同步）：
-  - `重構計畫.md`
-  - `進度追蹤.md`
-- 更新 `README.md`：補充錯誤碼契約與共用處理策略
-
-### 5) 其他
-- `.gitignore` 加入 upload 目錄相關忽略
+### 4) 文件同步（root + docs）
+- 更新 `重構計畫.md`：8.4 標記為核心完成
+- 更新 `進度追蹤.md`：本期焦點改為 8.5+，同步 8.4 完成狀態
+- 同步更新 `docs/重構計畫.md`、`docs/進度追蹤.md`
 
 ## 驗證
-- 後端：先前全量回歸 `189 passed`
-- 前端：目標測試於本機可通過（3 files / 9 tests）；部分環境有 `spawn EPERM` 啟動限制，屬環境問題非邏輯回歸
+- `npm run build`（多輪）通過
+- `npm run test -- TimelineDetailDialog.phase7.test.ts timelineService.test.ts` 通過（2 files / 6 tests）
 
-## 影響與收益
-- API 錯誤契約穩定化：前後端可用 `error_code` 做一致分流
-- 程式碼維護成本下降：錯誤處理與驗證邏輯集中化
-- 分層清晰度提升：查詢責任回歸 repository，service 專注業務規則
-- 文檔可落地：前端可直接依錯誤碼表實作 UI 行為
+## 為什麼要這樣改
+- 降低單檔責任密度，避免 `TimelineDetailDialog.vue` / `TimelineViewModes.vue` 持續膨脹
+- 提升可維護性：後續改動可局部落在對應子元件
+- 維持行為不變：本次以結構重構為主，不改 API 契約與產品流程
+
+## 影響範圍
+- 前端 timelines 相關元件結構重整
+- 無後端 API 契約變更
+- 無部署流程變更
