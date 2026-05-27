@@ -5,6 +5,8 @@ import hashlib
 import os
 import time
 
+from pydantic import ValidationError
+
 from models.notification import Notification
 from models.task import Task
 from models.timeline import Timeline
@@ -46,6 +48,11 @@ from repositories.timeline_repository import (
     get_users_by_ids,
 )
 from repositories.session_repository import add_entity, delete_entity, flush_session
+from services.contracts.timeline_contracts import (
+    ConflictCheckInput,
+    TimelineBatchCreateTasksInput,
+    WeeklyReportInput,
+)
 
 TIMELINE_UPDATE_ALLOWED_FIELDS = {'name', 'start_date', 'end_date', 'remark'}
 WEEKLY_REPORT_AI_TIMEOUT_SEC = float(os.getenv('WEEKLY_REPORT_AI_TIMEOUT_SEC', '35'))
@@ -533,6 +540,146 @@ def _normalize_report_period(start_date_raw, end_date_raw):
     return start_date, end_date
 
 
+def _validate_weekly_report_input(start_date_raw, end_date_raw):
+    try:
+        payload = WeeklyReportInput(
+            start_date_raw=start_date_raw,
+            end_date_raw=end_date_raw,
+        )
+    except ValidationError as err:
+        first_error = err.errors()[0] if err.errors() else {}
+        message = str(first_error.get('msg') or '參數格式錯誤')
+        raise TimelineOperationError(message, 400) from err
+    return payload
+
+
+def _validate_conflict_payload(payload):
+    if not isinstance(payload, dict):
+        raise TimelineOperationError('請提供正確的 JSON 物件', 400)
+
+    try:
+        return ConflictCheckInput.model_validate(payload)
+    except ValidationError as err:
+        first_error = err.errors()[0] if err.errors() else {}
+        message = str(first_error.get('msg') or '參數格式錯誤')
+        raise TimelineOperationError(message, 400) from err
+
+
+def _validate_batch_task_payloads(task_payloads):
+    try:
+        payload = TimelineBatchCreateTasksInput(task_payloads=task_payloads)
+    except ValidationError as err:
+        first_error = err.errors()[0] if err.errors() else {}
+        message = str(first_error.get('msg') or '參數格式錯誤')
+        raise TimelineOperationError(message, 400) from err
+    return payload.task_payloads
+
+
+def _collect_selected_existing_task_ids(task_payloads, existing_task_id_set):
+    selected_existing_task_ids = []
+    for task_data in task_payloads:
+        if not isinstance(task_data, dict):
+            raise TimelineOperationError('tasks 格式錯誤，項目必須是物件', 400)
+
+        task_id = _to_int(task_data.get('task_id'))
+        if not task_data.get('isExisting') or task_id is None:
+            continue
+        if task_id not in existing_task_id_set:
+            continue
+        if task_id not in selected_existing_task_ids:
+            selected_existing_task_ids.append(task_id)
+    return selected_existing_task_ids
+
+
+def _build_new_batch_tasks(timeline_id, user_id, timeline_start_date, task_payloads):
+    created_task_names = []
+    pending_dependency_records = []
+    current_date = timeline_start_date
+
+    for task_data in task_payloads:
+        if task_data.get('isExisting'):
+            continue
+
+        estimated_days = _to_int(task_data.get('estimated_days'))
+        if estimated_days is None or estimated_days <= 0:
+            estimated_days = 3
+        end_date = current_date + timedelta(days=estimated_days)
+
+        new_task = build_timeline_task_entity(
+            user_id=user_id,
+            timeline_id=timeline_id,
+            name=task_data.get('name', '未命名任務'),
+            priority=task_data.get('priority', 2),
+            status=task_data.get('status', 'pending'),
+            task_remark=task_data.get('task_remark', ''),
+            start_date=current_date,
+            end_date=end_date,
+            is_work=1,
+        )
+        add_entity(new_task)
+        created_task_names.append(new_task.name)
+        pending_dependency_records.append(
+            {
+                'task': new_task,
+                'depends_on_task_ids': _normalize_dependency_ids(task_data.get('depends_on_task_ids')),
+                'depends_on_task_refs': _normalize_dependency_refs(task_data.get('depends_on_task_refs')),
+            }
+        )
+        current_date = end_date
+
+    return created_task_names, pending_dependency_records
+
+
+def _resolve_batch_task_dependencies(retained_existing_tasks, pending_dependency_records):
+    valid_dependency_ids = {task.task_id for task in retained_existing_tasks}
+
+    name_to_task_ids = defaultdict(list)
+    for task in retained_existing_tasks:
+        task_name = (task.name or '').strip()
+        if task_name:
+            name_to_task_ids[task_name].append(task.task_id)
+
+    for record in pending_dependency_records:
+        task = record['task']
+        valid_dependency_ids.add(task.task_id)
+
+        task_name = (task.name or '').strip()
+        if task_name:
+            name_to_task_ids[task_name].append(task.task_id)
+
+    ignored_dependency_ref_count = 0
+    ignored_dependency_id_count = 0
+    for record in pending_dependency_records:
+        task = record['task']
+        dependency_ids = list(record['depends_on_task_ids'])
+
+        for dependency_ref in record['depends_on_task_refs']:
+            candidate_ids = name_to_task_ids.get(dependency_ref, [])
+            resolved_id = next((cid for cid in reversed(candidate_ids) if cid != task.task_id), None)
+            if resolved_id is None:
+                ignored_dependency_ref_count += 1
+                continue
+            dependency_ids.append(resolved_id)
+
+        normalized_dependency_ids = []
+        seen_dependency_ids = set()
+        for dependency_id in dependency_ids:
+            if dependency_id in seen_dependency_ids:
+                continue
+            if dependency_id == task.task_id:
+                ignored_dependency_id_count += 1
+                continue
+            if dependency_id not in valid_dependency_ids:
+                ignored_dependency_id_count += 1
+                continue
+            seen_dependency_ids.add(dependency_id)
+            normalized_dependency_ids.append(dependency_id)
+
+        task.depends_on_task_ids = normalized_dependency_ids
+
+    return ignored_dependency_ref_count, ignored_dependency_id_count
+
+
 def _build_weekly_report_ai_cache_key(timeline_id, start_date, end_date, status_text):
     digest = hashlib.sha1(status_text.encode('utf-8')).hexdigest()[:12]
     return f"{timeline_id}:{start_date.isoformat()}:{end_date.isoformat()}:{digest}"
@@ -775,7 +922,11 @@ def trigger_timeline_risk_notifications(timeline_id):
 
 def build_weekly_report_for_timeline(timeline_id, start_date_raw=None, end_date_raw=None):
     timeline = get_active_timeline_or_404(timeline_id)
-    start_date, end_date = _normalize_report_period(start_date_raw, end_date_raw)
+    input_payload = _validate_weekly_report_input(start_date_raw, end_date_raw)
+    start_date, end_date = _normalize_report_period(
+        input_payload.start_date_raw,
+        input_payload.end_date_raw,
+    )
 
     tasks = get_active_tasks_by_timeline_id(timeline_id)
     owner_map = {user.id: user.name for user in get_users_by_ids({task.user_id for task in tasks})}
@@ -991,26 +1142,19 @@ def build_weekly_report_for_timeline(timeline_id, start_date_raw=None, end_date_
 
 
 def check_timeline_task_conflicts(timeline_id, payload, actor_user_id):
-    if not isinstance(payload, dict):
-        raise TimelineOperationError('請提供正確的 JSON 物件', 400)
-
+    input_payload = _validate_conflict_payload(payload)
     timeline = get_active_timeline_or_404(timeline_id)
 
-    end_date = _parse_date_input(payload.get('end_date'), 'end_date')
-    if end_date is None:
-        raise TimelineOperationError('end_date 為必填，格式請使用 YYYY-MM-DD', 400)
-
-    start_date = _parse_date_input(payload.get('start_date'), 'start_date') or end_date
-    if start_date > end_date:
-        raise TimelineOperationError('start_date 不可晚於 end_date', 400)
+    end_date = input_payload.end_date
+    start_date = input_payload.start_date
 
     window_start_dt = datetime.combine(start_date, datetime.min.time())
     window_end_dt = datetime.combine(end_date, datetime.max.time())
 
-    assignee_user_id = _to_int(payload.get('assignee_user_id')) or actor_user_id
-    excluded_task_id = _to_int(payload.get('task_id'))
-    task_name = str(payload.get('name') or '').strip() or None
-    task_priority = _normalize_task_priority(payload.get('priority'))
+    assignee_user_id = input_payload.assignee_user_id or actor_user_id
+    excluded_task_id = input_payload.task_id
+    task_name = input_payload.name
+    task_priority = input_payload.priority
     priority_label = _priority_label(task_priority)
 
     assignee_member = get_timeline_member(timeline_id, assignee_user_id)
@@ -1204,7 +1348,7 @@ def check_timeline_task_conflicts(timeline_id, payload, actor_user_id):
         os.getenv('CONFLICT_CHECK_ENABLE_AI_SUGGESTION', 'false')
     ).strip().lower() in {'1', 'true', 'yes', 'on'}
     include_ai_suggestion = _to_bool(
-        payload.get('include_ai_suggestion'),
+        input_payload.include_ai_suggestion,
         default=env_ai_suggestion_enabled,
     )
 
@@ -1353,116 +1497,37 @@ def remove_timeline_member_for_owner(timeline_id, member_user_id, operator_user_
 
 def batch_create_tasks_for_timeline(timeline_id, user_id, task_payloads):
     timeline = get_active_timeline_or_404(timeline_id)
-
-    if not isinstance(task_payloads, list) or len(task_payloads) == 0:
-        raise TimelineOperationError('請提供至少一個任務', 400)
+    task_payloads = _validate_batch_task_payloads(task_payloads)
 
     with transaction(TimelineOperationError, '批次建立任務失敗，請稍後再試'):
         existing_tasks = get_active_tasks_by_timeline_id(timeline_id)
         all_existing_task_ids = [task.task_id for task in existing_tasks]
         existing_task_id_set = set(all_existing_task_ids)
 
-        selected_existing_task_ids = []
-        for task_data in task_payloads:
-            if not isinstance(task_data, dict):
-                raise TimelineOperationError('tasks 格式錯誤，項目必須是物件', 400)
-
-            task_id = _to_int(task_data.get('task_id'))
-            if not task_data.get('isExisting') or task_id is None:
-                continue
-            if task_id not in existing_task_id_set:
-                continue
-            if task_id not in selected_existing_task_ids:
-                selected_existing_task_ids.append(task_id)
+        selected_existing_task_ids = _collect_selected_existing_task_ids(
+            task_payloads=task_payloads,
+            existing_task_id_set=existing_task_id_set,
+        )
 
         tasks_to_delete = set(all_existing_task_ids) - set(selected_existing_task_ids)
         if tasks_to_delete:
             soft_delete_tasks_by_ids(list(tasks_to_delete), _utcnow_naive())
 
         retained_existing_tasks = [task for task in existing_tasks if task.task_id in selected_existing_task_ids]
-        valid_dependency_ids = {task.task_id for task in retained_existing_tasks}
-
-        created_task_names = []
-        pending_dependency_records = []
         start_date = timeline.start_date or datetime.now()
-        current_date = start_date
-
-        for task_data in task_payloads:
-            if task_data.get('isExisting'):
-                continue
-
-            estimated_days = _to_int(task_data.get('estimated_days'))
-            if estimated_days is None or estimated_days <= 0:
-                estimated_days = 3
-            end_date = current_date + timedelta(days=estimated_days)
-
-            new_task = build_timeline_task_entity(
-                user_id=user_id,
-                timeline_id=timeline_id,
-                name=task_data.get('name', '未命名任務'),
-                priority=task_data.get('priority', 2),
-                status=task_data.get('status', 'pending'),
-                task_remark=task_data.get('task_remark', ''),
-                start_date=current_date,
-                end_date=end_date,
-                is_work=1,
-            )
-            add_entity(new_task)
-            created_task_names.append(new_task.name)
-            pending_dependency_records.append(
-                {
-                    'task': new_task,
-                    'depends_on_task_ids': _normalize_dependency_ids(task_data.get('depends_on_task_ids')),
-                    'depends_on_task_refs': _normalize_dependency_refs(task_data.get('depends_on_task_refs')),
-                }
-            )
-            current_date = end_date
+        created_task_names, pending_dependency_records = _build_new_batch_tasks(
+            timeline_id=timeline_id,
+            user_id=user_id,
+            timeline_start_date=start_date,
+            task_payloads=task_payloads,
+        )
 
         flush_session()
 
-        name_to_task_ids = defaultdict(list)
-        for task in retained_existing_tasks:
-            task_name = (task.name or '').strip()
-            if task_name:
-                name_to_task_ids[task_name].append(task.task_id)
-
-        for record in pending_dependency_records:
-            task = record['task']
-            valid_dependency_ids.add(task.task_id)
-
-            task_name = (task.name or '').strip()
-            if task_name:
-                name_to_task_ids[task_name].append(task.task_id)
-
-        ignored_dependency_ref_count = 0
-        ignored_dependency_id_count = 0
-        for record in pending_dependency_records:
-            task = record['task']
-            dependency_ids = list(record['depends_on_task_ids'])
-
-            for dependency_ref in record['depends_on_task_refs']:
-                candidate_ids = name_to_task_ids.get(dependency_ref, [])
-                resolved_id = next((cid for cid in reversed(candidate_ids) if cid != task.task_id), None)
-                if resolved_id is None:
-                    ignored_dependency_ref_count += 1
-                    continue
-                dependency_ids.append(resolved_id)
-
-            normalized_dependency_ids = []
-            seen_dependency_ids = set()
-            for dependency_id in dependency_ids:
-                if dependency_id in seen_dependency_ids:
-                    continue
-                if dependency_id == task.task_id:
-                    ignored_dependency_id_count += 1
-                    continue
-                if dependency_id not in valid_dependency_ids:
-                    ignored_dependency_id_count += 1
-                    continue
-                seen_dependency_ids.add(dependency_id)
-                normalized_dependency_ids.append(dependency_id)
-
-            task.depends_on_task_ids = normalized_dependency_ids
+        ignored_dependency_ref_count, ignored_dependency_id_count = _resolve_batch_task_dependencies(
+            retained_existing_tasks=retained_existing_tasks,
+            pending_dependency_records=pending_dependency_records,
+        )
 
     message = (
         f'保留 {len(selected_existing_task_ids)} 個舊任務，'

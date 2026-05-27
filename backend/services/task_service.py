@@ -6,6 +6,7 @@ import re
 import time
 import uuid
 
+from pydantic import ValidationError
 from models.subtask import Subtask
 from models.task import Task
 from models.task_comment import TaskComment
@@ -47,6 +48,7 @@ from repositories.task_repository import (
     remove_task_member,
 )
 from repositories.session_repository import add_entity, delete_entity, flush_session
+from services.contracts.task_contracts import TaskCreateInput, TaskStatusUpdateInput, TaskUpdateInput
 
 TASK_CREATE_ALLOWED_FIELDS = {
     'name',
@@ -184,37 +186,51 @@ def validate_dependency_task_ids(timeline_id, depends_on_task_ids, current_task_
 
 
 def _build_task_create_payload(data):
-    status = data.get('status', 'pending')
-    if status not in TASK_STATUS_VALUES:
-        raise TaskOperationError('status 欄位值不合法', 400)
-
-    try:
-        priority = int(data.get('priority', 2))
-    except (TypeError, ValueError):
-        raise TaskOperationError('priority 必須是數字', 400)
-
-    if priority < 1 or priority > 3:
-        raise TaskOperationError('priority 必須介於 1 到 3', 400)
-
-    try:
-        start_date = datetime.fromisoformat(data['start_date']) if data.get('start_date') else None
-    except ValueError:
-        raise TaskOperationError('start_date 格式錯誤', 400)
-
-    try:
-        end_date = datetime.fromisoformat(data['end_date'])
-    except (TypeError, ValueError):
-        raise TaskOperationError('end_date 格式錯誤', 400)
+    create_input = _validate_task_create_input(data)
 
     return {
-        'status': status,
-        'priority': priority,
-        'start_date': start_date,
-        'end_date': end_date,
+        'status': create_input.status,
+        'priority': create_input.priority,
+        'start_date': create_input.start_date,
+        'end_date': create_input.end_date,
         'assignee_user_ids': normalize_assignee_user_ids(data.get('assignee_user_ids')),
         'depends_on_task_ids': normalize_depends_on_task_ids(data.get('depends_on_task_ids')),
+        'timeline_id': create_input.timeline_id,
+    }
+
+
+def _validation_error_to_task_operation_error(err):
+    first_error = err.errors()[0] if err.errors() else {}
+    message = str(first_error.get('msg') or '參數格式錯誤')
+    return TaskOperationError(message, 400)
+
+
+def _validate_task_create_input(data):
+    payload = {
+        'status': data.get('status', 'pending'),
+        'priority': data.get('priority', 2),
+        'start_date': data.get('start_date'),
+        'end_date': data.get('end_date'),
         'timeline_id': data.get('timeline_id'),
     }
+    try:
+        return TaskCreateInput.model_validate(payload)
+    except ValidationError as err:
+        raise _validation_error_to_task_operation_error(err) from err
+
+
+def _validate_task_update_input(data):
+    try:
+        return TaskUpdateInput.model_validate(data)
+    except ValidationError as err:
+        raise _validation_error_to_task_operation_error(err) from err
+
+
+def _validate_task_status_update_input(new_status):
+    try:
+        return TaskStatusUpdateInput(status=new_status)
+    except ValidationError as err:
+        raise _validation_error_to_task_operation_error(err) from err
 
 
 def _validate_task_create_membership(timeline_id, assignee_user_ids):
@@ -466,24 +482,14 @@ def update_task_for_member(task_id, data):
     unknown_fields = find_unknown_fields(data, TASK_UPDATE_ALLOWED_FIELDS)
     if unknown_fields:
         raise TaskOperationError(f'不允許的欄位: {", ".join(unknown_fields)}', 400)
-
-    if 'status' in data and data['status'] not in TASK_STATUS_VALUES:
-        raise TaskOperationError('status 欄位值不合法', 400)
+    update_input = _validate_task_update_input(data)
 
     with transaction(TaskOperationError, '任務更新失敗，請稍後再試'):
         if 'priority' in data:
-            try:
-                priority = int(data['priority'])
-            except (TypeError, ValueError):
-                raise TaskOperationError('priority 必須是數字', 400)
-            if priority < 1 or priority > 3:
-                raise TaskOperationError('priority 必須介於 1 到 3', 400)
-            task.priority = priority
+            task.priority = update_input.priority
 
         if 'name' in data:
-            if not data['name'] or not str(data['name']).strip():
-                raise TaskOperationError('name 不可為空', 400)
-            task.name = str(data['name']).strip()
+            task.name = update_input.name
 
         target_timeline_id = task.timeline_id
         if 'timeline_id' in data:
@@ -509,7 +515,7 @@ def update_task_for_member(task_id, data):
                 )
 
         if 'status' in data:
-            next_status = data['status']
+            next_status = update_input.status
             task.change_status(next_status, completed_at_fallback=_utcnow_naive())
 
         if 'tags' in data:
@@ -528,22 +534,10 @@ def update_task_for_member(task_id, data):
             task.isWork = data['isWork']
 
         if 'start_date' in data:
-            if data['start_date']:
-                try:
-                    task.start_date = datetime.fromisoformat(data['start_date'])
-                except ValueError:
-                    raise TaskOperationError('start_date 格式錯誤', 400)
-            else:
-                task.start_date = None
+            task.start_date = update_input.start_date
 
         if 'end_date' in data:
-            if data['end_date']:
-                try:
-                    task.end_date = datetime.fromisoformat(data['end_date'])
-                except ValueError:
-                    raise TaskOperationError('end_date 格式錯誤', 400)
-            else:
-                task.end_date = None
+            task.end_date = update_input.end_date
 
 
 def soft_delete_task_for_owner(task_id):
@@ -797,13 +791,10 @@ def toggle_subtask_for_task(task_id, subtask_id):
 
 def update_task_status_for_member(task_id, new_status):
     task = _find_active_task_or_404(task_id)
-
-    valid_statuses = ['pending', 'in_progress', 'completed']
-    if new_status not in valid_statuses:
-        raise TaskOperationError(f'無效的狀態，有效值為: {valid_statuses}', 400)
+    status_input = _validate_task_status_update_input(new_status)
 
     with transaction(TaskOperationError, '狀態更新失敗，請稍後再試'):
-        task.change_status(new_status, completed_at_fallback=_utcnow_naive())
+        task.change_status(status_input.status, completed_at_fallback=_utcnow_naive())
     return {
         'status': task.status,
         'completed': task.completed,

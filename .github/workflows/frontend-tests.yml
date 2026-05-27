@@ -38,6 +38,11 @@ jobs:
         cd frontend
         npm run build
 
+    - name: Guardrails Payload Check
+      run: |
+        cd frontend
+        npm run guardrails:payload
+
     - name: Upload coverage to Codecov
       if: always() && hashFiles('frontend/coverage/lcov.info') != ''
       uses: codecov/codecov-action@v6
@@ -46,9 +51,3 @@ jobs:
         flags: frontend
         name: frontend-coverage
         fail_ci_if_error: false
-
-    - name: Deploy to Firebase Hosting
-      if: success()
-      run: |
-        npm install -g firebase-tools
-        firebase deploy --token ${{ secrets.FIREBASE_TOKEN }} --project prajekt-kiriris --only hosting

@@ -2,7 +2,7 @@
 
 基於 Vue 3 + Flask 的專案管理與協作平台，整合 Google Gemini AI 實現智能任務生成。
 
-> **開發狀態**：Phase 1~6.6+ 已完成 ✅；Phase 7.1、7.2 已完成核心功能 ✅；Phase 7.3 核心閉環已完成 ✅；Phase 8 後端抽象與交易邊界收斂已完成 ✅（含 2026/05/17 收尾強化：session helper 一致性、group unique constraint、防重覆加入與 normalize 對齊；下一步保留 RAG 品質評測與 Unit of Work 研讀後再評估）。
+> **開發狀態**：Phase 1~6.6+ 已完成 ✅；Phase 7.1、7.2 已完成核心功能 ✅；Phase 7.3 核心閉環已完成 ✅；Phase 8.4~8.6 已完成 ✅（前端大型元件拆分、後端 service 契約化、CI/Deploy 拆分與 PR 流程護欄；下一步為 8.7 工程護欄補強與 Phase 9 型別註解/Docstring）。
 
 ## 功能模組
 
@@ -53,7 +53,8 @@ prajekt/
 ├── .github/
 │   └── workflows/
 │       ├── backend-tests.yml
-│       └── frontend-tests.yml
+│       ├── frontend-tests.yml
+│       └── frontend-deploy.yml
 ├── backend/
 │   ├── app.py                    # Flask 應用入口
 │   ├── blueprints/               # Route 層
@@ -176,7 +177,7 @@ npm run test:run
 
 ### 後端測試（pytest + coverage）
 
-- 結果：最新全量回歸 `187 passed`（coverage 基線持續維護中）
+- 結果：最新全量回歸 `194 passed`（coverage 基線持續維護中）
 - 覆蓋範圍：`blueprints`、`services`、`models`
 - 指令：
 
@@ -188,7 +189,8 @@ pytest --cov=blueprints --cov=services --cov=models --cov-report=term-missing --
 ### GitHub Actions
 
 - 已啟用：`backend-tests.yml`（PR/Push 自動執行 pytest + coverage 報告）
-- 已建立：`frontend-tests.yml`（後續可接 branch protection）
+- 已啟用：`frontend-tests.yml`（PR/Push 執行 `test:coverage` + `build` + `guardrails:payload`）
+- 已啟用：`frontend-deploy.yml`（`push main` 或手動觸發部署）
 
 ### 本輪 Phase 7.3 聚焦驗證（2026/05/08）
 
@@ -207,6 +209,13 @@ pytest --cov=blueprints --cov=services --cov=models --cov-report=term-missing --
 - 後端：`venv\Scripts\python.exe -m pytest tests/services/test_auth_service.py tests/services/test_profile_service.py tests/services/test_group_service.py tests/services/test_trash_service.py tests/services/test_group_snapshot.py`
 - 結果：`55 passed`（`50 + 5`，僅 `.pytest_cache` 權限 warning）
 - 驗證重點：session helper 一致化、group unique constraint + 409 防重覆加入、email normalize 對齊、snapshot job 清理、trash 永久刪除流程語義
+
+### 本輪 Phase 8.5/8.6 驗證（2026/05/27）
+
+- 後端：`venv\Scripts\python.exe -m pytest`
+- 結果：`194 passed`（僅 `.pytest_cache` 權限 warning）
+- 前端：`npm run guardrails:payload`（PASS）
+- 前端：`npm run build`（PASS）
 
 ## API 端點
 

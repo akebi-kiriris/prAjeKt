@@ -1597,10 +1597,9 @@ const saveSelectedTaskDependencies = async () => {
       depends_on_task_ids: dependencyIds,
     });
 
-    selectedTask.value = {
-      ...selectedTask.value,
-      depends_on_task_ids: dependencyIds,
-    };
+    if (selectedTask.value) {
+      selectedTask.value.depends_on_task_ids = dependencyIds;
+    }
     selectedTaskDependencyIds.value = dependencyIds;
 
     emit('refresh-all');
