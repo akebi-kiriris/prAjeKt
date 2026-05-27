@@ -6,17 +6,6 @@ from models.user import User
 from services.text_splitter_service import TextSplitterOperationError, TextSplitterService
 
 
-def _create_user(email: str, username: str) -> User:
-    user = User(
-        name="Splitter User",
-        username=username,
-        email=email,
-        password="hashed-password",
-    )
-    db.session.add(user)
-    db.session.commit()
-    return user
-
 
 def _create_document(user_id: int, filename: str, sha_seed: str = "a") -> KnowledgeDocument:
     document = KnowledgeDocument(
@@ -30,8 +19,8 @@ def _create_document(user_id: int, filename: str, sha_seed: str = "a") -> Knowle
     return document
 
 
-def test_text_splitter_splits_markdown_heading_then_sentence_level(app):
-    user = _create_user("splitter-1@example.com", "splitter_user_1")
+def test_text_splitter_splits_markdown_heading_then_sentence_level(app, user_factory):
+    user = user_factory("splitter-1@example.com", "splitter_user_1")
     document = _create_document(user.id, "note.md", "c")
 
     service = TextSplitterService(target_min_tokens=20, target_max_tokens=40, overlap_tokens=8)
@@ -54,8 +43,8 @@ def test_text_splitter_splits_markdown_heading_then_sentence_level(app):
     assert overlap_tail.splitlines()[0] in chunks[1]["content"]
 
 
-def test_text_splitter_marks_document_failed_on_parse_error(app):
-    user = _create_user("splitter-2@example.com", "splitter_user_2")
+def test_text_splitter_marks_document_failed_on_parse_error(app, user_factory):
+    user = user_factory("splitter-2@example.com", "splitter_user_2")
     document = _create_document(user.id, "broken.md", "d")
 
     service = TextSplitterService(target_min_tokens=20, target_max_tokens=40, overlap_tokens=8)

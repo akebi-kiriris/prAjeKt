@@ -15,22 +15,11 @@ from services.timeline_service import (
 )
 
 
-def _create_user(email: str, username: str) -> User:
-    user = User(
-        name="Service Test User",
-        username=username,
-        email=email,
-        password="hashed-password",
-    )
-    db.session.add(user)
-    db.session.commit()
-    return user
 
-
-def test_timeline_role_and_task_access_resolution(app):
-    owner = _create_user("timeline-access-owner@example.com", "timeline_access_owner")
-    member = _create_user("timeline-access-member@example.com", "timeline_access_member")
-    outsider = _create_user("timeline-access-outsider@example.com", "timeline_access_outsider")
+def test_timeline_role_and_task_access_resolution(app, user_factory):
+    owner = user_factory("timeline-access-owner@example.com", "timeline_access_owner")
+    member = user_factory("timeline-access-member@example.com", "timeline_access_member")
+    outsider = user_factory("timeline-access-outsider@example.com", "timeline_access_outsider")
 
     timeline = Timeline(user_id=owner.id, name="Access Timeline")
     db.session.add(timeline)
@@ -54,8 +43,8 @@ def test_timeline_role_and_task_access_resolution(app):
     assert get_task_access(outsider.id, solo_task) is None
 
 
-def test_timeline_serializers(app):
-    owner = _create_user("timeline-serializer-owner@example.com", "timeline_serializer_owner")
+def test_timeline_serializers(app, user_factory):
+    owner = user_factory("timeline-serializer-owner@example.com", "timeline_serializer_owner")
 
     timeline = Timeline(
         user_id=owner.id,

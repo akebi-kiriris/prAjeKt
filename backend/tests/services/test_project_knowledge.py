@@ -11,17 +11,6 @@ from services.timeline_service import create_timeline_for_user, add_timeline_mem
 from services.rag_planning_service import suggest_plan_with_rag
 
 
-def _create_user(email: str, username: str) -> User:
-    user = User(
-        name="Project Knowledge User",
-        username=username,
-        email=email,
-        password="hashed-password",
-    )
-    db.session.add(user)
-    db.session.commit()
-    return user
-
 
 class _FakeEmbedder:
     def embed_documents(self, texts):
@@ -43,12 +32,12 @@ class _FakeSplitter:
         ]
 
 
-def test_project_upload_and_listing_by_member(app, monkeypatch):
+def test_project_upload_and_listing_by_member(app, monkeypatch, user_factory):
     monkeypatch.setattr("services.knowledge_service.GeminiEmbeddingService", lambda: _FakeEmbedder())
     monkeypatch.setattr("services.knowledge_service.TextSplitterService", lambda: _FakeSplitter())
 
-    owner = _create_user("proj-owner@example.com", "proj_owner")
-    member = _create_user("proj-member@example.com", "proj_member")
+    owner = user_factory("proj-owner@example.com", "proj_owner")
+    member = user_factory("proj-member@example.com", "proj_member")
 
     timeline_id = create_timeline_for_user(owner.id, {"name": "Test Project"})
     add_timeline_member_for_owner(timeline_id, member.id, role=1, actor_user_id=owner.id)
@@ -68,9 +57,9 @@ def test_project_upload_and_listing_by_member(app, monkeypatch):
     assert listed["documents"][0]["project_id"] == timeline_id
 
 
-def test_suggest_plan_with_project_knowledge_passes_project_id(app, monkeypatch):
-    owner = _create_user("rag-owner@example.com", "rag_owner")
-    member = _create_user("rag-member@example.com", "rag_member")
+def test_suggest_plan_with_project_knowledge_passes_project_id(app, monkeypatch, user_factory):
+    owner = user_factory("rag-owner@example.com", "rag_owner")
+    member = user_factory("rag-member@example.com", "rag_member")
 
     timeline_id = create_timeline_for_user(owner.id, {"name": "RAG Project"})
     add_timeline_member_for_owner(timeline_id, member.id, role=1, actor_user_id=owner.id)

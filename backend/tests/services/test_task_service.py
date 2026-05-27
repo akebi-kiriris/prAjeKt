@@ -46,17 +46,6 @@ from services.task_service import (
 )
 
 
-def _create_user(email: str, username: str) -> User:
-    user = User(
-        name="Task Service User",
-        username=username,
-        email=email,
-        password="hashed-password",
-    )
-    db.session.add(user)
-    db.session.commit()
-    return user
-
 
 def _create_timeline(owner_id: int, name: str = "Task Service Timeline") -> Timeline:
     timeline = Timeline(user_id=owner_id, name=name)
@@ -67,8 +56,8 @@ def _create_timeline(owner_id: int, name: str = "Task Service Timeline") -> Time
     return timeline
 
 
-def test_create_task_for_user_validates_payload_and_dates(app):
-    owner = _create_user("task-create-validation@example.com", "task_create_validation")
+def test_create_task_for_user_validates_payload_and_dates(app, user_factory):
+    owner = user_factory("task-create-validation@example.com", "task_create_validation")
 
     with pytest.raises(TaskOperationError) as unknown_exc:
         create_task_for_user(
@@ -136,8 +125,8 @@ def test_create_task_for_user_validates_payload_and_dates(app):
     assert end_date_exc.value.status_code == 400
 
 
-def test_update_task_for_member_validates_and_persists_fields(app):
-    owner = _create_user("task-update-validation@example.com", "task_update_validation")
+def test_update_task_for_member_validates_and_persists_fields(app, user_factory):
+    owner = user_factory("task-update-validation@example.com", "task_update_validation")
     task_id = create_task_for_user(
         owner.id,
         {
@@ -172,9 +161,9 @@ def test_update_task_for_member_validates_and_persists_fields(app):
     assert bad_status_exc.value.status_code == 400
 
 
-def test_list_tasks_for_user_includes_assigned_tasks_and_owner_flag(app):
-    owner = _create_user("task-list-owner-service@example.com", "task_list_owner_service")
-    member = _create_user("task-list-member-service@example.com", "task_list_member_service")
+def test_list_tasks_for_user_includes_assigned_tasks_and_owner_flag(app, user_factory):
+    owner = user_factory("task-list-owner-service@example.com", "task_list_owner_service")
+    member = user_factory("task-list-member-service@example.com", "task_list_member_service")
 
     task_id = create_task_for_user(
         owner.id,
@@ -192,8 +181,8 @@ def test_list_tasks_for_user_includes_assigned_tasks_and_owner_flag(app):
     assert assigned["is_owner"] is False
 
 
-def test_toggle_task_for_member_updates_completed_and_status(app):
-    owner = _create_user("task-toggle-service@example.com", "task_toggle_service")
+def test_toggle_task_for_member_updates_completed_and_status(app, user_factory):
+    owner = user_factory("task-toggle-service@example.com", "task_toggle_service")
     task_id = create_task_for_user(
         owner.id,
         {
@@ -211,8 +200,8 @@ def test_toggle_task_for_member_updates_completed_and_status(app):
     assert task.status == "completed"
 
 
-def test_list_upcoming_tasks_for_user_includes_due_and_progress_items(app):
-    user = _create_user("task-upcoming-service@example.com", "task_upcoming_service")
+def test_list_upcoming_tasks_for_user_includes_due_and_progress_items(app, user_factory):
+    user = user_factory("task-upcoming-service@example.com", "task_upcoming_service")
     now = datetime.now(timezone.utc).replace(tzinfo=None)
 
     due_soon = Task(
@@ -246,8 +235,8 @@ def test_list_upcoming_tasks_for_user_includes_due_and_progress_items(app):
     assert "not upcoming" not in names
 
 
-def test_soft_delete_task_for_owner_marks_deleted_at(app):
-    owner = _create_user("task-soft-delete-service@example.com", "task_soft_delete_service")
+def test_soft_delete_task_for_owner_marks_deleted_at(app, user_factory):
+    owner = user_factory("task-soft-delete-service@example.com", "task_soft_delete_service")
     task_id = create_task_for_user(
         owner.id,
         {
@@ -263,8 +252,8 @@ def test_soft_delete_task_for_owner_marks_deleted_at(app):
     assert deleted_task.deleted_at is not None
 
 
-def test_create_task_for_user_accepts_timeline_owner_membership(app):
-    owner = _create_user("task-timeline-owner-service@example.com", "task_timeline_owner_service")
+def test_create_task_for_user_accepts_timeline_owner_membership(app, user_factory):
+    owner = user_factory("task-timeline-owner-service@example.com", "task_timeline_owner_service")
     timeline = _create_timeline(owner.id)
 
     task_id = create_task_for_user(
@@ -281,7 +270,7 @@ def test_create_task_for_user_accepts_timeline_owner_membership(app):
     assert owner_member.role == 0
 
 
-def test_task_service_find_unknown_fields_sorted():
+def test_task_service_find_unknown_fields_sorted(user_factory):
     unknown = task_find_unknown_fields(
         {"name": "Task", "priority": 2, "x": 1, "a": 2},
         {"name", "priority"},
@@ -289,8 +278,8 @@ def test_task_service_find_unknown_fields_sorted():
     assert unknown == ["a", "x"]
 
 
-def test_task_service_create_notification_persists_data(app):
-    user = _create_user("task-notif@example.com", "task_notif_user")
+def test_task_service_create_notification_persists_data(app, user_factory):
+    user = user_factory("task-notif@example.com", "task_notif_user")
 
     create_notification(
         user_id=user.id,
@@ -306,9 +295,9 @@ def test_task_service_create_notification_persists_data(app):
     assert notif.type == "task_assigned"
 
 
-def test_get_user_task_role_prefers_task_role_over_timeline_role(app):
-    owner = _create_user("task-role-owner@example.com", "task_role_owner")
-    member = _create_user("task-role-member@example.com", "task_role_member")
+def test_get_user_task_role_prefers_task_role_over_timeline_role(app, user_factory):
+    owner = user_factory("task-role-owner@example.com", "task_role_owner")
+    member = user_factory("task-role-member@example.com", "task_role_member")
 
     timeline = _create_timeline(owner.id, "Task Role Timeline")
     task = Task(user_id=owner.id, name="Task Role Task", timeline_id=timeline.id)
@@ -323,9 +312,9 @@ def test_get_user_task_role_prefers_task_role_over_timeline_role(app):
     assert role == 1
 
 
-def test_get_user_task_role_falls_back_to_timeline_role(app):
-    owner = _create_user("task-fallback-owner@example.com", "task_fallback_owner")
-    member = _create_user("task-fallback-member@example.com", "task_fallback_member")
+def test_get_user_task_role_falls_back_to_timeline_role(app, user_factory):
+    owner = user_factory("task-fallback-owner@example.com", "task_fallback_owner")
+    member = user_factory("task-fallback-member@example.com", "task_fallback_member")
 
     timeline = _create_timeline(owner.id, "Fallback Timeline")
     task = Task(user_id=owner.id, name="Fallback Task", timeline_id=timeline.id)
@@ -339,10 +328,10 @@ def test_get_user_task_role_falls_back_to_timeline_role(app):
     assert role == 1
 
 
-def test_can_manage_task_members_owner_and_timeline_owner(app):
-    owner = _create_user("manage-owner@example.com", "manage_owner")
-    timeline_owner = _create_user("manage-timeline-owner@example.com", "manage_timeline_owner")
-    collaborator = _create_user("manage-collab@example.com", "manage_collab")
+def test_can_manage_task_members_owner_and_timeline_owner(app, user_factory):
+    owner = user_factory("manage-owner@example.com", "manage_owner")
+    timeline_owner = user_factory("manage-timeline-owner@example.com", "manage_timeline_owner")
+    collaborator = user_factory("manage-collab@example.com", "manage_collab")
 
     timeline = _create_timeline(owner.id, "Manage Timeline")
     task = Task(user_id=owner.id, name="Manage Task", timeline_id=timeline.id)
@@ -359,10 +348,10 @@ def test_can_manage_task_members_owner_and_timeline_owner(app):
     assert can_manage_task_members(collaborator.id, task) is False
 
 
-def test_task_service_member_management_operations(app):
-    owner = _create_user("task-member-op-owner@example.com", "task_member_op_owner")
-    member = _create_user("task-member-op-member@example.com", "task_member_op_member")
-    outsider = _create_user("task-member-op-outsider@example.com", "task_member_op_outsider")
+def test_task_service_member_management_operations(app, user_factory):
+    owner = user_factory("task-member-op-owner@example.com", "task_member_op_owner")
+    member = user_factory("task-member-op-member@example.com", "task_member_op_member")
+    outsider = user_factory("task-member-op-outsider@example.com", "task_member_op_outsider")
 
     timeline = _create_timeline(owner.id, "Task Member Ops Timeline")
     db.session.add(TimelineUser(timeline_id=timeline.id, user_id=member.id, role=1))
@@ -405,10 +394,10 @@ def test_task_service_member_management_operations(app):
     assert remove_owner_exc.value.status_code == 400
 
 
-def test_create_task_for_user_accepts_assignee_user_ids(app):
-    owner = _create_user("task-create-owner@example.com", "task_create_owner")
-    member = _create_user("task-create-member@example.com", "task_create_member")
-    outsider = _create_user("task-create-outsider@example.com", "task_create_outsider")
+def test_create_task_for_user_accepts_assignee_user_ids(app, user_factory):
+    owner = user_factory("task-create-owner@example.com", "task_create_owner")
+    member = user_factory("task-create-member@example.com", "task_create_member")
+    outsider = user_factory("task-create-outsider@example.com", "task_create_outsider")
 
     timeline = _create_timeline(owner.id, "Task Create Timeline")
     db.session.add(TimelineUser(timeline_id=timeline.id, user_id=member.id, role=1))
@@ -443,8 +432,8 @@ def test_create_task_for_user_accepts_assignee_user_ids(app):
     assert invalid_assignee_exc.value.status_code == 400
 
 
-def test_task_service_validates_depends_on_task_ids(app):
-    owner = _create_user("task-depends-owner@example.com", "task_depends_owner")
+def test_task_service_validates_depends_on_task_ids(app, user_factory):
+    owner = user_factory("task-depends-owner@example.com", "task_depends_owner")
 
     main_timeline = _create_timeline(owner.id, "Task Depends Timeline")
     other_timeline = _create_timeline(owner.id, "Task Depends Other Timeline")
@@ -509,9 +498,9 @@ def test_task_service_validates_depends_on_task_ids(app):
     assert refreshed_task.depends_on_task_ids == [base_task.task_id]
 
 
-def test_task_service_comment_operations(app):
-    owner = _create_user("task-comment-op-owner@example.com", "task_comment_op_owner")
-    member = _create_user("task-comment-op-member@example.com", "task_comment_op_member")
+def test_task_service_comment_operations(app, user_factory):
+    owner = user_factory("task-comment-op-owner@example.com", "task_comment_op_owner")
+    member = user_factory("task-comment-op-member@example.com", "task_comment_op_member")
 
     task = Task(user_id=owner.id, name="Task Comment Ops")
     db.session.add(task)
@@ -542,8 +531,8 @@ def test_task_service_comment_operations(app):
     assert not_found_exc.value.status_code == 404
 
 
-def test_task_service_subtask_and_status_operations(app):
-    owner = _create_user("task-subtask-op-owner@example.com", "task_subtask_op_owner")
+def test_task_service_subtask_and_status_operations(app, user_factory):
+    owner = user_factory("task-subtask-op-owner@example.com", "task_subtask_op_owner")
 
     task = Task(user_id=owner.id, name="Task Subtask Ops", status="pending", completed=False)
     db.session.add(task)
@@ -597,8 +586,8 @@ def test_task_service_subtask_and_status_operations(app):
     assert missing_task_exc.value.status_code == 404
 
 
-def test_task_service_summary_orchestration(app, monkeypatch):
-    owner = _create_user("task-summary-service-owner@example.com", "task_summary_service_owner")
+def test_task_service_summary_orchestration(app, monkeypatch, user_factory):
+    owner = user_factory("task-summary-service-owner@example.com", "task_summary_service_owner")
     task = Task(user_id=owner.id, name="Task Summary Service")
     db.session.add(task)
     db.session.commit()
@@ -645,10 +634,10 @@ def test_task_service_summary_orchestration(app, monkeypatch):
     assert not_found_exc.value.status_code == 404
 
 
-def test_task_service_file_operations_and_validation(app):
-    owner = _create_user("task-file-service-owner@example.com", "task_file_service_owner")
-    member = _create_user("task-file-service-member@example.com", "task_file_service_member")
-    outsider = _create_user("task-file-service-outsider@example.com", "task_file_service_outsider")
+def test_task_service_file_operations_and_validation(app, user_factory):
+    owner = user_factory("task-file-service-owner@example.com", "task_file_service_owner")
+    member = user_factory("task-file-service-member@example.com", "task_file_service_member")
+    outsider = user_factory("task-file-service-outsider@example.com", "task_file_service_outsider")
 
     task = Task(user_id=owner.id, name="Task File Service")
     db.session.add(task)

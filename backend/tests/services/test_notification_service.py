@@ -14,20 +14,9 @@ from services.notification_service import (
 )
 
 
-def _create_user(email: str, username: str) -> User:
-    user = User(
-        name="Service Test User",
-        username=username,
-        email=email,
-        password="hashed-password",
-    )
-    db.session.add(user)
-    db.session.commit()
-    return user
 
-
-def test_notification_service_to_dict(app):
-    user = _create_user("notif-service@example.com", "notif_service_user")
+def test_notification_service_to_dict(app, user_factory):
+    user = user_factory("notif-service@example.com", "notif_service_user")
     notif = Notification(
         user_id=user.id,
         type="task_assigned",
@@ -45,8 +34,8 @@ def test_notification_service_to_dict(app):
     assert payload["created_at"].endswith("Z")
 
 
-def test_notification_service_operations(app):
-    user = _create_user("notif-ops@example.com", "notif_ops_user")
+def test_notification_service_operations(app, user_factory):
+    user = user_factory("notif-ops@example.com", "notif_ops_user")
     n1 = Notification(
         user_id=user.id,
         type="task_assigned",
@@ -80,8 +69,8 @@ def test_notification_service_operations(app):
     assert Notification.query.filter_by(id=n2.id).first() is None
 
 
-def test_notification_service_not_found_errors(app):
-    user = _create_user("notif-err@example.com", "notif_err_user")
+def test_notification_service_not_found_errors(app, user_factory):
+    user = user_factory("notif-err@example.com", "notif_err_user")
 
     with pytest.raises(NotificationOperationError) as read_exc:
         mark_notification_as_read(999999, user.id)

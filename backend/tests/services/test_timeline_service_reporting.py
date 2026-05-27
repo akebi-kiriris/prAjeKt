@@ -14,21 +14,10 @@ from services.timeline_service import (
 )
 
 
-def _create_user(email: str, username: str) -> User:
-    user = User(
-        name="Service Test User",
-        username=username,
-        email=email,
-        password="hashed-password",
-    )
-    db.session.add(user)
-    db.session.commit()
-    return user
 
-
-def test_build_weekly_report_for_timeline_includes_summary_risks_and_comments(app):
-    owner = _create_user("timeline-weekly-owner@example.com", "timeline_weekly_owner")
-    member = _create_user("timeline-weekly-member@example.com", "timeline_weekly_member")
+def test_build_weekly_report_for_timeline_includes_summary_risks_and_comments(app, user_factory):
+    owner = user_factory("timeline-weekly-owner@example.com", "timeline_weekly_owner")
+    member = user_factory("timeline-weekly-member@example.com", "timeline_weekly_member")
 
     timeline = Timeline(user_id=owner.id, name="Weekly Timeline")
     db.session.add(timeline)
@@ -101,8 +90,8 @@ def test_build_weekly_report_for_timeline_includes_summary_risks_and_comments(ap
     assert "前端" in payload["analysis"]["top_tags"]
 
 
-def test_build_timeline_risk_analysis_detects_cycle_and_missing_dependency(app):
-    owner = _create_user("timeline-risk-owner@example.com", "timeline_risk_owner")
+def test_build_timeline_risk_analysis_detects_cycle_and_missing_dependency(app, user_factory):
+    owner = user_factory("timeline-risk-owner@example.com", "timeline_risk_owner")
 
     timeline = Timeline(user_id=owner.id, name="Risk Timeline")
     db.session.add(timeline)
@@ -164,9 +153,9 @@ def test_build_timeline_risk_analysis_detects_cycle_and_missing_dependency(app):
     assert "missing_dependency" in warning_codes
 
 
-def test_trigger_timeline_risk_notifications_creates_notifications(app):
-    owner = _create_user("timeline-risk-notify-owner@example.com", "timeline_risk_notify_owner")
-    member = _create_user("timeline-risk-notify-member@example.com", "timeline_risk_notify_member")
+def test_trigger_timeline_risk_notifications_creates_notifications(app, user_factory):
+    owner = user_factory("timeline-risk-notify-owner@example.com", "timeline_risk_notify_owner")
+    member = user_factory("timeline-risk-notify-member@example.com", "timeline_risk_notify_member")
 
     timeline = Timeline(user_id=owner.id, name="Risk Notify Timeline")
     db.session.add(timeline)

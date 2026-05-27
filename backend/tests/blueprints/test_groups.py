@@ -1,4 +1,3 @@
-from werkzeug.security import generate_password_hash
 import blueprints.groups as groups_blueprint_module
 import services.group_service as group_service_module
 
@@ -6,17 +5,6 @@ from models import db
 from models.group import GroupMember
 from models.user import User
 
-
-def _create_user(email: str, password: str, username: str) -> User:
-    user = User(
-        name="Group Blueprint User",
-        username=username,
-        email=email,
-        password=generate_password_hash(password),
-    )
-    db.session.add(user)
-    db.session.commit()
-    return user
 
 
 def _get_auth_headers(client, email: str, password: str) -> dict:
@@ -29,13 +17,13 @@ def _get_auth_headers(client, email: str, password: str) -> dict:
     return {"Authorization": f"Bearer {token}"}
 
 
-def test_get_groups_requires_auth(client):
+def test_get_groups_requires_auth(client, auth_user_factory):
     response = client.get("/api/groups")
     assert response.status_code == 401
 
 
-def test_create_group_success_and_creator_membership(client):
-    owner = _create_user(
+def test_create_group_success_and_creator_membership(client, auth_user_factory):
+    owner = auth_user_factory(
         email="group-create@example.com",
         password="Password123!",
         username="group_create_user",
@@ -57,8 +45,8 @@ def test_create_group_success_and_creator_membership(client):
     assert payload["invite_code"]
 
 
-def test_join_group_success_for_second_user(client):
-    _create_user(
+def test_join_group_success_for_second_user(client, auth_user_factory):
+    auth_user_factory(
         email="group-owner@example.com",
         password="Password123!",
         username="group_owner_user",
@@ -75,7 +63,7 @@ def test_join_group_success_for_second_user(client):
     group_id = payload["group_id"]
     invite_code = payload["invite_code"]
 
-    member = _create_user(
+    member = auth_user_factory(
         email="group-member@example.com",
         password="Password123!",
         username="group_member_user",
@@ -93,8 +81,8 @@ def test_join_group_success_for_second_user(client):
     assert member_row is not None
 
 
-def test_send_and_fetch_group_message_for_member(client):
-    _create_user(
+def test_send_and_fetch_group_message_for_member(client, auth_user_factory):
+    auth_user_factory(
         email="group-chat-owner@example.com",
         password="Password123!",
         username="group_chat_owner",
@@ -122,8 +110,8 @@ def test_send_and_fetch_group_message_for_member(client):
     assert any(item["content"] == "hello group" for item in payload)
 
 
-def test_get_group_messages_blocks_non_member(client):
-    _create_user(
+def test_get_group_messages_blocks_non_member(client, auth_user_factory):
+    auth_user_factory(
         email="group-block-owner@example.com",
         password="Password123!",
         username="group_block_owner",
@@ -138,7 +126,7 @@ def test_get_group_messages_blocks_non_member(client):
     assert create_response.status_code == 201
     group_id = create_response.get_json()["group_id"]
 
-    _create_user(
+    auth_user_factory(
         email="group-outsider@example.com",
         password="Password123!",
         username="group_outsider",
@@ -149,8 +137,8 @@ def test_get_group_messages_blocks_non_member(client):
     assert response.status_code == 403
 
 
-def test_leave_group_removes_membership(client):
-    user = _create_user(
+def test_leave_group_removes_membership(client, auth_user_factory):
+    user = auth_user_factory(
         email="group-leave@example.com",
         password="Password123!",
         username="group_leave_user",
@@ -172,8 +160,8 @@ def test_leave_group_removes_membership(client):
     assert member_row is None
 
 
-def test_create_group_requires_non_empty_name(client):
-    _create_user(
+def test_create_group_requires_non_empty_name(client, auth_user_factory):
+    auth_user_factory(
         email="group-empty-name@example.com",
         password="Password123!",
         username="group_empty_name_user",
@@ -189,8 +177,8 @@ def test_create_group_requires_non_empty_name(client):
     assert response.status_code == 400
 
 
-def test_join_group_invalid_and_duplicate(client):
-    owner = _create_user(
+def test_join_group_invalid_and_duplicate(client, auth_user_factory):
+    owner = auth_user_factory(
         email="group-join-owner@example.com",
         password="Password123!",
         username="group_join_owner_user",
@@ -221,13 +209,13 @@ def test_join_group_invalid_and_duplicate(client):
     assert owner.id is not None
 
 
-def test_leave_group_returns_404_when_user_not_member(client):
-    owner = _create_user(
+def test_leave_group_returns_404_when_user_not_member(client, auth_user_factory):
+    owner = auth_user_factory(
         email="group-leave-owner404@example.com",
         password="Password123!",
         username="group_leave_owner404",
     )
-    outsider = _create_user(
+    outsider = auth_user_factory(
         email="group-leave-outsider404@example.com",
         password="Password123!",
         username="group_leave_outsider404",
@@ -248,18 +236,18 @@ def test_leave_group_returns_404_when_user_not_member(client):
     assert owner.id != outsider.id
 
 
-def test_send_group_message_validation_and_members_api(client):
-    owner = _create_user(
+def test_send_group_message_validation_and_members_api(client, auth_user_factory):
+    owner = auth_user_factory(
         email="group-message-owner@example.com",
         password="Password123!",
         username="group_message_owner",
     )
-    member = _create_user(
+    member = auth_user_factory(
         email="group-message-member@example.com",
         password="Password123!",
         username="group_message_member",
     )
-    outsider = _create_user(
+    outsider = auth_user_factory(
         email="group-message-outsider@example.com",
         password="Password123!",
         username="group_message_outsider",
@@ -312,8 +300,8 @@ def test_send_group_message_validation_and_members_api(client):
     assert forbidden_message.status_code == 403
 
 
-def test_group_ai_snapshot_requires_member(client):
-    _create_user(
+def test_group_ai_snapshot_requires_member(client, auth_user_factory):
+    auth_user_factory(
         email="group-snapshot-owner@example.com",
         password="Password123!",
         username="group_snapshot_owner",
@@ -328,7 +316,7 @@ def test_group_ai_snapshot_requires_member(client):
     assert create_response.status_code == 201
     group_id = create_response.get_json()["group_id"]
 
-    _create_user(
+    auth_user_factory(
         email="group-snapshot-outsider@example.com",
         password="Password123!",
         username="group_snapshot_outsider",
@@ -343,8 +331,8 @@ def test_group_ai_snapshot_requires_member(client):
     assert response.status_code == 403
 
 
-def test_group_ai_snapshot_success_and_latest(client, monkeypatch):
-    _create_user(
+def test_group_ai_snapshot_success_and_latest(client, monkeypatch, auth_user_factory):
+    auth_user_factory(
         email="group-snapshot-success@example.com",
         password="Password123!",
         username="group_snapshot_success",
@@ -408,8 +396,8 @@ def test_group_ai_snapshot_success_and_latest(client, monkeypatch):
     assert latest_payload["snapshot_id"] == payload["snapshot_id"]
 
 
-def test_group_ai_snapshot_async_job_status(client, monkeypatch):
-    _create_user(
+def test_group_ai_snapshot_async_job_status(client, monkeypatch, auth_user_factory):
+    auth_user_factory(
         email="group-snapshot-async@example.com",
         password="Password123!",
         username="group_snapshot_async",

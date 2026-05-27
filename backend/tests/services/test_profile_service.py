@@ -17,26 +17,15 @@ from services.profile_service import (
 )
 
 
-def _create_user(email: str, username: str) -> User:
-    user = User(
-        name="Service Test User",
-        username=username,
-        email=email,
-        password="hashed-password",
-    )
-    db.session.add(user)
-    db.session.commit()
-    return user
 
-
-def test_profile_service_helpers_and_serializers(app):
+def test_profile_service_helpers_and_serializers(app, user_factory):
     unknown = profile_find_unknown_fields(
         {"name": "A", "x": 1, "z": 2},
         {"name", "email"},
     )
     assert unknown == ["x", "z"]
 
-    user = _create_user("profile-service@example.com", "profile_service_user")
+    user = user_factory("profile-service@example.com", "profile_service_user")
     user.bio = "about"
     user.avatar = "https://example.com/avatar.png"
     db.session.commit()
@@ -54,9 +43,9 @@ def test_profile_service_helpers_and_serializers(app):
     }
 
 
-def test_profile_service_update_search_and_chart_stats(app):
-    user = _create_user("profile-service-ops@example.com", "profile_service_ops")
-    target = _create_user("profile-service-target@example.com", "profile_service_target")
+def test_profile_service_update_search_and_chart_stats(app, user_factory):
+    user = user_factory("profile-service-ops@example.com", "profile_service_ops")
+    target = user_factory("profile-service-target@example.com", "profile_service_target")
 
     loaded = get_profile_user_or_404(user.id)
     assert loaded.id == user.id
@@ -105,9 +94,9 @@ def test_profile_service_update_search_and_chart_stats(app):
     assert len(stats["daily_completions"]) == 30
 
 
-def test_profile_service_validation_errors(app):
-    owner = _create_user("profile-service-owner@example.com", "profile_service_owner")
-    duplicate = _create_user("profile-service-dup@example.com", "profile_service_dup")
+def test_profile_service_validation_errors(app, user_factory):
+    owner = user_factory("profile-service-owner@example.com", "profile_service_owner")
+    duplicate = user_factory("profile-service-dup@example.com", "profile_service_dup")
 
     with pytest.raises(ProfileOperationError) as unknown_exc:
         update_profile_for_user(owner.id, {"bad_field": "x"})

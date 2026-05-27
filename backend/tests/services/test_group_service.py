@@ -4,7 +4,6 @@ import pytest
 
 from models import db
 from models.group import Group, GroupMember
-from models.user import User
 from services.group_service import (
     GroupOperationError,
     create_group_for_user,
@@ -22,21 +21,8 @@ from services.group_service import (
     send_group_message_for_member,
 )
 
-
-def _create_user(email: str, username: str) -> User:
-    user = User(
-        name="Service Test User",
-        username=username,
-        email=email,
-        password="hashed-password",
-    )
-    db.session.add(user)
-    db.session.commit()
-    return user
-
-
-def test_group_service_generate_unique_invite_code_skips_existing(app, monkeypatch):
-    owner = _create_user("group-owner@example.com", "group_owner")
+def test_group_service_generate_unique_invite_code_skips_existing(app, monkeypatch, user_factory):
+    owner = user_factory("group-owner@example.com", "group_owner")
     existing = Group(
         group_name="Existing Group",
         group_type="task",
@@ -55,9 +41,9 @@ def test_group_service_generate_unique_invite_code_skips_existing(app, monkeypat
     assert len(code) == 6
 
 
-def test_group_service_serializers_and_membership(app):
-    owner = _create_user("group-owner2@example.com", "group_owner2")
-    member = _create_user("group-member2@example.com", "group_member2")
+def test_group_service_serializers_and_membership(app, user_factory):
+    owner = user_factory("group-owner2@example.com", "group_owner2")
+    member = user_factory("group-member2@example.com", "group_member2")
 
     group = Group(
         group_name="Service Group",
@@ -91,10 +77,10 @@ def test_group_service_serializers_and_membership(app):
     assert group_room_name(group.group_id) == f"group_{group.group_id}"
 
 
-def test_group_service_operations_and_errors(app):
-    owner = _create_user("group-service-owner@example.com", "group_service_owner")
-    member = _create_user("group-service-member@example.com", "group_service_member")
-    outsider = _create_user("group-service-outsider@example.com", "group_service_outsider")
+def test_group_service_operations_and_errors(app, user_factory):
+    owner = user_factory("group-service-owner@example.com", "group_service_owner")
+    member = user_factory("group-service-member@example.com", "group_service_member")
+    outsider = user_factory("group-service-outsider@example.com", "group_service_outsider")
 
     created = create_group_for_user(owner.id, "Service Ops Group")
     group_id = created["group_id"]

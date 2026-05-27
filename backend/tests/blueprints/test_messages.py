@@ -1,20 +1,8 @@
-from werkzeug.security import generate_password_hash
 
 from models import db
 from models.message import Message, MessageRead
 from models.user import User
 
-
-def _create_user(email: str, password: str, username: str) -> User:
-    user = User(
-        name="Message Blueprint User",
-        username=username,
-        email=email,
-        password=generate_password_hash(password),
-    )
-    db.session.add(user)
-    db.session.commit()
-    return user
 
 
 def _get_auth_headers(client, email: str, password: str) -> dict:
@@ -27,18 +15,18 @@ def _get_auth_headers(client, email: str, password: str) -> dict:
     return {"Authorization": f"Bearer {token}"}
 
 
-def test_get_unread_count_requires_auth(client):
+def test_get_unread_count_requires_auth(client, auth_user_factory):
     response = client.get("/api/messages/unread-count")
     assert response.status_code == 401
 
 
-def test_get_unread_count_returns_only_unread_messages(client):
-    user = _create_user(
+def test_get_unread_count_returns_only_unread_messages(client, auth_user_factory):
+    user = auth_user_factory(
         email="message-count-user@example.com",
         password="Password123!",
         username="message_count_user",
     )
-    sender = _create_user(
+    sender = auth_user_factory(
         email="message-count-sender@example.com",
         password="Password123!",
         username="message_count_sender",
@@ -59,13 +47,13 @@ def test_get_unread_count_returns_only_unread_messages(client):
     assert response.get_json()["unread_count"] == 2
 
 
-def test_mark_all_as_read_marks_every_unread_message(client):
-    user = _create_user(
+def test_mark_all_as_read_marks_every_unread_message(client, auth_user_factory):
+    user = auth_user_factory(
         email="message-mark-user@example.com",
         password="Password123!",
         username="message_mark_user",
     )
-    sender = _create_user(
+    sender = auth_user_factory(
         email="message-mark-sender@example.com",
         password="Password123!",
         username="message_mark_sender",

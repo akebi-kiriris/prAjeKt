@@ -16,17 +16,6 @@ from services.group_service import (
 import services.group_service as group_service_module
 
 
-def _create_user(email: str, username: str) -> User:
-    user = User(
-        name="Group Snapshot Service User",
-        username=username,
-        email=email,
-        password=generate_password_hash("Password123!"),
-    )
-    db.session.add(user)
-    db.session.commit()
-    return user
-
 
 def _create_group_with_owner(owner: User) -> Group:
     group = Group(
@@ -42,7 +31,7 @@ def _create_group_with_owner(owner: User) -> Group:
     return group
 
 
-def test_chunk_messages_splits_by_size(app):
+def test_chunk_messages_splits_by_size(app, user_factory):
     messages = [
         {"message_id": 1, "content": "a"},
         {"message_id": 2, "content": "b"},
@@ -56,7 +45,7 @@ def test_chunk_messages_splits_by_size(app):
     assert len(chunks[1]) == 1
 
 
-def test_merge_chunk_summaries_deduplicates(app):
+def test_merge_chunk_summaries_deduplicates(app, user_factory):
     merged = merge_chunk_summaries(
         [
             {
@@ -88,8 +77,8 @@ def test_merge_chunk_summaries_deduplicates(app):
     assert merged["digest"]["todo_for_user"][0]["text"] == "補測試"
 
 
-def test_generate_group_snapshot_success_and_latest(app, monkeypatch):
-    owner = _create_user("group-snapshot-service-owner@example.com", "group_snapshot_service_owner")
+def test_generate_group_snapshot_success_and_latest(app, monkeypatch, user_factory):
+    owner = user_factory("group-snapshot-service-owner@example.com", "group_snapshot_service_owner")
     group = _create_group_with_owner(owner)
 
     db.session.add_all([
@@ -138,8 +127,8 @@ def test_generate_group_snapshot_success_and_latest(app, monkeypatch):
     assert latest["snapshot_id"] == snapshot["snapshot_id"]
 
 
-def test_generate_group_snapshot_no_messages(app):
-    owner = _create_user("group-snapshot-service-empty@example.com", "group_snapshot_service_empty")
+def test_generate_group_snapshot_no_messages(app, user_factory):
+    owner = user_factory("group-snapshot-service-empty@example.com", "group_snapshot_service_empty")
     group = _create_group_with_owner(owner)
 
     with pytest.raises(GroupOperationError) as excinfo:
@@ -148,7 +137,7 @@ def test_generate_group_snapshot_no_messages(app):
     assert excinfo.value.status_code == 400
 
 
-def test_should_enqueue_snapshot_threshold_logic(app):
+def test_should_enqueue_snapshot_threshold_logic(app, user_factory):
     assert should_enqueue_snapshot(source_count=10, async_requested=False) is False
     assert should_enqueue_snapshot(source_count=9999, async_requested=False) is True
     assert should_enqueue_snapshot(source_count=1, async_requested=True) is True
