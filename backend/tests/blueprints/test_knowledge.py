@@ -1,21 +1,9 @@
 from io import BytesIO
 
-from werkzeug.security import generate_password_hash
 
 from models import db
 from models.user import User
 
-
-def _create_user(email: str, password: str, username: str) -> User:
-    user = User(
-        name="Knowledge Blueprint User",
-        username=username,
-        email=email,
-        password=generate_password_hash(password),
-    )
-    db.session.add(user)
-    db.session.commit()
-    return user
 
 
 def _get_auth_headers(client, email: str, password: str) -> dict:
@@ -25,8 +13,8 @@ def _get_auth_headers(client, email: str, password: str) -> dict:
     return {"Authorization": f"Bearer {token}"}
 
 
-def test_knowledge_documents_blueprint_flow(client, monkeypatch):
-    _create_user(
+def test_knowledge_documents_blueprint_flow(client, monkeypatch, auth_user_factory):
+    auth_user_factory(
         email="knowledge-blueprint@example.com",
         password="Password123!",
         username="knowledge_blueprint_user",
@@ -87,8 +75,8 @@ def test_knowledge_documents_blueprint_flow(client, monkeypatch):
     assert deleted.get_json()["document_id"] == 10
 
 
-def test_batch_delete_rejects_empty_document_ids(client, monkeypatch):
-    _create_user(
+def test_batch_delete_rejects_empty_document_ids(client, monkeypatch, auth_user_factory):
+    auth_user_factory(
         email="knowledge-batch-empty@example.com",
         password="Password123!",
         username="knowledge_batch_empty",
@@ -106,8 +94,8 @@ def test_batch_delete_rejects_empty_document_ids(client, monkeypatch):
     assert response.get_json()["error_code"] == "BAD_REQUEST"
 
 
-def test_batch_reindex_rejects_empty_document_ids(client, monkeypatch):
-    _create_user(
+def test_batch_reindex_rejects_empty_document_ids(client, monkeypatch, auth_user_factory):
+    auth_user_factory(
         email="knowledge-batch-reindex-empty@example.com",
         password="Password123!",
         username="knowledge_batch_reindex_empty",

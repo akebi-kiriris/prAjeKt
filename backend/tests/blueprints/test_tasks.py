@@ -1,24 +1,12 @@
 from datetime import datetime, timedelta, timezone
 from io import BytesIO
 
-from werkzeug.security import generate_password_hash
 
 from models import db
 from models.task import Task
 from models.task_user import TaskUser
 from models.user import User
 
-
-def _create_user(email: str, password: str, username: str) -> User:
-    user = User(
-        name="Task Blueprint User",
-        username=username,
-        email=email,
-        password=generate_password_hash(password),
-    )
-    db.session.add(user)
-    db.session.commit()
-    return user
 
 
 def _get_auth_headers(client, email: str, password: str) -> dict:
@@ -42,13 +30,13 @@ def _create_task(client, headers, **overrides) -> int:
     return response.get_json()["task_id"]
 
 
-def test_get_tasks_requires_auth(client):
+def test_get_tasks_requires_auth(client, auth_user_factory):
     response = client.get("/api/tasks")
     assert response.status_code == 401
 
 
-def test_create_task_endpoint_returns_task_id_and_owner_membership(client):
-    user = _create_user(
+def test_create_task_endpoint_returns_task_id_and_owner_membership(client, auth_user_factory):
+    user = auth_user_factory(
         email="task-create@example.com",
         password="Password123!",
         username="task_create_user",
@@ -75,8 +63,8 @@ def test_create_task_endpoint_returns_task_id_and_owner_membership(client):
     assert owner_member.role == 0
 
 
-def test_create_task_endpoint_maps_validation_errors(client):
-    _create_user(
+def test_create_task_endpoint_maps_validation_errors(client, auth_user_factory):
+    auth_user_factory(
         email="task-validation-map@example.com",
         password="Password123!",
         username="task_validation_map_user",
@@ -152,8 +140,8 @@ def test_create_task_endpoint_maps_validation_errors(client):
     assert invalid_end_date.status_code == 400
 
 
-def test_get_tasks_endpoint_returns_created_item(client):
-    _create_user(
+def test_get_tasks_endpoint_returns_created_item(client, auth_user_factory):
+    auth_user_factory(
         email="task-list@example.com",
         password="Password123!",
         username="task_list_user",
@@ -169,13 +157,13 @@ def test_get_tasks_endpoint_returns_created_item(client):
     assert any(item["task_id"] == task_id for item in payload)
 
 
-def test_update_task_endpoint_maps_success_and_guards(client):
-    _create_user(
+def test_update_task_endpoint_maps_success_and_guards(client, auth_user_factory):
+    auth_user_factory(
         email="task-update-owner@example.com",
         password="Password123!",
         username="task_update_owner_user",
     )
-    _create_user(
+    auth_user_factory(
         email="task-update-outsider@example.com",
         password="Password123!",
         username="task_update_outsider_user",
@@ -221,18 +209,18 @@ def test_update_task_endpoint_maps_success_and_guards(client):
     assert forbidden.status_code == 403
 
 
-def test_task_member_endpoints_map_service_results(client):
-    _create_user(
+def test_task_member_endpoints_map_service_results(client, auth_user_factory):
+    auth_user_factory(
         email="task-member-owner@example.com",
         password="Password123!",
         username="task_member_owner_user",
     )
-    target = _create_user(
+    target = auth_user_factory(
         email="task-member-target@example.com",
         password="Password123!",
         username="task_member_target_user",
     )
-    _create_user(
+    auth_user_factory(
         email="task-member-outsider@example.com",
         password="Password123!",
         username="task_member_outsider_user",
@@ -280,18 +268,18 @@ def test_task_member_endpoints_map_service_results(client):
     assert remove_member.status_code == 200
 
 
-def test_task_member_role_endpoint_validations_and_permissions(client):
-    _create_user(
+def test_task_member_role_endpoint_validations_and_permissions(client, auth_user_factory):
+    auth_user_factory(
         email="task-member-role-owner@example.com",
         password="Password123!",
         username="task_member_role_owner_user",
     )
-    member = _create_user(
+    member = auth_user_factory(
         email="task-member-role-member@example.com",
         password="Password123!",
         username="task_member_role_member_user",
     )
-    _create_user(
+    auth_user_factory(
         email="task-member-role-outsider@example.com",
         password="Password123!",
         username="task_member_role_outsider_user",
@@ -343,8 +331,8 @@ def test_task_member_role_endpoint_validations_and_permissions(client):
     assert promote.status_code == 200
 
 
-def test_task_comment_endpoints_map_crud_flow(client):
-    _create_user(
+def test_task_comment_endpoints_map_crud_flow(client, auth_user_factory):
+    auth_user_factory(
         email="task-comment-owner@example.com",
         password="Password123!",
         username="task_comment_owner_user",
@@ -371,13 +359,13 @@ def test_task_comment_endpoints_map_crud_flow(client):
     assert delete_response.status_code == 200
 
 
-def test_task_comment_endpoints_reject_invalid_and_forbidden(client):
-    _create_user(
+def test_task_comment_endpoints_reject_invalid_and_forbidden(client, auth_user_factory):
+    auth_user_factory(
         email="task-comment-owner2@example.com",
         password="Password123!",
         username="task_comment_owner_user2",
     )
-    _create_user(
+    auth_user_factory(
         email="task-comment-outsider@example.com",
         password="Password123!",
         username="task_comment_outsider_user",
@@ -415,8 +403,8 @@ def test_task_comment_endpoints_reject_invalid_and_forbidden(client):
     assert forbidden_delete.status_code == 403
 
 
-def test_ai_comment_summary_endpoint_maps_service_payload_and_errors(client, monkeypatch):
-    _create_user(
+def test_ai_comment_summary_endpoint_maps_service_payload_and_errors(client, monkeypatch, auth_user_factory):
+    auth_user_factory(
         email="task-summary-route@example.com",
         password="Password123!",
         username="task_summary_route_user",
@@ -453,13 +441,13 @@ def test_ai_comment_summary_endpoint_maps_service_payload_and_errors(client, mon
     assert unavailable.status_code == 503
 
 
-def test_ai_comment_summary_requires_member_and_handles_empty(client):
-    _create_user(
+def test_ai_comment_summary_requires_member_and_handles_empty(client, auth_user_factory):
+    auth_user_factory(
         email="task-summary-owner@example.com",
         password="Password123!",
         username="task_summary_owner_user",
     )
-    _create_user(
+    auth_user_factory(
         email="task-summary-outsider@example.com",
         password="Password123!",
         username="task_summary_outsider_user",
@@ -480,13 +468,13 @@ def test_ai_comment_summary_requires_member_and_handles_empty(client):
     assert payload["summary"]["next_actions"] == []
 
 
-def test_task_file_endpoints_handle_multipart_and_download(client):
-    _create_user(
+def test_task_file_endpoints_handle_multipart_and_download(client, auth_user_factory):
+    auth_user_factory(
         email="task-file-owner@example.com",
         password="Password123!",
         username="task_file_owner_user",
     )
-    _create_user(
+    auth_user_factory(
         email="task-file-outsider@example.com",
         password="Password123!",
         username="task_file_outsider_user",
@@ -554,8 +542,8 @@ def test_task_file_endpoints_handle_multipart_and_download(client):
     assert delete_response.status_code == 200
 
 
-def test_subtask_status_toggle_and_delete_endpoints(client):
-    _create_user(
+def test_subtask_status_toggle_and_delete_endpoints(client, auth_user_factory):
+    auth_user_factory(
         email="task-subtask@example.com",
         password="Password123!",
         username="task_subtask_user",
@@ -599,13 +587,13 @@ def test_subtask_status_toggle_and_delete_endpoints(client):
     assert delete_subtask.status_code == 200
 
 
-def test_delete_task_endpoint_maps_owner_guard_and_success(client):
-    _create_user(
+def test_delete_task_endpoint_maps_owner_guard_and_success(client, auth_user_factory):
+    auth_user_factory(
         email="task-delete-owner@example.com",
         password="Password123!",
         username="task_delete_owner_user",
     )
-    _create_user(
+    auth_user_factory(
         email="task-delete-outsider@example.com",
         password="Password123!",
         username="task_delete_outsider_user",
@@ -621,8 +609,8 @@ def test_delete_task_endpoint_maps_owner_guard_and_success(client):
     assert success.status_code == 200
 
 
-def test_get_upcoming_tasks_includes_due_and_progress_items(client):
-    user = _create_user(
+def test_get_upcoming_tasks_includes_due_and_progress_items(client, auth_user_factory):
+    user = auth_user_factory(
         email="task-upcoming@example.com",
         password="Password123!",
         username="task_upcoming_user",

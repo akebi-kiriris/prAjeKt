@@ -15,26 +15,15 @@ from services.todo_service import (
 )
 
 
-def _create_user(email: str, username: str) -> User:
-    user = User(
-        name="Service Test User",
-        username=username,
-        email=email,
-        password="hashed-password",
-    )
-    db.session.add(user)
-    db.session.commit()
-    return user
 
-
-def test_todo_service_helpers_and_serializer(app):
+def test_todo_service_helpers_and_serializer(app, user_factory):
     unknown = todo_find_unknown_fields(
         {"title": "t", "content": "c", "bad": True},
         {"title", "content"},
     )
     assert unknown == ["bad"]
 
-    user = _create_user("todo-service@example.com", "todo_service_user")
+    user = user_factory("todo-service@example.com", "todo_service_user")
     todo = Todo(
         user_id=user.id,
         title="Todo title",
@@ -51,8 +40,8 @@ def test_todo_service_helpers_and_serializer(app):
     assert payload["created_at"].endswith("Z")
 
 
-def test_todo_service_crud_operations(app):
-    user = _create_user("todo-service-crud@example.com", "todo_service_crud_user")
+def test_todo_service_crud_operations(app, user_factory):
+    user = user_factory("todo-service-crud@example.com", "todo_service_crud_user")
 
     todo_id = create_todo_for_user(
         user.id,
@@ -87,8 +76,8 @@ def test_todo_service_crud_operations(app):
     assert db.session.get(Todo, todo_id).deleted_at is not None
 
 
-def test_todo_service_validation_and_not_found_errors(app):
-    user = _create_user("todo-service-error@example.com", "todo_service_error_user")
+def test_todo_service_validation_and_not_found_errors(app, user_factory):
+    user = user_factory("todo-service-error@example.com", "todo_service_error_user")
 
     with pytest.raises(TodoOperationError) as unknown_exc:
         create_todo_for_user(

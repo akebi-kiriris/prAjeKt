@@ -1,19 +1,7 @@
-from werkzeug.security import generate_password_hash
 
 from models import db
 from models.user import User
 
-
-def _create_user(email: str, password: str, username: str) -> User:
-    user = User(
-        name="Todo Blueprint User",
-        username=username,
-        email=email,
-        password=generate_password_hash(password),
-    )
-    db.session.add(user)
-    db.session.commit()
-    return user
 
 
 def _get_auth_headers(client, email: str, password: str) -> dict:
@@ -26,13 +14,13 @@ def _get_auth_headers(client, email: str, password: str) -> dict:
     return {"Authorization": f"Bearer {token}"}
 
 
-def test_get_todos_requires_auth(client):
+def test_get_todos_requires_auth(client, auth_user_factory):
     response = client.get("/api/todos")
     assert response.status_code == 401
 
 
-def test_create_todo_and_get_todo_list(client):
-    _create_user(
+def test_create_todo_and_get_todo_list(client, auth_user_factory):
+    auth_user_factory(
         email="todo-list@example.com",
         password="Password123!",
         username="todo_list_user",
@@ -60,8 +48,8 @@ def test_create_todo_and_get_todo_list(client):
     assert any(item["id"] == todo_id for item in payload)
 
 
-def test_create_todo_rejects_unknown_fields(client):
-    _create_user(
+def test_create_todo_rejects_unknown_fields(client, auth_user_factory):
+    auth_user_factory(
         email="todo-unknown-field@example.com",
         password="Password123!",
         username="todo_unknown_field_user",
@@ -81,8 +69,8 @@ def test_create_todo_rejects_unknown_fields(client):
     assert response.status_code == 400
 
 
-def test_toggle_todo_switches_completed_state(client):
-    _create_user(
+def test_toggle_todo_switches_completed_state(client, auth_user_factory):
+    auth_user_factory(
         email="todo-toggle@example.com",
         password="Password123!",
         username="todo_toggle_user",
@@ -109,8 +97,8 @@ def test_toggle_todo_switches_completed_state(client):
     assert second_toggle.get_json()["completed"] is False
 
 
-def test_update_todo_rejects_invalid_priority(client):
-    _create_user(
+def test_update_todo_rejects_invalid_priority(client, auth_user_factory):
+    auth_user_factory(
         email="todo-update-priority@example.com",
         password="Password123!",
         username="todo_update_priority_user",

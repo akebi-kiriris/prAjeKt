@@ -2,7 +2,6 @@ from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
 import services.timeline_service as timeline_service_module
-from werkzeug.security import generate_password_hash
 
 from models import db
 from models.notification import Notification
@@ -13,17 +12,6 @@ from models.timeline import Timeline
 from models.timeline_user import TimelineUser
 from models.user import User
 
-
-def _create_user(email: str, password: str, username: str) -> User:
-    user = User(
-        name="Timeline Blueprint User",
-        username=username,
-        email=email,
-        password=generate_password_hash(password),
-    )
-    db.session.add(user)
-    db.session.commit()
-    return user
 
 
 def _get_auth_headers(client, email: str, password: str) -> dict:
@@ -49,13 +37,13 @@ def _create_timeline(client, headers, **overrides) -> int:
     return response.get_json()["id"]
 
 
-def test_get_timelines_requires_auth(client):
+def test_get_timelines_requires_auth(client, auth_user_factory):
     response = client.get("/api/timelines")
     assert response.status_code == 401
 
 
-def test_create_timeline_success_and_owner_membership(client):
-    user = _create_user(
+def test_create_timeline_success_and_owner_membership(client, auth_user_factory):
+    user = auth_user_factory(
         email="timeline-create@example.com",
         password="Password123!",
         username="timeline_create_user",
@@ -71,8 +59,8 @@ def test_create_timeline_success_and_owner_membership(client):
     assert owner_member.role == 0
 
 
-def test_create_timeline_validations(client):
-    _create_user(
+def test_create_timeline_validations(client, auth_user_factory):
+    auth_user_factory(
         email="timeline-validate@example.com",
         password="Password123!",
         username="timeline_validate_user",
@@ -108,8 +96,8 @@ def test_create_timeline_validations(client):
     assert bad_date.status_code == 400
 
 
-def test_get_timelines_returns_created_timeline(client):
-    _create_user(
+def test_get_timelines_returns_created_timeline(client, auth_user_factory):
+    auth_user_factory(
         email="timeline-list@example.com",
         password="Password123!",
         username="timeline_list_user",
@@ -131,8 +119,8 @@ def test_get_timelines_returns_created_timeline(client):
     assert any(item["id"] == timeline_id for item in payload)
 
 
-def test_update_timeline_unknown_field_returns_400(client):
-    _create_user(
+def test_update_timeline_unknown_field_returns_400(client, auth_user_factory):
+    auth_user_factory(
         email="timeline-update@example.com",
         password="Password123!",
         username="timeline_update_user",
@@ -155,8 +143,8 @@ def test_update_timeline_unknown_field_returns_400(client):
     assert update_response.status_code == 400
 
 
-def test_update_timeline_success_and_validation(client):
-    _create_user(
+def test_update_timeline_success_and_validation(client, auth_user_factory):
+    auth_user_factory(
         email="timeline-update-success@example.com",
         password="Password123!",
         username="timeline_update_success_user",
@@ -191,8 +179,8 @@ def test_update_timeline_success_and_validation(client):
     assert invalid_date.status_code == 400
 
 
-def test_delete_timeline_soft_deletes_timeline_and_related_tasks(client):
-    user = _create_user(
+def test_delete_timeline_soft_deletes_timeline_and_related_tasks(client, auth_user_factory):
+    user = auth_user_factory(
         email="timeline-delete@example.com",
         password="Password123!",
         username="timeline_delete_user",
@@ -227,13 +215,13 @@ def test_delete_timeline_soft_deletes_timeline_and_related_tasks(client):
     assert deleted_task.deleted_at is not None
 
 
-def test_get_timeline_tasks_and_remark_update(client):
-    owner = _create_user(
+def test_get_timeline_tasks_and_remark_update(client, auth_user_factory):
+    owner = auth_user_factory(
         email="timeline-task-owner@example.com",
         password="Password123!",
         username="timeline_task_owner_user",
     )
-    assistant = _create_user(
+    assistant = auth_user_factory(
         email="timeline-task-assistant@example.com",
         password="Password123!",
         username="timeline_task_assistant_user",
@@ -276,13 +264,13 @@ def test_get_timeline_tasks_and_remark_update(client):
     assert valid_remark.status_code == 200
 
 
-def test_get_timeline_tasks_can_manage_members_for_task_owner_member(client):
-    timeline_owner = _create_user(
+def test_get_timeline_tasks_can_manage_members_for_task_owner_member(client, auth_user_factory):
+    timeline_owner = auth_user_factory(
         email="timeline-manage-owner@example.com",
         password="Password123!",
         username="timeline_manage_owner",
     )
-    collaborator = _create_user(
+    collaborator = auth_user_factory(
         email="timeline-manage-collaborator@example.com",
         password="Password123!",
         username="timeline_manage_collaborator",
@@ -325,13 +313,13 @@ def test_get_timeline_tasks_can_manage_members_for_task_owner_member(client):
     assert manage_map["Collaborator non-owner task"] is False
 
 
-def test_search_user_by_email_flow(client):
-    _create_user(
+def test_search_user_by_email_flow(client, auth_user_factory):
+    auth_user_factory(
         email="timeline-search@example.com",
         password="Password123!",
         username="timeline_search_user",
     )
-    _create_user(
+    auth_user_factory(
         email="timeline-search-target@example.com",
         password="Password123!",
         username="timeline_search_target_user",
@@ -368,9 +356,10 @@ def test_search_user_by_email_flow(client):
         json={"timeline_id": timeline_id, "email": "timeline-search-target@example.com"},
     )
     assert found.status_code == 200
+    target_user = User.query.filter_by(email="timeline-search-target@example.com").first()
     assert found.get_json() == {
-        "id": User.query.filter_by(email="timeline-search-target@example.com").first().id,
-        "name": "Timeline Blueprint User",
+        "id": target_user.id,
+        "name": target_user.name,
     }
 
     forbidden = client.post(
@@ -381,13 +370,13 @@ def test_search_user_by_email_flow(client):
     assert forbidden.status_code == 403
 
 
-def test_timeline_members_add_get_remove_and_notification(client):
-    owner = _create_user(
+def test_timeline_members_add_get_remove_and_notification(client, auth_user_factory):
+    owner = auth_user_factory(
         email="timeline-member-owner@example.com",
         password="Password123!",
         username="timeline_member_owner_user",
     )
-    invited = _create_user(
+    invited = auth_user_factory(
         email="timeline-member-invited@example.com",
         password="Password123!",
         username="timeline_member_invited_user",
@@ -418,18 +407,18 @@ def test_timeline_members_add_get_remove_and_notification(client):
     assert remove_member.status_code == 200
 
 
-def test_remove_timeline_member_self_and_owner_permission_guards(client):
-    owner = _create_user(
+def test_remove_timeline_member_self_and_owner_permission_guards(client, auth_user_factory):
+    owner = auth_user_factory(
         email="timeline-guard-owner@example.com",
         password="Password123!",
         username="timeline_guard_owner_user",
     )
-    collaborator = _create_user(
+    collaborator = auth_user_factory(
         email="timeline-guard-collab@example.com",
         password="Password123!",
         username="timeline_guard_collab_user",
     )
-    target = _create_user(
+    target = auth_user_factory(
         email="timeline-guard-target@example.com",
         password="Password123!",
         username="timeline_guard_target_user",
@@ -456,8 +445,8 @@ def test_remove_timeline_member_self_and_owner_permission_guards(client):
     assert collab_remove.status_code == 403
 
 
-def test_generate_tasks_with_ai_guards(client, monkeypatch):
-    _create_user(
+def test_generate_tasks_with_ai_guards(client, monkeypatch, auth_user_factory):
+    auth_user_factory(
         email="timeline-ai-guard@example.com",
         password="Password123!",
         username="timeline_ai_guard_user",
@@ -481,8 +470,8 @@ def test_generate_tasks_with_ai_guards(client, monkeypatch):
     assert blank_name.status_code == 400
 
 
-def test_generate_tasks_with_ai_success_and_json_decode_error(client, monkeypatch):
-    owner = _create_user(
+def test_generate_tasks_with_ai_success_and_json_decode_error(client, monkeypatch, auth_user_factory):
+    owner = auth_user_factory(
         email="timeline-ai-success@example.com",
         password="Password123!",
         username="timeline_ai_success_user",
@@ -533,8 +522,8 @@ def test_generate_tasks_with_ai_success_and_json_decode_error(client, monkeypatc
     assert bad_json.status_code == 500
 
 
-def test_batch_create_tasks_validation_and_success(client):
-    owner = _create_user(
+def test_batch_create_tasks_validation_and_success(client, auth_user_factory):
+    owner = auth_user_factory(
         email="timeline-batch-owner@example.com",
         password="Password123!",
         username="timeline_batch_owner_user",
@@ -592,8 +581,8 @@ def test_batch_create_tasks_validation_and_success(client):
     assert new_task.depends_on_task_ids == [keep_task.task_id]
 
 
-def test_batch_create_tasks_partial_selection_keeps_resolvable_dependencies(client):
-    owner = _create_user(
+def test_batch_create_tasks_partial_selection_keeps_resolvable_dependencies(client, auth_user_factory):
+    owner = auth_user_factory(
         email="timeline-batch-partial-owner@example.com",
         password="Password123!",
         username="timeline_batch_partial_owner",
@@ -670,13 +659,13 @@ def test_batch_create_tasks_partial_selection_keeps_resolvable_dependencies(clie
     assert task_4.depends_on_task_ids == []
 
 
-def test_get_timeline_weekly_report_returns_completed_and_risk_items(client):
-    owner = _create_user(
+def test_get_timeline_weekly_report_returns_completed_and_risk_items(client, auth_user_factory):
+    owner = auth_user_factory(
         email="timeline-weekly-api-owner@example.com",
         password="Password123!",
         username="timeline_weekly_api_owner",
     )
-    member = _create_user(
+    member = auth_user_factory(
         email="timeline-weekly-api-member@example.com",
         password="Password123!",
         username="timeline_weekly_api_member",
@@ -733,8 +722,8 @@ def test_get_timeline_weekly_report_returns_completed_and_risk_items(client):
     assert payload["analysis"]["progress_signal"] in {"進度領先", "進度穩定", "進度落後"}
 
 
-def test_get_timeline_risk_analysis_returns_summary_and_warnings(client):
-    owner = _create_user(
+def test_get_timeline_risk_analysis_returns_summary_and_warnings(client, auth_user_factory):
+    owner = auth_user_factory(
         email="timeline-risk-api-owner@example.com",
         password="Password123!",
         username="timeline_risk_api_owner",
@@ -778,13 +767,13 @@ def test_get_timeline_risk_analysis_returns_summary_and_warnings(client):
     assert "missing_dependency" in warning_codes
 
 
-def test_post_timeline_risk_analysis_notify_owner_only(client):
-    owner = _create_user(
+def test_post_timeline_risk_analysis_notify_owner_only(client, auth_user_factory):
+    owner = auth_user_factory(
         email="timeline-risk-notify-api-owner@example.com",
         password="Password123!",
         username="timeline_risk_notify_api_owner",
     )
-    member = _create_user(
+    member = auth_user_factory(
         email="timeline-risk-notify-api-member@example.com",
         password="Password123!",
         username="timeline_risk_notify_api_member",
@@ -830,8 +819,8 @@ def test_post_timeline_risk_analysis_notify_owner_only(client):
     assert payload["notified_user_count"] >= 1
 
 
-def test_timeline_conflict_check_api_detects_overlap_and_validates_payload(client):
-    owner = _create_user(
+def test_timeline_conflict_check_api_detects_overlap_and_validates_payload(client, auth_user_factory):
+    owner = auth_user_factory(
         email="timeline-conflict-api-owner@example.com",
         password="Password123!",
         username="timeline_conflict_api_owner",
@@ -879,7 +868,7 @@ def test_timeline_conflict_check_api_detects_overlap_and_validates_payload(clien
     )
     assert invalid_response.status_code == 400
 
-    outsider = _create_user(
+    outsider = auth_user_factory(
         email="timeline-conflict-api-outsider@example.com",
         password="Password123!",
         username="timeline_conflict_api_outsider",
@@ -897,8 +886,8 @@ def test_timeline_conflict_check_api_detects_overlap_and_validates_payload(clien
     assert non_member_assignee_response.status_code == 400
 
 
-def test_get_upcoming_timelines_returns_due_and_progress_items(client):
-    owner = _create_user(
+def test_get_upcoming_timelines_returns_due_and_progress_items(client, auth_user_factory):
+    owner = auth_user_factory(
         email="timeline-upcoming-owner@example.com",
         password="Password123!",
         username="timeline_upcoming_owner_user",
@@ -946,13 +935,13 @@ def test_get_upcoming_timelines_returns_due_and_progress_items(client):
     assert "far timeline" not in names
 
 
-def test_get_member_stats_owner_only_and_payload(client):
-    owner = _create_user(
+def test_get_member_stats_owner_only_and_payload(client, auth_user_factory):
+    owner = auth_user_factory(
         email="timeline-stats-owner@example.com",
         password="Password123!",
         username="timeline_stats_owner_user",
     )
-    member = _create_user(
+    member = auth_user_factory(
         email="timeline-stats-member@example.com",
         password="Password123!",
         username="timeline_stats_member_user",
@@ -997,8 +986,8 @@ def test_get_member_stats_owner_only_and_payload(client):
     assert len(payload["members"]) == 2
 
 
-def test_post_ai_suggest_plan_returns_structured_payload(client, monkeypatch):
-    _create_user(
+def test_post_ai_suggest_plan_returns_structured_payload(client, monkeypatch, auth_user_factory):
+    auth_user_factory(
         email="timeline-ai-plan-owner@example.com",
         password="Password123!",
         username="timeline_ai_plan_owner",

@@ -4,23 +4,11 @@ from models import db
 from models.task import Task
 from models.timeline import Timeline
 from models.user import User
-from werkzeug.security import generate_password_hash
 
 
 def _now_naive_utc() -> datetime:
     return datetime.now(timezone.utc).replace(tzinfo=None)
 
-
-def _create_user(email: str, password: str, username: str) -> User:
-    user = User(
-        name="Trash Blueprint User",
-        username=username,
-        email=email,
-        password=generate_password_hash(password),
-    )
-    db.session.add(user)
-    db.session.commit()
-    return user
 
 
 def _get_auth_headers(client, email: str, password: str) -> dict:
@@ -33,13 +21,13 @@ def _get_auth_headers(client, email: str, password: str) -> dict:
     return {"Authorization": f"Bearer {token}"}
 
 
-def test_get_trash_requires_auth(client):
+def test_get_trash_requires_auth(client, auth_user_factory):
     response = client.get("/api/trash")
     assert response.status_code == 401
 
 
-def test_get_trash_returns_soft_deleted_owned_items(client):
-    user = _create_user(
+def test_get_trash_returns_soft_deleted_owned_items(client, auth_user_factory):
+    user = auth_user_factory(
         email="trash-list@example.com",
         password="Password123!",
         username="trash_list_user",
@@ -62,8 +50,8 @@ def test_get_trash_returns_soft_deleted_owned_items(client):
     assert any(item["id"] == timeline.id for item in payload["timelines"])
 
 
-def test_restore_task_and_restore_timeline(client):
-    user = _create_user(
+def test_restore_task_and_restore_timeline(client, auth_user_factory):
+    user = auth_user_factory(
         email="trash-restore@example.com",
         password="Password123!",
         username="trash_restore_user",
@@ -85,8 +73,8 @@ def test_restore_task_and_restore_timeline(client):
     assert db.session.get(Timeline, timeline.id).deleted_at is None
 
 
-def test_permanently_delete_task(client):
-    user = _create_user(
+def test_permanently_delete_task(client, auth_user_factory):
+    user = auth_user_factory(
         email="trash-delete-task@example.com",
         password="Password123!",
         username="trash_delete_task_user",
@@ -103,8 +91,8 @@ def test_permanently_delete_task(client):
     assert db.session.get(Task, task.task_id) is None
 
 
-def test_permanently_delete_timeline_cascades_tasks(client):
-    user = _create_user(
+def test_permanently_delete_timeline_cascades_tasks(client, auth_user_factory):
+    user = auth_user_factory(
         email="trash-delete-timeline@example.com",
         password="Password123!",
         username="trash_delete_timeline_user",
@@ -126,13 +114,13 @@ def test_permanently_delete_timeline_cascades_tasks(client):
     assert db.session.get(Timeline, timeline.id) is None
 
 
-def test_restore_task_denies_non_owner(client):
-    owner = _create_user(
+def test_restore_task_denies_non_owner(client, auth_user_factory):
+    owner = auth_user_factory(
         email="trash-owner@example.com",
         password="Password123!",
         username="trash_owner_user",
     )
-    outsider = _create_user(
+    outsider = auth_user_factory(
         email="trash-outsider@example.com",
         password="Password123!",
         username="trash_outsider_user",

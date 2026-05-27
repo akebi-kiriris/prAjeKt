@@ -14,19 +14,8 @@ from services.timeline_service import (
 )
 
 
-def _create_user(email: str, username: str) -> User:
-    user = User(
-        name="Service Test User",
-        username=username,
-        email=email,
-        password="hashed-password",
-    )
-    db.session.add(user)
-    db.session.commit()
-    return user
 
-
-def test_timeline_service_find_unknown_fields_sorted():
+def test_timeline_service_find_unknown_fields_sorted(user_factory):
     unknown = timeline_find_unknown_fields(
         {"name": "Timeline", "remark": "r", "x": 1},
         {"name", "remark"},
@@ -34,8 +23,8 @@ def test_timeline_service_find_unknown_fields_sorted():
     assert unknown == ["x"]
 
 
-def test_generate_timeline_tasks_with_ai_missing_api_key(app, monkeypatch):
-    owner = _create_user("timeline-ai-service-owner@example.com", "timeline_ai_service_owner")
+def test_generate_timeline_tasks_with_ai_missing_api_key(app, monkeypatch, user_factory):
+    owner = user_factory("timeline-ai-service-owner@example.com", "timeline_ai_service_owner")
     timeline = Timeline(user_id=owner.id, name="AI Service Timeline")
     db.session.add(timeline)
     db.session.commit()
@@ -52,8 +41,8 @@ def test_generate_timeline_tasks_with_ai_missing_api_key(app, monkeypatch):
     assert excinfo.value.code == "missing_api_key"
 
 
-def test_generate_timeline_tasks_with_ai_success_and_json_decode_error(app, monkeypatch):
-    owner = _create_user("timeline-ai-service-ok@example.com", "timeline_ai_service_ok")
+def test_generate_timeline_tasks_with_ai_success_and_json_decode_error(app, monkeypatch, user_factory):
+    owner = user_factory("timeline-ai-service-ok@example.com", "timeline_ai_service_ok")
     timeline = Timeline(user_id=owner.id, name="AI Service OK Timeline")
     db.session.add(timeline)
     db.session.flush()
@@ -112,8 +101,8 @@ def test_generate_timeline_tasks_with_ai_success_and_json_decode_error(app, monk
     assert excinfo.value.code == "generation_failed"
 
 
-def test_generate_timeline_tasks_with_ai_auto_fallback_dependency_chain(app, monkeypatch):
-    owner = _create_user("timeline-ai-service-chain@example.com", "timeline_ai_service_chain")
+def test_generate_timeline_tasks_with_ai_auto_fallback_dependency_chain(app, monkeypatch, user_factory):
+    owner = user_factory("timeline-ai-service-chain@example.com", "timeline_ai_service_chain")
     timeline = Timeline(user_id=owner.id, name="AI Service Chain Timeline")
     db.session.add(timeline)
     db.session.commit()
@@ -145,8 +134,8 @@ def test_generate_timeline_tasks_with_ai_auto_fallback_dependency_chain(app, mon
     assert generated_tasks[2]["depends_on_task_refs"] == ["API 開發"]
 
 
-def test_batch_create_tasks_for_timeline_partial_selection_dependency_fallback(app):
-    owner = _create_user("timeline-service-batch-partial@example.com", "timeline_service_batch_partial")
+def test_batch_create_tasks_for_timeline_partial_selection_dependency_fallback(app, user_factory):
+    owner = user_factory("timeline-service-batch-partial@example.com", "timeline_service_batch_partial")
 
     timeline = Timeline(user_id=owner.id, name="Service batch partial timeline")
     db.session.add(timeline)
@@ -215,8 +204,8 @@ def test_batch_create_tasks_for_timeline_partial_selection_dependency_fallback(a
     assert task_5.depends_on_task_ids == [task_4.task_id]
 
 
-def test_batch_create_tasks_for_timeline_ignores_unresolvable_dependency_ids(app):
-    owner = _create_user("timeline-service-batch-ids@example.com", "timeline_service_batch_ids")
+def test_batch_create_tasks_for_timeline_ignores_unresolvable_dependency_ids(app, user_factory):
+    owner = user_factory("timeline-service-batch-ids@example.com", "timeline_service_batch_ids")
 
     timeline = Timeline(user_id=owner.id, name="Service batch ids timeline")
     db.session.add(timeline)

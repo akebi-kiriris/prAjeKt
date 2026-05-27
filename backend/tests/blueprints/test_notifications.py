@@ -1,19 +1,7 @@
 from models import db
 from models.notification import Notification
 from models.user import User
-from werkzeug.security import generate_password_hash
 
-
-def _create_user(email: str, password: str, username: str) -> User:
-    user = User(
-        name="Notification Blueprint User",
-        username=username,
-        email=email,
-        password=generate_password_hash(password),
-    )
-    db.session.add(user)
-    db.session.commit()
-    return user
 
 
 def _get_auth_headers(client, email: str, password: str) -> dict:
@@ -40,13 +28,13 @@ def _create_notification(user_id: int, title: str, is_read: bool = False) -> Not
     return n
 
 
-def test_get_notifications_requires_auth(client):
+def test_get_notifications_requires_auth(client, auth_user_factory):
     response = client.get("/api/notifications")
     assert response.status_code == 401
 
 
-def test_get_notifications_and_unread_count(client):
-    user = _create_user(
+def test_get_notifications_and_unread_count(client, auth_user_factory):
+    user = auth_user_factory(
         email="notif-list@example.com",
         password="Password123!",
         username="notif_list_user",
@@ -66,8 +54,8 @@ def test_get_notifications_and_unread_count(client):
     assert unread_response.get_json()["count"] == 1
 
 
-def test_mark_as_read_and_mark_all_read(client):
-    user = _create_user(
+def test_mark_as_read_and_mark_all_read(client, auth_user_factory):
+    user = auth_user_factory(
         email="notif-read@example.com",
         password="Password123!",
         username="notif_read_user",
@@ -88,8 +76,8 @@ def test_mark_as_read_and_mark_all_read(client):
     assert unread_response.get_json()["count"] == 0
 
 
-def test_delete_notification_success_and_not_found(client):
-    user = _create_user(
+def test_delete_notification_success_and_not_found(client, auth_user_factory):
+    user = auth_user_factory(
         email="notif-delete@example.com",
         password="Password123!",
         username="notif_delete_user",

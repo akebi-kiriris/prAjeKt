@@ -12,20 +12,9 @@ from services.timeline_service import TimelineOperationError, check_timeline_tas
 import services.timeline_service as timeline_service_module
 
 
-def _create_user(email: str, username: str) -> User:
-    user = User(
-        name="Service Test User",
-        username=username,
-        email=email,
-        password="hashed-password",
-    )
-    db.session.add(user)
-    db.session.commit()
-    return user
 
-
-def test_check_timeline_task_conflicts_detects_overlap_and_suggestion(app):
-    owner = _create_user("timeline-conflict-owner@example.com", "timeline_conflict_owner")
+def test_check_timeline_task_conflicts_detects_overlap_and_suggestion(app, user_factory):
+    owner = user_factory("timeline-conflict-owner@example.com", "timeline_conflict_owner")
 
     timeline = Timeline(user_id=owner.id, name="Conflict Timeline")
     db.session.add(timeline)
@@ -75,10 +64,10 @@ def test_check_timeline_task_conflicts_detects_overlap_and_suggestion(app):
     assert excinfo.value.status_code == 400
 
 
-def test_check_timeline_task_conflicts_skips_ai_suggestion_when_not_enabled(app, monkeypatch):
+def test_check_timeline_task_conflicts_skips_ai_suggestion_when_not_enabled(app, monkeypatch, user_factory):
     monkeypatch.delenv("CONFLICT_CHECK_ENABLE_AI_SUGGESTION", raising=False)
 
-    owner = _create_user("timeline-conflict-ai-off-owner@example.com", "timeline_conflict_ai_off_owner")
+    owner = user_factory("timeline-conflict-ai-off-owner@example.com", "timeline_conflict_ai_off_owner")
 
     timeline = Timeline(user_id=owner.id, name="Conflict AI Off Timeline")
     db.session.add(timeline)
@@ -131,10 +120,10 @@ def test_check_timeline_task_conflicts_skips_ai_suggestion_when_not_enabled(app,
     assert called["value"] is False
 
 
-def test_check_timeline_task_conflicts_allows_ai_suggestion_when_payload_enables_it(app, monkeypatch):
+def test_check_timeline_task_conflicts_allows_ai_suggestion_when_payload_enables_it(app, monkeypatch, user_factory):
     monkeypatch.delenv("CONFLICT_CHECK_ENABLE_AI_SUGGESTION", raising=False)
 
-    owner = _create_user("timeline-conflict-ai-on-owner@example.com", "timeline_conflict_ai_on_owner")
+    owner = user_factory("timeline-conflict-ai-on-owner@example.com", "timeline_conflict_ai_on_owner")
 
     timeline = Timeline(user_id=owner.id, name="Conflict AI On Timeline")
     db.session.add(timeline)
@@ -194,8 +183,8 @@ def test_check_timeline_task_conflicts_allows_ai_suggestion_when_payload_enables
     assert "impact_days" in captured_kwargs["risk_context_text"]
 
 
-def test_check_timeline_task_conflicts_ignores_completed_tasks_in_same_timeline(app):
-    owner = _create_user("timeline-completed-owner@example.com", "timeline_completed_owner")
+def test_check_timeline_task_conflicts_ignores_completed_tasks_in_same_timeline(app, user_factory):
+    owner = user_factory("timeline-completed-owner@example.com", "timeline_completed_owner")
 
     timeline = Timeline(user_id=owner.id, name="Completed Conflict Timeline")
     db.session.add(timeline)
@@ -233,9 +222,9 @@ def test_check_timeline_task_conflicts_ignores_completed_tasks_in_same_timeline(
     assert conflict_payload["workload_overload_count"] == 0
 
 
-def test_check_timeline_task_conflicts_rejects_non_timeline_member_assignee(app):
-    owner = _create_user("timeline-assignee-owner@example.com", "timeline_assignee_owner")
-    outsider = _create_user("timeline-assignee-outsider@example.com", "timeline_assignee_outsider")
+def test_check_timeline_task_conflicts_rejects_non_timeline_member_assignee(app, user_factory):
+    owner = user_factory("timeline-assignee-owner@example.com", "timeline_assignee_owner")
+    outsider = user_factory("timeline-assignee-outsider@example.com", "timeline_assignee_outsider")
 
     timeline = Timeline(user_id=owner.id, name="Assignee Validation Timeline")
     db.session.add(timeline)
@@ -259,10 +248,10 @@ def test_check_timeline_task_conflicts_rejects_non_timeline_member_assignee(app)
     assert "assignee_user_id 必須是專案成員" in excinfo.value.message
 
 
-def test_check_timeline_task_conflicts_includes_cross_project_and_workload_overload(app, monkeypatch):
+def test_check_timeline_task_conflicts_includes_cross_project_and_workload_overload(app, monkeypatch, user_factory):
     monkeypatch.setenv("ASSIGNEE_DAILY_OVERLOAD_THRESHOLD", "1")
 
-    owner = _create_user("timeline-cross-owner@example.com", "timeline_cross_owner")
+    owner = user_factory("timeline-cross-owner@example.com", "timeline_cross_owner")
 
     main_timeline = Timeline(user_id=owner.id, name="Main Timeline")
     legacy_timeline = Timeline(user_id=owner.id, name="Legacy Timeline")
@@ -306,11 +295,11 @@ def test_check_timeline_task_conflicts_includes_cross_project_and_workload_overl
     assert conflict_payload["workload_overload_days"][0]["projected_task_count"] >= 2
 
 
-def test_check_timeline_task_conflicts_masks_names_for_other_assignee(app, monkeypatch):
+def test_check_timeline_task_conflicts_masks_names_for_other_assignee(app, monkeypatch, user_factory):
     monkeypatch.setenv("ASSIGNEE_DAILY_OVERLOAD_THRESHOLD", "1")
 
-    owner = _create_user("timeline-mask-owner@example.com", "timeline_mask_owner")
-    member = _create_user("timeline-mask-member@example.com", "timeline_mask_member")
+    owner = user_factory("timeline-mask-owner@example.com", "timeline_mask_owner")
+    member = user_factory("timeline-mask-member@example.com", "timeline_mask_member")
 
     timeline = Timeline(user_id=owner.id, name="Mask Timeline")
     db.session.add(timeline)

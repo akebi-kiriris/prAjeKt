@@ -1,19 +1,7 @@
-from werkzeug.security import generate_password_hash
 
 from models import db
 from models.user import User
 
-
-def _create_user(email: str, password: str, username: str) -> User:
-    user = User(
-        name="Profile Blueprint User",
-        username=username,
-        email=email,
-        password=generate_password_hash(password),
-    )
-    db.session.add(user)
-    db.session.commit()
-    return user
 
 
 def _get_auth_headers(client, email: str, password: str) -> dict:
@@ -26,13 +14,13 @@ def _get_auth_headers(client, email: str, password: str) -> dict:
     return {"Authorization": f"Bearer {token}"}
 
 
-def test_get_profile_requires_auth(client):
+def test_get_profile_requires_auth(client, auth_user_factory):
     response = client.get("/api/profile/me")
     assert response.status_code == 401
 
 
-def test_get_profile_returns_current_user(client):
-    _create_user(
+def test_get_profile_returns_current_user(client, auth_user_factory):
+    auth_user_factory(
         email="profile-me@example.com",
         password="Password123!",
         username="profile_me_user",
@@ -47,8 +35,8 @@ def test_get_profile_returns_current_user(client):
     assert "created_at" in payload
 
 
-def test_update_profile_rejects_unknown_fields(client):
-    _create_user(
+def test_update_profile_rejects_unknown_fields(client, auth_user_factory):
+    auth_user_factory(
         email="profile-unknown@example.com",
         password="Password123!",
         username="profile_unknown_user",
@@ -64,13 +52,13 @@ def test_update_profile_rejects_unknown_fields(client):
     assert response.status_code == 400
 
 
-def test_update_profile_rejects_duplicate_username(client):
-    _create_user(
+def test_update_profile_rejects_duplicate_username(client, auth_user_factory):
+    auth_user_factory(
         email="profile-owner@example.com",
         password="Password123!",
         username="profile_owner_user",
     )
-    _create_user(
+    auth_user_factory(
         email="profile-another@example.com",
         password="Password123!",
         username="already_taken_username",
@@ -86,13 +74,13 @@ def test_update_profile_rejects_duplicate_username(client):
     assert response.status_code == 409
 
 
-def test_update_profile_rejects_duplicate_email(client):
-    _create_user(
+def test_update_profile_rejects_duplicate_email(client, auth_user_factory):
+    auth_user_factory(
         email="profile-email-owner@example.com",
         password="Password123!",
         username="profile_email_owner_user",
     )
-    _create_user(
+    auth_user_factory(
         email="profile-email-taken@example.com",
         password="Password123!",
         username="profile_email_taken_user",
@@ -108,8 +96,8 @@ def test_update_profile_rejects_duplicate_email(client):
     assert response.status_code == 409
 
 
-def test_update_profile_password_requires_current_password(client):
-    _create_user(
+def test_update_profile_password_requires_current_password(client, auth_user_factory):
+    auth_user_factory(
         email="profile-password@example.com",
         password="Password123!",
         username="profile_password_user",
@@ -125,13 +113,13 @@ def test_update_profile_password_requires_current_password(client):
     assert response.status_code == 400
 
 
-def test_search_user_success_and_not_found(client):
-    _create_user(
+def test_search_user_success_and_not_found(client, auth_user_factory):
+    auth_user_factory(
         email="profile-search-owner@example.com",
         password="Password123!",
         username="profile_search_owner",
     )
-    _create_user(
+    auth_user_factory(
         email="profile-search-target@example.com",
         password="Password123!",
         username="profile_search_target",
@@ -154,8 +142,8 @@ def test_search_user_success_and_not_found(client):
     assert miss_response.status_code == 404
 
 
-def test_chart_stats_returns_expected_shape(client):
-    _create_user(
+def test_chart_stats_returns_expected_shape(client, auth_user_factory):
+    auth_user_factory(
         email="profile-stats@example.com",
         password="Password123!",
         username="profile_stats_user",

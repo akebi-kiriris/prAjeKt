@@ -13,20 +13,9 @@ from services.task_service import (
 )
 
 
-def _create_user(email: str, username: str) -> User:
-    user = User(
-        name="Task Service User",
-        username=username,
-        email=email,
-        password="hashed-password",
-    )
-    db.session.add(user)
-    db.session.commit()
-    return user
 
-
-def test_task_member_serializers(app):
-    owner = _create_user("task-member-owner@example.com", "task_member_owner")
+def test_task_member_serializers(app, user_factory):
+    owner = user_factory("task-member-owner@example.com", "task_member_owner")
     task = Task(user_id=owner.id, name="Member Task")
     db.session.add(task)
     db.session.commit()
@@ -43,9 +32,9 @@ def test_task_member_serializers(app):
     assert payload_with_contact["assigned_at"].endswith("Z")
 
 
-def test_build_task_member_list_returns_viewer_role(app):
-    owner = _create_user("member-list-owner@example.com", "member_list_owner")
-    member = _create_user("member-list-member@example.com", "member_list_member")
+def test_build_task_member_list_returns_viewer_role(app, user_factory):
+    owner = user_factory("member-list-owner@example.com", "member_list_owner")
+    member = user_factory("member-list-member@example.com", "member_list_member")
 
     task = Task(user_id=owner.id, name="Member List Task")
     db.session.add(task)
@@ -66,8 +55,8 @@ def test_build_task_member_list_returns_viewer_role(app):
     assert all("email" in row for row in payload)
 
 
-def test_task_list_item_and_comment_serializers(app):
-    owner = _create_user("task-serializer-owner@example.com", "task_serializer_owner")
+def test_task_list_item_and_comment_serializers(app, user_factory):
+    owner = user_factory("task-serializer-owner@example.com", "task_serializer_owner")
     task = Task(
         user_id=owner.id,
         name="Serializer Task",

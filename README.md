@@ -2,7 +2,7 @@
 
 基於 Vue 3 + Flask 的專案管理與協作平台，整合 Google Gemini AI 實現智能任務生成。
 
-> **開發狀態**：Phase 1~6.6+ 已完成 ✅；Phase 7.1、7.2 已完成核心功能 ✅；Phase 7.3 核心閉環已完成 ✅；Phase 8.4~8.6 已完成 ✅（前端大型元件拆分、後端 service 契約化、CI/Deploy 拆分與 PR 流程護欄；下一步為 8.7 工程護欄補強與 Phase 9 型別註解/Docstring）。
+> **開發狀態**：Phase 1~6.6+ 已完成 ✅；Phase 7.1、7.2 已完成核心功能 ✅；Phase 7.3 核心閉環已完成 ✅；Phase 8.1~8.7 已完成 ✅（交易邊界收斂、前端大型元件拆分、後端 service 契約化、CI/Deploy 拆分、單人精簡護欄與後端測試工廠化）；下一步進入 Phase 9（型別註解/Docstring/Tool Calling）。
 
 ## 功能模組
 
@@ -216,6 +216,15 @@ pytest --cov=blueprints --cov=services --cov=models --cov-report=term-missing --
 - 結果：`194 passed`（僅 `.pytest_cache` 權限 warning）
 - 前端：`npm run guardrails:payload`（PASS）
 - 前端：`npm run build`（PASS）
+
+### 本輪 Phase 8.7 驗證（2026/05/28）
+
+- 前端：`npm run test -- TimelineSubcomponents.test.ts`
+- 結果：`3 passed`
+- 後端（services）：`venv\Scripts\python.exe -m pytest tests/services`
+- 結果：`79 passed`（僅 `.pytest_cache` 權限 warning）
+- 後端（blueprints）：`venv\Scripts\python.exe -m pytest tests/blueprints`
+- 結果：`94 passed`（僅 `.pytest_cache` 權限 warning）
 
 ## API 端點
 

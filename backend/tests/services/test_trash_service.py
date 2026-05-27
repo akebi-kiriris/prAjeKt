@@ -18,21 +18,10 @@ from services.trash_service import (
 )
 
 
-def _create_user(email: str, username: str) -> User:
-    user = User(
-        name="Service Test User",
-        username=username,
-        email=email,
-        password="hashed-password",
-    )
-    db.session.add(user)
-    db.session.commit()
-    return user
 
-
-def test_trash_service_get_payload_includes_owned_and_member_deleted(app):
-    owner = _create_user("trash-service-owner@example.com", "trash_service_owner")
-    member = _create_user("trash-service-member@example.com", "trash_service_member")
+def test_trash_service_get_payload_includes_owned_and_member_deleted(app, user_factory):
+    owner = user_factory("trash-service-owner@example.com", "trash_service_owner")
+    member = user_factory("trash-service-member@example.com", "trash_service_member")
 
     owned_task = Task(user_id=member.id, name="owned deleted", deleted_at=datetime.now(timezone.utc).replace(tzinfo=None))
     db.session.add(owned_task)
@@ -72,8 +61,8 @@ def test_trash_service_get_payload_includes_owned_and_member_deleted(app):
     assert foreign_timeline.id in timeline_ids
 
 
-def test_trash_service_restore_and_delete_operations(app):
-    owner = _create_user("trash-service-op-owner@example.com", "trash_service_op_owner")
+def test_trash_service_restore_and_delete_operations(app, user_factory):
+    owner = user_factory("trash-service-op-owner@example.com", "trash_service_op_owner")
 
     task = Task(
         user_id=owner.id,
@@ -113,9 +102,9 @@ def test_trash_service_restore_and_delete_operations(app):
     assert db.session.get(Timeline, timeline.id) is None
 
 
-def test_trash_service_owner_guard_raises_not_found(app):
-    owner = _create_user("trash-service-guard-owner@example.com", "trash_service_guard_owner")
-    outsider = _create_user("trash-service-guard-outsider@example.com", "trash_service_guard_outsider")
+def test_trash_service_owner_guard_raises_not_found(app, user_factory):
+    owner = user_factory("trash-service-guard-owner@example.com", "trash_service_guard_owner")
+    outsider = user_factory("trash-service-guard-outsider@example.com", "trash_service_guard_outsider")
 
     task = Task(
         user_id=owner.id,

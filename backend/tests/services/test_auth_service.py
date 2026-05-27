@@ -11,21 +11,8 @@ from services.auth_service import (
     register_user,
 )
 
-
-def _create_user(email: str, username: str) -> User:
-    user = User(
-        name="Service Test User",
-        username=username,
-        email=email,
-        password="hashed-password",
-    )
-    db.session.add(user)
-    db.session.commit()
-    return user
-
-
-def test_auth_service_serializers(app):
-    user = _create_user("auth-service@example.com", "auth_service_user")
+def test_auth_service_serializers(app, user_factory):
+    user = user_factory("auth-service@example.com", "auth_service_user")
     user.phone = "0912345678"
     db.session.commit()
 

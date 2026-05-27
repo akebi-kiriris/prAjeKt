@@ -5,7 +5,6 @@ from werkzeug.datastructures import FileStorage
 
 from models import db
 from models.knowledge import KnowledgeDocument
-from models.user import User
 from services.knowledge_service import (
     KnowledgeOperationError,
     delete_knowledge_document,
@@ -13,19 +12,6 @@ from services.knowledge_service import (
     reindex_knowledge_document,
     upload_and_index_knowledge_document,
 )
-
-
-def _create_user(email: str, username: str) -> User:
-    user = User(
-        name="Knowledge Service User",
-        username=username,
-        email=email,
-        password="hashed-password",
-    )
-    db.session.add(user)
-    db.session.commit()
-    return user
-
 
 class _FakeEmbedder:
     def embed_documents(self, texts):
@@ -47,11 +33,15 @@ class _FakeSplitter:
         ]
 
 
-def test_upload_and_reindex_and_delete_knowledge_document(app, monkeypatch):
+def test_upload_and_reindex_and_delete_knowledge_document(app, monkeypatch, user_factory):
     monkeypatch.setattr("services.knowledge_service.GeminiEmbeddingService", lambda: _FakeEmbedder())
     monkeypatch.setattr("services.knowledge_service.TextSplitterService", lambda: _FakeSplitter())
 
-    owner = _create_user("knowledge-service-owner@example.com", "knowledge_service_owner")
+    owner = user_factory(
+        "knowledge-service-owner@example.com",
+        "knowledge_service_owner",
+        name="Knowledge Service User",
+    )
     file_obj = FileStorage(
         stream=BytesIO("這是測試文件內容".encode("utf-8")),
         filename="notes.md",
@@ -76,11 +66,15 @@ def test_upload_and_reindex_and_delete_knowledge_document(app, monkeypatch):
     assert listed_after_delete["meta"]["count"] == 0
 
 
-def test_upload_knowledge_document_deduplicates_by_user(app, monkeypatch):
+def test_upload_knowledge_document_deduplicates_by_user(app, monkeypatch, user_factory):
     monkeypatch.setattr("services.knowledge_service.GeminiEmbeddingService", lambda: _FakeEmbedder())
     monkeypatch.setattr("services.knowledge_service.TextSplitterService", lambda: _FakeSplitter())
 
-    owner = _create_user("knowledge-dedupe-owner@example.com", "knowledge_dedupe_owner")
+    owner = user_factory(
+        "knowledge-dedupe-owner@example.com",
+        "knowledge_dedupe_owner",
+        name="Knowledge Service User",
+    )
     same_content = "同一份內容"
 
     upload_and_index_knowledge_document(
@@ -96,8 +90,12 @@ def test_upload_knowledge_document_deduplicates_by_user(app, monkeypatch):
     assert exc.value.status_code == 409
 
 
-def test_reindex_requires_source_text(app):
-    owner = _create_user("knowledge-reindex-source@example.com", "knowledge_reindex_source")
+def test_reindex_requires_source_text(app, user_factory):
+    owner = user_factory(
+        "knowledge-reindex-source@example.com",
+        "knowledge_reindex_source",
+        name="Knowledge Service User",
+    )
     document = KnowledgeDocument(
         user_id=owner.id,
         filename="legacy.md",
