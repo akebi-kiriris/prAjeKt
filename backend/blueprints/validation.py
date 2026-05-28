@@ -1,5 +1,8 @@
 from flask import jsonify
 from pydantic import ValidationError
+from typing import Any, Callable, TypeVar
+
+ModelT = TypeVar("ModelT")
 
 
 def status_to_error_code(status_code: int) -> str:
@@ -17,7 +20,12 @@ def status_to_error_code(status_code: int) -> str:
     return mapping.get(status_code, "UNKNOWN_ERROR")
 
 
-def error_response(code: str, message: str, status_code: int, details: dict | None = None):
+def error_response(
+    code: str,
+    message: str,
+    status_code: int,
+    details: dict[str, Any] | None = None,
+):
     payload = {
         "error": message,
         "error_code": code,
@@ -27,7 +35,7 @@ def error_response(code: str, message: str, status_code: int, details: dict | No
     return jsonify(payload), status_code
 
 
-def error_from_exception(err):
+def error_from_exception(err: Exception):
     status_code = getattr(err, "status_code", 500)
     message = getattr(err, "message", "伺服器發生未預期錯誤")
     return error_response(status_to_error_code(status_code), message, status_code)
@@ -57,7 +65,13 @@ def format_pydantic_error(
     return message
 
 
-def validate_payload_or_400(model_cls, payload, *, error_message_builder=None, by_alias=False):
+def validate_payload_or_400(
+    model_cls: type[ModelT],
+    payload: dict[str, Any],
+    *,
+    error_message_builder: Callable[[ValidationError], str] | None = None,
+    by_alias: bool = False,
+) -> tuple[dict[str, Any] | None, tuple[Any, int] | None]:
     try:
         model = model_cls.model_validate(payload)
         return model.model_dump(exclude_unset=True, by_alias=by_alias), None

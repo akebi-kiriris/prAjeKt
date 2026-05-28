@@ -4,6 +4,7 @@ from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeout
 import hashlib
 import os
 import time
+from typing import Any
 
 from pydantic import ValidationError
 
@@ -61,29 +62,29 @@ _WEEKLY_REPORT_AI_SUMMARY_CACHE = {}
 
 
 class TimelineAIGenerationError(Exception):
-    def __init__(self, code, message):
+    def __init__(self, code: str, message: str):
         super().__init__(message)
         self.code = code
         self.message = message
 
 
 class TimelineOperationError(Exception):
-    def __init__(self, message, status_code):
+    def __init__(self, message: str, status_code: int):
         super().__init__(message)
         self.message = message
         self.status_code = status_code
 
 
-def find_unknown_fields(payload, allowed_fields):
+def find_unknown_fields(payload: dict[str, Any], allowed_fields: set[str]) -> list[str]:
     return sorted(set(payload.keys()) - allowed_fields)
 
 
-def get_user_timeline_role(user_id, timeline_id):
+def get_user_timeline_role(user_id: int, timeline_id: int) -> int | None:
     """查詢使用者在某專案的角色。"""
     return get_timeline_role(timeline_id, user_id)
 
 
-def get_task_access(user_id, task):
+def get_task_access(user_id: int, task: Task) -> int | None:
     """查詢使用者對某任務的存取權限（支援 timeline 任務與獨立任務）。"""
     if task.timeline_id:
         role = get_user_timeline_role(user_id, task.timeline_id)
@@ -100,7 +101,12 @@ def get_task_access(user_id, task):
     return None
 
 
-def timeline_list_item_to_dict(timeline, role, total_tasks, completed_tasks):
+def timeline_list_item_to_dict(
+    timeline: Timeline,
+    role: int,
+    total_tasks: int,
+    completed_tasks: int,
+) -> dict[str, Any]:
     return {
         'id': timeline.id,
         'name': timeline.name,
@@ -113,7 +119,12 @@ def timeline_list_item_to_dict(timeline, role, total_tasks, completed_tasks):
     }
 
 
-def timeline_task_item_to_dict(task, assignee_name, assistant_list, can_manage_members=False):
+def timeline_task_item_to_dict(
+    task: Task,
+    assignee_name: str | None,
+    assistant_list: list[str],
+    can_manage_members: bool = False,
+) -> dict[str, Any]:
     return {
         'task_id': task.task_id,
         'name': task.name,
@@ -134,7 +145,7 @@ def timeline_task_item_to_dict(task, assignee_name, assistant_list, can_manage_m
     }
 
 
-def timeline_member_item_to_dict(timeline_member, user):
+def timeline_member_item_to_dict(timeline_member: TimelineUser, user: Any) -> dict[str, Any]:
     return {
         'user_id': user.id,
         'name': user.name,
@@ -219,7 +230,7 @@ def _normalize_dependency_refs(raw_values):
     return normalized
 
 
-def _normalize_generated_tasks(generated_tasks, timeline_id):
+def _normalize_generated_tasks(generated_tasks: Any, timeline_id: int) -> list[dict[str, Any]]:
     if not isinstance(generated_tasks, list):
         raise TimelineAIGenerationError('invalid_payload', 'AI 回傳格式錯誤')
 
@@ -254,7 +265,11 @@ def _normalize_generated_tasks(generated_tasks, timeline_id):
     return normalized_tasks
 
 
-def generate_timeline_tasks_with_ai(timeline_id, project_name, description=''):
+def generate_timeline_tasks_with_ai(
+    timeline_id: int,
+    project_name: str,
+    description: str = '',
+) -> dict[str, Any]:
     existing_tasks_info = _build_existing_tasks_info(timeline_id)
 
     try:
@@ -288,14 +303,14 @@ def _utcnow_naive():
     return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
-def get_active_timeline_or_404(timeline_id):
+def get_active_timeline_or_404(timeline_id: int) -> Timeline:
     timeline = get_active_timeline_by_id(timeline_id)
     if not timeline:
         raise TimelineOperationError('找不到該專案', 404)
     return timeline
 
 
-def list_timeline_items_for_user(user_id):
+def list_timeline_items_for_user(user_id: int) -> list[dict[str, Any]]:
     memberships = get_timeline_memberships_for_user_ordered_desc(user_id)
     timeline_ids = [timeline.id for timeline, _role in memberships]
     tasks = get_active_tasks_by_timeline_ids(timeline_ids)
@@ -314,7 +329,7 @@ def list_timeline_items_for_user(user_id):
     return result
 
 
-def create_timeline_for_user(user_id, data):
+def create_timeline_for_user(user_id: int, data: dict[str, Any]) -> int:
     name = data.get('name')
     start_date_raw = data.get('start_date', '')
     end_date_raw = data.get('end_date', '')
@@ -356,7 +371,7 @@ def create_timeline_for_user(user_id, data):
     return new_timeline.id
 
 
-def update_timeline_for_member(timeline_id, data):
+def update_timeline_for_member(timeline_id: int, data: dict[str, Any]) -> None:
     timeline = get_active_timeline_or_404(timeline_id)
 
     unknown_fields = find_unknown_fields(data, TIMELINE_UPDATE_ALLOWED_FIELDS)
@@ -397,7 +412,7 @@ def update_timeline_for_member(timeline_id, data):
             timeline.remark = data['remark']
 
 
-def soft_delete_timeline_for_owner(timeline_id):
+def soft_delete_timeline_for_owner(timeline_id: int) -> None:
     timeline = get_active_timeline_or_404(timeline_id)
 
     with transaction(TimelineOperationError, '專案刪除失敗，請稍後再試'):
@@ -406,7 +421,7 @@ def soft_delete_timeline_for_owner(timeline_id):
         soft_delete_tasks_by_timeline_id(timeline_id, deleted_at)
 
 
-def list_timeline_tasks_detail(timeline_id, viewer_user_id=None):
+def list_timeline_tasks_detail(timeline_id: int, viewer_user_id: int | None = None) -> list[dict[str, Any]]:
     tasks = get_active_tasks_by_timeline_id_ordered_end_date(timeline_id)
     task_ids = [task.task_id for task in tasks]
     task_users = get_task_users_by_task_ids(task_ids)
@@ -840,7 +855,7 @@ def _build_conflict_risk_context_text(timeline, conflicts):
     )
 
 
-def build_timeline_risk_analysis(timeline_id):
+def build_timeline_risk_analysis(timeline_id: int) -> dict[str, Any]:
     timeline = get_active_timeline_or_404(timeline_id)
     tasks = get_active_tasks_by_timeline_id(timeline_id)
 
@@ -852,7 +867,7 @@ def build_timeline_risk_analysis(timeline_id):
     return payload
 
 
-def trigger_timeline_risk_notifications(timeline_id):
+def trigger_timeline_risk_notifications(timeline_id: int) -> dict[str, Any]:
     timeline = get_active_timeline_or_404(timeline_id)
     analysis = build_timeline_risk_analysis(timeline_id)
 
@@ -920,7 +935,11 @@ def trigger_timeline_risk_notifications(timeline_id):
     }
 
 
-def build_weekly_report_for_timeline(timeline_id, start_date_raw=None, end_date_raw=None):
+def build_weekly_report_for_timeline(
+    timeline_id: int,
+    start_date_raw: str | None = None,
+    end_date_raw: str | None = None,
+) -> dict[str, Any]:
     timeline = get_active_timeline_or_404(timeline_id)
     input_payload = _validate_weekly_report_input(start_date_raw, end_date_raw)
     start_date, end_date = _normalize_report_period(
@@ -1141,7 +1160,11 @@ def build_weekly_report_for_timeline(timeline_id, start_date_raw=None, end_date_
     }
 
 
-def check_timeline_task_conflicts(timeline_id, payload, actor_user_id):
+def check_timeline_task_conflicts(
+    timeline_id: int,
+    payload: dict[str, Any],
+    actor_user_id: int,
+) -> dict[str, Any]:
     input_payload = _validate_conflict_payload(payload)
     timeline = get_active_timeline_or_404(timeline_id)
 
@@ -1416,7 +1439,7 @@ def check_timeline_task_conflicts(timeline_id, payload, actor_user_id):
     }
 
 
-def update_timeline_remark_for_member(timeline_id, remark):
+def update_timeline_remark_for_member(timeline_id: int, remark: str) -> None:
     timeline = get_active_timeline_or_404(timeline_id)
 
     if not isinstance(remark, str):
@@ -1426,7 +1449,7 @@ def update_timeline_remark_for_member(timeline_id, remark):
         timeline.remark = remark
 
 
-def search_timeline_user_by_email(timeline_id, requester_user_id, email):
+def search_timeline_user_by_email(timeline_id: int, requester_user_id: int, email: str) -> dict[str, Any]:
     if timeline_id in (None, ''):
         raise TimelineOperationError('請提供 timeline_id', 400)
 
@@ -1445,7 +1468,7 @@ def search_timeline_user_by_email(timeline_id, requester_user_id, email):
     return user
 
 
-def list_timeline_members_payload(timeline_id):
+def list_timeline_members_payload(timeline_id: int) -> list[dict[str, Any]]:
     members = get_timeline_members(timeline_id)
     users_map = {user.id: user for user in get_users_by_ids([member.user_id for member in members])}
 
@@ -1457,7 +1480,12 @@ def list_timeline_members_payload(timeline_id):
     return result
 
 
-def add_timeline_member_for_owner(timeline_id, invited_user_id, role, actor_user_id):
+def add_timeline_member_for_owner(
+    timeline_id: int,
+    invited_user_id: int,
+    role: int,
+    actor_user_id: int,
+) -> None:
     if not invited_user_id:
         raise TimelineOperationError('請提供使用者 ID', 400)
 
@@ -1483,7 +1511,7 @@ def add_timeline_member_for_owner(timeline_id, invited_user_id, role, actor_user
         add_entity(notif)
 
 
-def remove_timeline_member_for_owner(timeline_id, member_user_id, operator_user_id):
+def remove_timeline_member_for_owner(timeline_id: int, member_user_id: int, operator_user_id: int) -> None:
     if member_user_id == operator_user_id:
         raise TimelineOperationError('不能將自己移出專案', 400)
 
@@ -1495,7 +1523,11 @@ def remove_timeline_member_for_owner(timeline_id, member_user_id, operator_user_
         delete_entity(member)
 
 
-def batch_create_tasks_for_timeline(timeline_id, user_id, task_payloads):
+def batch_create_tasks_for_timeline(
+    timeline_id: int,
+    user_id: int,
+    task_payloads: list[dict[str, Any]],
+) -> dict[str, Any]:
     timeline = get_active_timeline_or_404(timeline_id)
     task_payloads = _validate_batch_task_payloads(task_payloads)
 
@@ -1548,7 +1580,7 @@ def batch_create_tasks_for_timeline(timeline_id, user_id, task_payloads):
     }
 
 
-def list_upcoming_timelines_for_user(user_id):
+def list_upcoming_timelines_for_user(user_id: int) -> list[dict[str, Any]]:
     today = datetime.now(timezone.utc).date()
     threshold = today + timedelta(days=3)
 
@@ -1582,7 +1614,7 @@ def list_upcoming_timelines_for_user(user_id):
     return result
 
 
-def build_timeline_member_stats_payload(timeline_id):
+def build_timeline_member_stats_payload(timeline_id: int) -> dict[str, Any]:
     members = get_timeline_members(timeline_id)
     member_ids = [member.user_id for member in members]
     users_map = {user.id: user.name for user in get_users_by_ids(member_ids)}

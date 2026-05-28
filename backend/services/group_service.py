@@ -5,6 +5,7 @@ import os
 import random
 import threading
 import uuid
+from typing import Any, TypedDict
 
 from sqlalchemy.exc import IntegrityError
 from models.group import Group
@@ -12,6 +13,8 @@ from models.group import GroupMember
 from models.group_ai_snapshot import GroupAISnapshot
 from models.message import Message
 from repositories.group_repository import (
+    GroupMemberRow,
+    GroupMessageRow,
     count_group_messages_for_snapshot as count_group_messages_for_snapshot_query,
     get_group_by_invite_code,
     get_group_member,
@@ -27,7 +30,7 @@ from services.transactions import transaction
 
 
 class GroupOperationError(Exception):
-    def __init__(self, message, status_code):
+    def __init__(self, message: str, status_code: int):
         super().__init__(message)
         self.message = message
         self.status_code = status_code
@@ -38,17 +41,24 @@ _snapshot_jobs_lock = threading.Lock()
 _snapshot_executor = ThreadPoolExecutor(max_workers=2)
 
 
-def _utcnow_naive():
+class SnapshotMessageRow(TypedDict):
+    message_id: int
+    sender_name: str
+    content: str
+    created_at: str | None
+
+
+def _utcnow_naive() -> datetime:
     return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
-def _to_iso_z(value):
+def _to_iso_z(value: datetime | None) -> str | None:
     if not value:
         return None
     return value.isoformat() + 'Z'
 
 
-def _get_int_env(name, default_value):
+def _get_int_env(name: str, default_value: int) -> int:
     raw = os.getenv(name)
     if raw is None or raw == '':
         return default_value
@@ -58,27 +68,27 @@ def _get_int_env(name, default_value):
         return default_value
 
 
-def get_snapshot_chunk_size():
+def get_snapshot_chunk_size() -> int:
     return max(1, _get_int_env('SNAPSHOT_CHUNK_SIZE', 50))
 
 
-def get_snapshot_async_threshold():
+def get_snapshot_async_threshold() -> int:
     return max(1, _get_int_env('SNAPSHOT_ASYNC_THRESHOLD', 500))
 
 
-def get_snapshot_window_days_default():
+def get_snapshot_window_days_default() -> int:
     return max(1, _get_int_env('SNAPSHOT_WINDOW_DAYS', 30))
 
 
-def get_snapshot_job_ttl_seconds():
+def get_snapshot_job_ttl_seconds() -> int:
     return max(60, _get_int_env('SNAPSHOT_JOB_TTL_SECONDS', 3600))
 
 
-def get_snapshot_job_max_records():
+def get_snapshot_job_max_records() -> int:
     return max(50, _get_int_env('SNAPSHOT_JOB_MAX_RECORDS', 500))
 
 
-def generate_unique_invite_code():
+def generate_unique_invite_code() -> str:
     while True:
         invite_code = f"{random.randint(0, 999999):06d}"
         existing = get_group_by_invite_code(invite_code)
@@ -86,7 +96,7 @@ def generate_unique_invite_code():
             return invite_code
 
 
-def group_to_dict(group):
+def group_to_dict(group: Group) -> dict[str, Any]:
     return {
         'group_id': group.group_id,
         'group_name': group.group_name,
@@ -96,39 +106,59 @@ def group_to_dict(group):
     }
 
 
-def group_member_to_dict(member, include_email=True):
+def group_member_to_dict(member: GroupMemberRow | Any, include_email: bool = True) -> dict[str, Any]:
+    if isinstance(member, dict):
+        user_id = int(member["user_id"])
+        name = str(member["name"])
+        email = str(member["email"])
+    else:
+        user_id = int(getattr(member, "id"))
+        name = str(getattr(member, "name"))
+        email = str(getattr(member, "email"))
+
     payload = {
-        'user_id': member.id,
-        'name': member.name,
+        'user_id': user_id,
+        'name': name,
     }
     if include_email:
-        payload['email'] = member.email
+        payload['email'] = email
     return payload
 
 
-def group_message_to_dict(message):
+def group_message_to_dict(message: GroupMessageRow | Any) -> dict[str, Any]:
+    if isinstance(message, dict):
+        message_id = int(message["message_id"])
+        content = str(message["content"])
+        sender_name = str(message["sender_name"])
+        created_at = message["created_at"]
+    else:
+        message_id = int(getattr(message, "message_id"))
+        content = str(getattr(message, "content"))
+        sender_name = str(getattr(message, "sender_name"))
+        created_at = getattr(message, "created_at")
+
     return {
-        'message_id': message.message_id,
-        'content': message.content,
-        'sender_name': message.sender_name,
-        'created_at': message.created_at.isoformat() + 'Z' if message.created_at else None,
+        'message_id': message_id,
+        'content': content,
+        'sender_name': sender_name,
+        'created_at': created_at.isoformat() + 'Z' if created_at else None,
     }
 
 
-def is_group_member(group_id, user_id):
+def is_group_member(group_id: int, user_id: int) -> bool:
     return get_group_member(group_id, user_id) is not None
 
 
-def group_room_name(group_id):
+def group_room_name(group_id: int) -> str:
     return f'group_{group_id}'
 
 
-def list_groups_for_user(user_id):
+def list_groups_for_user(user_id: int) -> list[dict[str, Any]]:
     groups = list_groups_for_user_query(user_id)
     return [group_to_dict(group) for group in groups]
 
 
-def create_group_for_user(user_id, group_name):
+def create_group_for_user(user_id: int, group_name: str) -> dict[str, Any]:
     normalized_name = group_name.strip() if isinstance(group_name, str) else ''
     if not normalized_name:
         raise GroupOperationError('請輸入群組名稱', 400)
@@ -163,7 +193,7 @@ def create_group_for_user(user_id, group_name):
     raise GroupOperationError('建立群組失敗，請稍後再試', 500)
 
 
-def join_group_by_invite_code(user_id, invite_code):
+def join_group_by_invite_code(user_id: int, invite_code: str) -> None:
     normalized_code = invite_code.strip() if isinstance(invite_code, str) else ''
     if not normalized_code:
         raise GroupOperationError('請輸入邀請碼', 400)
@@ -188,7 +218,7 @@ def join_group_by_invite_code(user_id, invite_code):
         raise
 
 
-def leave_group_for_user(group_id, user_id):
+def leave_group_for_user(group_id: int, user_id: int) -> None:
     member = get_group_member(group_id, user_id)
     if not member:
         raise GroupOperationError('您不是該群組成員', 404)
@@ -197,12 +227,12 @@ def leave_group_for_user(group_id, user_id):
         delete_entity(member)
 
 
-def list_group_members_payload(group_id, include_email=False):
+def list_group_members_payload(group_id: int, include_email: bool = False) -> list[dict[str, Any]]:
     members = list_group_members_query(group_id)
     return [group_member_to_dict(member, include_email=include_email) for member in members]
 
 
-def list_group_messages_for_member(group_id, user_id):
+def list_group_messages_for_member(group_id: int, user_id: int) -> list[dict[str, Any]]:
     if not is_group_member(group_id, user_id):
         raise GroupOperationError('您不是該群組成員', 403)
 
@@ -210,7 +240,7 @@ def list_group_messages_for_member(group_id, user_id):
     return [group_message_to_dict(message) for message in messages]
 
 
-def send_group_message_for_member(group_id, user_id, content):
+def send_group_message_for_member(group_id: int, user_id: int, content: str) -> int:
     normalized_content = content.strip() if isinstance(content, str) else ''
     if not normalized_content:
         raise GroupOperationError('訊息內容不可為空', 400)
@@ -229,7 +259,7 @@ def send_group_message_for_member(group_id, user_id, content):
     return new_message.message_id
 
 
-def group_snapshot_to_dict(snapshot):
+def group_snapshot_to_dict(snapshot: GroupAISnapshot) -> dict[str, Any]:
     return {
         'snapshot_id': snapshot.snapshot_id,
         'group_id': snapshot.group_id,
@@ -471,7 +501,7 @@ def _finalize_snapshot_payload(payload):
     return compacted
 
 
-def parse_ai_snapshot_response(raw_text):
+def parse_ai_snapshot_response(raw_text: str) -> dict[str, Any]:
     try:
         parsed = json.loads(raw_text)
     except json.JSONDecodeError as exc:
@@ -490,7 +520,7 @@ def _merge_message_ids(existing_ids, incoming_ids):
     return merged
 
 
-def merge_chunk_summaries(chunk_summaries):
+def merge_chunk_summaries(chunk_summaries: list[dict[str, Any]]) -> dict[str, Any]:
     topic_map = {}
     decision_map = {}
     action_map = {}
@@ -548,36 +578,36 @@ def merge_chunk_summaries(chunk_summaries):
     return _finalize_snapshot_payload(merged)
 
 
-def count_group_messages_for_snapshot(group_id, window_days):
+def count_group_messages_for_snapshot(group_id: int, window_days: int) -> int:
     cutoff = _utcnow_naive() - timedelta(days=window_days)
     return count_group_messages_for_snapshot_query(group_id, cutoff)
 
 
-def fetch_group_messages(group_id, window_days):
+def fetch_group_messages(group_id: int, window_days: int) -> list[SnapshotMessageRow]:
     cutoff = _utcnow_naive() - timedelta(days=window_days)
     rows = list_group_messages_for_snapshot(group_id, cutoff)
 
-    payload = []
+    payload: list[SnapshotMessageRow] = []
     for row in rows:
-        text = row.content.strip() if isinstance(row.content, str) else ''
+        text = row["content"].strip() if isinstance(row["content"], str) else ''
         if not text:
             continue
         payload.append({
-            'message_id': row.message_id,
-            'sender_name': row.sender_name,
+            'message_id': row["message_id"],
+            'sender_name': row["sender_name"],
             'content': text,
-            'created_at': _to_iso_z(row.created_at),
+            'created_at': _to_iso_z(row["created_at"]),
         })
 
     return payload
 
 
-def chunk_messages(messages, size):
+def chunk_messages(messages: list[SnapshotMessageRow], size: int) -> list[list[SnapshotMessageRow]]:
     chunk_size = max(1, size)
     return [messages[index:index + chunk_size] for index in range(0, len(messages), chunk_size)]
 
 
-def build_group_snapshot_system_prompt():
+def build_group_snapshot_system_prompt() -> str:
     return (
         '你是專案協作知識整理助手。重點是給出可執行下一步，避免冗長敘述。'
         '請輸出 JSON 物件，schema 必須為：'
@@ -591,7 +621,7 @@ def build_group_snapshot_system_prompt():
     )
 
 
-def build_chunk_prompt(chunk):
+def build_chunk_prompt(chunk: list[SnapshotMessageRow]) -> str:
     lines = []
     for item in chunk:
         lines.append(
@@ -600,7 +630,15 @@ def build_chunk_prompt(chunk):
     return '請根據以下群組訊息整理知識快照：\n' + '\n'.join(lines)
 
 
-def persist_snapshot(group_id, snapshot_payload, created_by, source_count, model, provider, metadata_json):
+def persist_snapshot(
+    group_id: int,
+    snapshot_payload: dict[str, Any],
+    created_by: int | None,
+    source_count: int,
+    model: str | None,
+    provider: str | None,
+    metadata_json: dict[str, Any] | None,
+) -> dict[str, Any]:
     snapshot = GroupAISnapshot(
         group_id=group_id,
         summary_json=snapshot_payload,
@@ -616,7 +654,12 @@ def persist_snapshot(group_id, snapshot_payload, created_by, source_count, model
     return group_snapshot_to_dict(snapshot)
 
 
-def generate_group_snapshot(group_id, window_days=30, created_by=None, force=False):
+def generate_group_snapshot(
+    group_id: int,
+    window_days: int = 30,
+    created_by: int | None = None,
+    force: bool = False,
+) -> dict[str, Any]:
     if not isinstance(window_days, int) or window_days <= 0:
         raise GroupOperationError('window_days 必須為正整數', 400)
 
@@ -668,7 +711,7 @@ def generate_group_snapshot(group_id, window_days=30, created_by=None, force=Fal
     )
 
 
-def get_latest_group_snapshot_for_member(group_id, user_id):
+def get_latest_group_snapshot_for_member(group_id: int, user_id: int) -> dict[str, Any]:
     if not is_group_member(group_id, user_id):
         raise GroupOperationError('您不是該群組成員', 403)
 
@@ -679,7 +722,7 @@ def get_latest_group_snapshot_for_member(group_id, user_id):
     return group_snapshot_to_dict(snapshot)
 
 
-def should_enqueue_snapshot(source_count, async_requested=False):
+def should_enqueue_snapshot(source_count: int, async_requested: bool = False) -> bool:
     return bool(async_requested) or source_count > get_snapshot_async_threshold()
 
 
@@ -755,7 +798,7 @@ def _run_snapshot_job(app, job_id, group_id, user_id, window_days):
         })
 
 
-def enqueue_snapshot_job(app, group_id, user_id, window_days=30):
+def enqueue_snapshot_job(app: Any, group_id: int, user_id: int, window_days: int = 30) -> dict[str, Any]:
     job_id = uuid.uuid4().hex
     now_iso = _to_iso_z(_utcnow_naive())
     payload = {
@@ -779,7 +822,7 @@ def enqueue_snapshot_job(app, group_id, user_id, window_days=30):
     return payload
 
 
-def get_snapshot_job_status(job_id, requester_user_id=None):
+def get_snapshot_job_status(job_id: str, requester_user_id: int | None = None) -> dict[str, Any]:
     with _snapshot_jobs_lock:
         _cleanup_snapshot_jobs_locked()
         payload = dict(_snapshot_jobs.get(job_id, {}))

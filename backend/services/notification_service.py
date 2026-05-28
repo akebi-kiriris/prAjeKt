@@ -6,16 +6,18 @@ from repositories.notification_repository import (
 )
 from repositories.session_repository import delete_entity
 from services.transactions import transaction
+from models.notification import Notification
+from typing import Any
 
 
 class NotificationOperationError(Exception):
-    def __init__(self, message, status_code):
+    def __init__(self, message: str, status_code: int):
         super().__init__(message)
         self.message = message
         self.status_code = status_code
 
 
-def notification_to_dict(notification):
+def notification_to_dict(notification: Notification) -> dict[str, Any]:
     return {
         'id': notification.id,
         'type': notification.type,
@@ -27,15 +29,15 @@ def notification_to_dict(notification):
     }
 
 
-def get_notifications_for_user(user_id, limit=50):
+def get_notifications_for_user(user_id: int, limit: int = 50) -> list[Notification]:
     return list_notifications_for_user(user_id, limit=limit)
 
 
-def get_unread_count_for_user(user_id):
+def get_unread_count_for_user(user_id: int) -> int:
     return count_unread_notifications_for_user(user_id)
 
 
-def mark_notification_as_read(notification_id, user_id):
+def mark_notification_as_read(notification_id: int, user_id: int) -> None:
     notification = get_notification_for_user(notification_id, user_id)
     if not notification:
         raise NotificationOperationError('找不到通知', 404)
@@ -44,12 +46,12 @@ def mark_notification_as_read(notification_id, user_id):
         notification.is_read = True
 
 
-def mark_all_notifications_as_read(user_id):
+def mark_all_notifications_as_read(user_id: int) -> None:
     with transaction(NotificationOperationError, '標記全部通知失敗，請稍後再試'):
         mark_all_unread_notifications_as_read(user_id)
 
 
-def delete_notification_for_user(notification_id, user_id):
+def delete_notification_for_user(notification_id: int, user_id: int) -> None:
     notification = get_notification_for_user(notification_id, user_id)
     if not notification:
         raise NotificationOperationError('找不到通知', 404)

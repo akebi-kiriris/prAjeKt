@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from typing import Any
 
 import networkx as nx
 
@@ -10,11 +11,11 @@ SEVERITY_RANK = {
 }
 
 
-def _utc_iso_now():
+def _utc_iso_now() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace('+00:00', 'Z')
 
 
-def _date_only(value):
+def _date_only(value: Any) -> Any | None:
     if value is None:
         return None
     if hasattr(value, 'date'):
@@ -22,14 +23,14 @@ def _date_only(value):
     return None
 
 
-def _to_int(value):
+def _to_int(value: Any) -> int | None:
     try:
         return int(value)
     except (TypeError, ValueError):
         return None
 
 
-def _normalize_dependency_ids(raw_dependencies, task_id, warnings):
+def _normalize_dependency_ids(raw_dependencies: Any, task_id: int, warnings: list[dict[str, Any]]) -> list[int]:
     if raw_dependencies in (None, ''):
         return []
 
@@ -79,7 +80,7 @@ def _normalize_dependency_ids(raw_dependencies, task_id, warnings):
     return normalized
 
 
-def _resolve_task_schedule(task, warnings):
+def _resolve_task_schedule(task: Any, warnings: list[dict[str, Any]]) -> dict[str, Any]:
     start_date = _date_only(task.start_date)
     end_date = _date_only(task.end_date)
     is_schedule_incomplete = False
@@ -120,13 +121,13 @@ def _resolve_task_schedule(task, warnings):
     }
 
 
-def _severity_max(current, target):
+def _severity_max(current: str, target: str) -> str:
     if SEVERITY_RANK[target] > SEVERITY_RANK[current]:
         return target
     return current
 
 
-def _suggest_actions(is_critical, is_overdue, is_schedule_incomplete):
+def _suggest_actions(is_critical: bool, is_overdue: bool, is_schedule_incomplete: bool) -> list[str]:
     actions = []
 
     if is_critical:
@@ -142,7 +143,7 @@ def _suggest_actions(is_critical, is_overdue, is_schedule_incomplete):
     return actions
 
 
-def build_critical_path_analysis_payload(timeline, tasks):
+def build_critical_path_analysis_payload(timeline: Any, tasks: list[Any]) -> dict[str, Any]:
     warnings = []
     task_map = {task.task_id: task for task in tasks}
     graph = nx.DiGraph()
