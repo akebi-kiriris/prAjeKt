@@ -2,6 +2,7 @@ import os
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
 from datetime import datetime, timezone
+from typing import Any
 
 from chains import generate_rag_plan_suggestion, get_default_llm
 from repositories.knowledge_repository import (
@@ -16,7 +17,7 @@ from services.embedding_service import EmbeddingOperationError, GeminiEmbeddingS
 
 
 class RAGPlanningOperationError(Exception):
-    def __init__(self, message, status_code=400):
+    def __init__(self, message: str, status_code: int = 400):
         super().__init__(message)
         self.message = message
         self.status_code = status_code
@@ -26,13 +27,13 @@ class RAGPlanningTimeoutError(Exception):
     pass
 
 
-def _normalize_text(value):
+def _normalize_text(value: Any) -> str:
     if not isinstance(value, str):
         return ""
     return value.strip()
 
 
-def _extract_query_terms(text):
+def _extract_query_terms(text: str) -> list[str]:
     separators = ["\n", ",", "，", "。", ".", "、", " ", "\t"]
     normalized = text
     for separator in separators:
@@ -41,7 +42,7 @@ def _extract_query_terms(text):
     return [item for item in terms if len(item) >= 2]
 
 
-def _normalize_task_tags(tags):
+def _normalize_task_tags(tags: Any) -> list[str]:
     if not tags:
         return []
     if isinstance(tags, str):
@@ -51,7 +52,7 @@ def _normalize_task_tags(tags):
     return [str(tags).strip()] if str(tags).strip() else []
 
 
-def _build_history_references(user_id, user_request, limit):
+def _build_history_references(user_id: int, user_request: str, limit: int) -> list[dict[str, Any]]:
     memberships = get_timeline_memberships_for_user(user_id)
     timeline_ids = [timeline.id for timeline, _role in memberships]
     if not timeline_ids:
@@ -101,7 +102,12 @@ def _build_history_references(user_id, user_request, limit):
     return references[:limit]
 
 
-def _build_knowledge_references(user_id, user_request, limit, project_id=None):
+def _build_knowledge_references(
+    user_id: int,
+    user_request: str,
+    limit: int,
+    project_id: int | None = None,
+) -> list[dict[str, Any]]:
     rows = []
     try:
         embedder = GeminiEmbeddingService()
@@ -153,7 +159,11 @@ def _build_knowledge_references(user_id, user_request, limit, project_id=None):
     return references
 
 
-def _merge_references(history_refs, knowledge_refs, max_sources):
+def _merge_references(
+    history_refs: list[dict[str, Any]],
+    knowledge_refs: list[dict[str, Any]],
+    max_sources: int,
+) -> list[dict[str, Any]]:
     merged = []
     seen = set()
 
@@ -181,7 +191,7 @@ def _merge_references(history_refs, knowledge_refs, max_sources):
     return merged[:max_sources]
 
 
-def _build_retrieval_context(references):
+def _build_retrieval_context(references: list[dict[str, Any]]) -> str:
     if not references:
         return "無可用來源"
     lines = []
@@ -193,7 +203,7 @@ def _build_retrieval_context(references):
     return "\n\n".join(lines)
 
 
-def _fallback_suggestion(user_request, references):
+def _fallback_suggestion(user_request: str, references: list[dict[str, Any]]) -> dict[str, Any]:
     reference_titles = [item["title"] for item in references[:3]]
     tag_counter = Counter()
     for item in references:
@@ -238,7 +248,7 @@ def _fallback_suggestion(user_request, references):
     }
 
 
-def _generate_rag_plan_with_timeout(llm, user_request, retrieval_context):
+def _generate_rag_plan_with_timeout(llm: Any, user_request: str, retrieval_context: str) -> dict[str, Any]:
     timeout_sec = float(os.getenv("RAG_PLANNING_AI_TIMEOUT_SEC", "25"))
     if timeout_sec <= 0:
         return generate_rag_plan_suggestion(
@@ -265,7 +275,7 @@ def _generate_rag_plan_with_timeout(llm, user_request, retrieval_context):
             executor.shutdown(wait=False, cancel_futures=True)
 
 
-def suggest_plan_with_rag(user_id, payload):
+def suggest_plan_with_rag(user_id: int, payload: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise RAGPlanningOperationError("請提供正確的 JSON 物件", 400)
 

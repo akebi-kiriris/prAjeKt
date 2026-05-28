@@ -1,19 +1,20 @@
 from werkzeug.security import check_password_hash, generate_password_hash
 from sqlalchemy.exc import IntegrityError
 from models.user import User
+from typing import Any
 from repositories.auth_repository import get_user_by_email, get_user_by_id, get_user_by_username
 from repositories.session_repository import add_entity
 from services.transactions import transaction
 
 
 class AuthOperationError(Exception):
-    def __init__(self, message, status_code):
+    def __init__(self, message: str, status_code: int):
         super().__init__(message)
         self.message = message
         self.status_code = status_code
 
 
-def auth_user_to_dict(user):
+def auth_user_to_dict(user: User) -> dict[str, Any]:
     return {
         'id': user.id,
         'name': user.name,
@@ -22,7 +23,7 @@ def auth_user_to_dict(user):
     }
 
 
-def current_user_to_dict(user):
+def current_user_to_dict(user: User) -> dict[str, Any]:
     return {
         'id': user.id,
         'name': user.name,
@@ -32,7 +33,7 @@ def current_user_to_dict(user):
     }
 
 
-def register_user(data):
+def register_user(data: dict[str, Any]) -> int:
     name = (data.get('name') or '').strip()
     username = data.get('username')
     email = (data.get('email') or '').strip().lower()
@@ -74,7 +75,7 @@ def register_user(data):
         raise
 
 
-def authenticate_user(email, password):
+def authenticate_user(email: str, password: str) -> User:
     normalized_email = email.strip().lower() if isinstance(email, str) else ''
     if not normalized_email or not password:
         raise AuthOperationError('請提供 email 和密碼', 400)
@@ -86,7 +87,7 @@ def authenticate_user(email, password):
     return user
 
 
-def get_current_user_or_404(user_id):
+def get_current_user_or_404(user_id: int) -> User:
     user = get_user_by_id(user_id)
     if not user:
         raise AuthOperationError('使用者不存在', 404)

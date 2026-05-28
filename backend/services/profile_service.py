@@ -1,6 +1,8 @@
 from datetime import datetime, timedelta, timezone
+from typing import Any
 
 from werkzeug.security import check_password_hash, generate_password_hash
+from models.user import User
 
 from repositories.profile_repository import (
     get_user_by_email_excluding_id,
@@ -28,17 +30,17 @@ PROFILE_UPDATE_ALLOWED_FIELDS = {
 
 
 class ProfileOperationError(Exception):
-    def __init__(self, message, status_code):
+    def __init__(self, message: str, status_code: int):
         super().__init__(message)
         self.message = message
         self.status_code = status_code
 
 
-def find_unknown_fields(payload, allowed_fields):
+def find_unknown_fields(payload: dict[str, Any], allowed_fields: set[str]) -> list[str]:
     return sorted(set(payload.keys()) - allowed_fields)
 
 
-def profile_to_dict(user):
+def profile_to_dict(user: User) -> dict[str, Any]:
     return {
         'id': user.id,
         'name': user.name,
@@ -51,7 +53,7 @@ def profile_to_dict(user):
     }
 
 
-def search_user_to_dict(user):
+def search_user_to_dict(user: User) -> dict[str, Any]:
     return {
         'id': user.id,
         'name': user.name,
@@ -60,14 +62,14 @@ def search_user_to_dict(user):
     }
 
 
-def get_profile_user_or_404(user_id):
+def get_profile_user_or_404(user_id: int) -> User:
     user = get_user_by_id(user_id)
     if not user:
         raise ProfileOperationError('使用者不存在', 404)
     return user
 
 
-def update_profile_for_user(user_id, data):
+def update_profile_for_user(user_id: int, data: dict[str, Any]) -> None:
     if not isinstance(data, dict):
         raise ProfileOperationError('請提供正確的 JSON 物件', 400)
 
@@ -118,7 +120,7 @@ def update_profile_for_user(user_id, data):
         pass
 
 
-def search_user_by_query(query):
+def search_user_by_query(query: str) -> User:
     normalized_query = query.strip() if isinstance(query, str) else ''
     if not normalized_query:
         raise ProfileOperationError('請提供搜尋條件', 400)
@@ -131,7 +133,7 @@ def search_user_by_query(query):
     return user
 
 
-def build_chart_stats_for_user(user_id):
+def build_chart_stats_for_user(user_id: int) -> dict[str, Any]:
     today = datetime.now(timezone.utc).date()
 
     timeline_ids = list_timeline_ids_for_user(user_id)

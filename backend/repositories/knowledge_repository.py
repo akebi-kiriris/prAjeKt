@@ -1,23 +1,25 @@
 from sqlalchemy import func, or_
+from collections.abc import Sequence
+from typing import Any
 
 from models import db
 from models.knowledge import KnowledgeChunk, KnowledgeDocument, KnowledgeDocumentEvent
 
 
 def create_knowledge_document(
-    user_id,
-    filename,
-    sha256,
-    project_id=None,
-    status="uploaded",
-    mime_type=None,
-    size_bytes=None,
-    source_text=None,
-    error_message=None,
-    file_path=None,
-    storage_key=None,
-    original_filename=None,
-):
+    user_id: int,
+    filename: str,
+    sha256: str,
+    project_id: int | None = None,
+    status: str = "uploaded",
+    mime_type: str | None = None,
+    size_bytes: int | None = None,
+    source_text: str | None = None,
+    error_message: str | None = None,
+    file_path: str | None = None,
+    storage_key: str | None = None,
+    original_filename: str | None = None,
+) -> KnowledgeDocument:
     document = KnowledgeDocument(
         user_id=user_id,
         project_id=project_id,
@@ -37,30 +39,30 @@ def create_knowledge_document(
     return document
 
 
-def get_knowledge_document_by_id(user_id, document_id):
+def get_knowledge_document_by_id(user_id: int, document_id: int) -> KnowledgeDocument | None:
     query = KnowledgeDocument.query.filter_by(id=document_id, user_id=user_id)
     return query.first()
 
 
-def get_knowledge_document_by_project_id(document_id, project_id):
+def get_knowledge_document_by_project_id(document_id: int, project_id: int | None) -> KnowledgeDocument | None:
     if project_id is None:
         return None
     return KnowledgeDocument.query.filter_by(id=document_id, project_id=project_id).first()
 
 
-def get_knowledge_document_by_sha256(user_id, sha256):
+def get_knowledge_document_by_sha256(user_id: int, sha256: str) -> KnowledgeDocument | None:
     return KnowledgeDocument.query.filter_by(user_id=user_id, sha256=sha256).first()
 
 
 def list_knowledge_documents_for_user(
-    user_id,
-    limit=50,
-    offset=0,
-    project_id=None,
-    query_text=None,
-    sort="created_desc",
-    status=None,
-):
+    user_id: int,
+    limit: int = 50,
+    offset: int = 0,
+    project_id: int | None = None,
+    query_text: str | None = None,
+    sort: str = "created_desc",
+    status: str | None = None,
+) -> list[KnowledgeDocument]:
     if project_id is not None:
         query = KnowledgeDocument.query.filter_by(project_id=project_id)
     else:
@@ -84,7 +86,12 @@ def list_knowledge_documents_for_user(
     return query.offset(offset).limit(limit).all()
 
 
-def update_knowledge_document_status(user_id, document_id, status, error_message=None):
+def update_knowledge_document_status(
+    user_id: int,
+    document_id: int,
+    status: str,
+    error_message: str | None = None,
+) -> KnowledgeDocument | None:
     document = get_knowledge_document_by_id(user_id=user_id, document_id=document_id)
     if document is None:
         return None
@@ -93,7 +100,11 @@ def update_knowledge_document_status(user_id, document_id, status, error_message
     return document
 
 
-def update_knowledge_document_status_by_id(document_id, status, error_message=None):
+def update_knowledge_document_status_by_id(
+    document_id: int,
+    status: str,
+    error_message: str | None = None,
+) -> KnowledgeDocument | None:
     document = KnowledgeDocument.query.filter_by(id=document_id).first()
     if document is None:
         return None
@@ -102,14 +113,14 @@ def update_knowledge_document_status_by_id(document_id, status, error_message=No
     return document
 
 
-def soft_delete_knowledge_document(document):
+def soft_delete_knowledge_document(document: KnowledgeDocument | None) -> bool:
     if document is None:
         return False
     document.deleted_at = func.now()
     return True
 
 
-def delete_knowledge_document_for_user(user_id, document_id):
+def delete_knowledge_document_for_user(user_id: int, document_id: int) -> bool:
     document = get_knowledge_document_by_id(user_id=user_id, document_id=document_id)
     if document is None:
         return False
@@ -117,14 +128,19 @@ def delete_knowledge_document_for_user(user_id, document_id):
     return True
 
 
-def delete_knowledge_document(document):
+def delete_knowledge_document(document: KnowledgeDocument | None) -> bool:
     if document is None:
         return False
     db.session.delete(document)
     return True
 
 
-def replace_knowledge_chunks_for_document(user_id, document_id, chunk_rows, project_id=None):
+def replace_knowledge_chunks_for_document(
+    user_id: int,
+    document_id: int,
+    chunk_rows: Sequence[dict[str, Any]],
+    project_id: int | None = None,
+) -> list[KnowledgeChunk]:
     if project_id is not None:
         q = KnowledgeChunk.query.filter_by(document_id=document_id, project_id=project_id)
     else:
@@ -151,7 +167,11 @@ def replace_knowledge_chunks_for_document(user_id, document_id, chunk_rows, proj
     return objects
 
 
-def list_knowledge_chunks_for_document(user_id, document_id, project_id=None):
+def list_knowledge_chunks_for_document(
+    user_id: int,
+    document_id: int,
+    project_id: int | None = None,
+) -> list[KnowledgeChunk]:
     if project_id is not None:
         query = KnowledgeChunk.query.filter_by(document_id=document_id, project_id=project_id)
     else:
@@ -159,7 +179,12 @@ def list_knowledge_chunks_for_document(user_id, document_id, project_id=None):
     return query.order_by(KnowledgeChunk.id.asc()).all()
 
 
-def search_knowledge_chunks_by_l2_distance(user_id, query_embedding, limit=8, project_id=None):
+def search_knowledge_chunks_by_l2_distance(
+    user_id: int,
+    query_embedding: Sequence[float],
+    limit: int = 8,
+    project_id: int | None = None,
+) -> list[KnowledgeChunk]:
     if project_id is not None:
         base_query = KnowledgeChunk.query.filter(KnowledgeChunk.project_id == project_id)
     else:
@@ -172,7 +197,12 @@ def search_knowledge_chunks_by_l2_distance(user_id, query_embedding, limit=8, pr
     return base_query.order_by(distance_fn(query_embedding)).limit(limit).all()
 
 
-def search_knowledge_chunks_with_scores(user_id, query_embedding, limit=8, project_id=None):
+def search_knowledge_chunks_with_scores(
+    user_id: int,
+    query_embedding: Sequence[float],
+    limit: int = 8,
+    project_id: int | None = None,
+) -> list[dict[str, Any]]:
     distance_fn = getattr(KnowledgeChunk.embedding, "l2_distance", None)
     if not callable(distance_fn):
         return []
@@ -191,7 +221,12 @@ def search_knowledge_chunks_with_scores(user_id, query_embedding, limit=8, proje
     return [{"chunk": chunk, "distance": float(distance)} for chunk, distance in rows]
 
 
-def search_knowledge_chunks_by_text(user_id, query_text, limit=8, project_id=None):
+def search_knowledge_chunks_by_text(
+    user_id: int,
+    query_text: str | None,
+    limit: int = 8,
+    project_id: int | None = None,
+) -> list[KnowledgeChunk]:
     text = (query_text or "").strip()
     query = (
         KnowledgeChunk.query
@@ -222,7 +257,11 @@ def search_knowledge_chunks_by_text(user_id, query_text, limit=8, project_id=Non
     return query.order_by(KnowledgeChunk.id.desc()).limit(limit).all()
 
 
-def count_knowledge_chunks_for_document(user_id, document_id, project_id=None):
+def count_knowledge_chunks_for_document(
+    user_id: int,
+    document_id: int,
+    project_id: int | None = None,
+) -> int:
     q = db.session.query(func.count(KnowledgeChunk.id)).filter(
         KnowledgeChunk.document_id == document_id,
     )
@@ -234,12 +273,12 @@ def count_knowledge_chunks_for_document(user_id, document_id, project_id=None):
 
 
 def create_knowledge_document_event(
-    document_id,
-    project_id,
-    actor_user_id,
-    event_type,
-    event_payload=None,
-):
+    document_id: int,
+    project_id: int | None,
+    actor_user_id: int | None,
+    event_type: str,
+    event_payload: dict[str, Any] | None = None,
+) -> KnowledgeDocumentEvent:
     event = KnowledgeDocumentEvent(
         document_id=document_id,
         project_id=project_id,
@@ -252,7 +291,11 @@ def create_knowledge_document_event(
     return event
 
 
-def list_knowledge_document_events(project_id, limit=50, offset=0):
+def list_knowledge_document_events(
+    project_id: int,
+    limit: int = 50,
+    offset: int = 0,
+) -> list[KnowledgeDocumentEvent]:
     return (
         KnowledgeDocumentEvent.query.filter_by(project_id=project_id)
         .order_by(KnowledgeDocumentEvent.created_at.desc())

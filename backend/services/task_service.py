@@ -5,6 +5,8 @@ import os
 import re
 import time
 import uuid
+from collections.abc import Iterable
+from typing import Any
 
 from pydantic import ValidationError
 from models.subtask import Subtask
@@ -104,17 +106,17 @@ MAX_TASK_FILE_SIZE = 10 * 1024 * 1024
 
 
 class TaskOperationError(Exception):
-    def __init__(self, message, status_code):
+    def __init__(self, message: str, status_code: int):
         super().__init__(message)
         self.message = message
         self.status_code = status_code
 
 
-def find_unknown_fields(payload, allowed_fields):
+def find_unknown_fields(payload: dict[str, Any], allowed_fields: set[str]) -> list[str]:
     return sorted(set(payload.keys()) - allowed_fields)
 
 
-def normalize_assignee_user_ids(raw_value):
+def normalize_assignee_user_ids(raw_value: Any) -> list[int]:
     if raw_value in (None, ''):
         return []
 
@@ -141,7 +143,7 @@ def normalize_assignee_user_ids(raw_value):
     return normalized
 
 
-def normalize_depends_on_task_ids(raw_value):
+def normalize_depends_on_task_ids(raw_value: Any) -> list[int]:
     if raw_value in (None, ''):
         return []
 
@@ -168,7 +170,11 @@ def normalize_depends_on_task_ids(raw_value):
     return normalized
 
 
-def validate_dependency_task_ids(timeline_id, depends_on_task_ids, current_task_id=None):
+def validate_dependency_task_ids(
+    timeline_id: int | None,
+    depends_on_task_ids: list[int],
+    current_task_id: int | None = None,
+) -> None:
     if not depends_on_task_ids:
         return
 
@@ -185,7 +191,7 @@ def validate_dependency_task_ids(timeline_id, depends_on_task_ids, current_task_
         raise TaskOperationError('depends_on_task_ids 包含非同專案任務', 400)
 
 
-def _build_task_create_payload(data):
+def _build_task_create_payload(data: dict[str, Any]) -> dict[str, Any]:
     create_input = _validate_task_create_input(data)
 
     return {
@@ -199,13 +205,13 @@ def _build_task_create_payload(data):
     }
 
 
-def _validation_error_to_task_operation_error(err):
+def _validation_error_to_task_operation_error(err: ValidationError) -> TaskOperationError:
     first_error = err.errors()[0] if err.errors() else {}
     message = str(first_error.get('msg') or '參數格式錯誤')
     return TaskOperationError(message, 400)
 
 
-def _validate_task_create_input(data):
+def _validate_task_create_input(data: dict[str, Any]) -> TaskCreateInput:
     payload = {
         'status': data.get('status', 'pending'),
         'priority': data.get('priority', 2),
@@ -219,21 +225,21 @@ def _validate_task_create_input(data):
         raise _validation_error_to_task_operation_error(err) from err
 
 
-def _validate_task_update_input(data):
+def _validate_task_update_input(data: dict[str, Any]) -> TaskUpdateInput:
     try:
         return TaskUpdateInput.model_validate(data)
     except ValidationError as err:
         raise _validation_error_to_task_operation_error(err) from err
 
 
-def _validate_task_status_update_input(new_status):
+def _validate_task_status_update_input(new_status: str) -> TaskStatusUpdateInput:
     try:
         return TaskStatusUpdateInput(status=new_status)
     except ValidationError as err:
         raise _validation_error_to_task_operation_error(err) from err
 
 
-def _validate_task_create_membership(timeline_id, assignee_user_ids):
+def _validate_task_create_membership(timeline_id: int | None, assignee_user_ids: list[int]) -> None:
     if not timeline_id or not assignee_user_ids:
         return
 
@@ -243,7 +249,11 @@ def _validate_task_create_membership(timeline_id, assignee_user_ids):
         raise TaskOperationError('指派名單包含非專案成員', 400)
 
 
-def _create_task_with_members_and_notifications(user_id, data, payload):
+def _create_task_with_members_and_notifications(
+    user_id: int,
+    data: dict[str, Any],
+    payload: dict[str, Any],
+) -> int:
     with transaction(TaskOperationError, '任務新增失敗，請稍後再試'):
         new_task = build_task_entity(
             user_id=user_id,
@@ -285,7 +295,13 @@ def _create_task_with_members_and_notifications(user_id, data, payload):
         return new_task.task_id
 
 
-def create_notification(user_id, ntype, title, content=None, link=None):
+def create_notification(
+    user_id: int,
+    ntype: str,
+    title: str,
+    content: str | None = None,
+    link: str | None = None,
+) -> None:
     """建立通知的工具函式，失敗時靜默不影響主流程。"""
     try:
         notif = build_notification_entity(
@@ -300,7 +316,7 @@ def create_notification(user_id, ntype, title, content=None, link=None):
         pass
 
 
-def get_user_task_role(user_id, task_id):
+def get_user_task_role(user_id: int, task_id: int) -> int | None:
     """查詢使用者在某任務的角色。"""
     member = get_task_member(task_id, user_id)
     if member:
@@ -315,7 +331,7 @@ def get_user_task_role(user_id, task_id):
     return None
 
 
-def can_manage_task_members(operator_user_id, task):
+def can_manage_task_members(operator_user_id: int, task: Task) -> bool:
     """檢查是否可管理任務成員（任務主責/建立者/專案主責）。"""
     task_role = get_user_task_role(operator_user_id, task.task_id)
     is_task_owner = (task_role == 0) or (task.user_id == operator_user_id)
@@ -328,7 +344,7 @@ def can_manage_task_members(operator_user_id, task):
     return is_task_owner or is_timeline_owner
 
 
-def task_member_to_dict(task_member, user, include_contact=False):
+def task_member_to_dict(task_member: TaskUser, user: Any, include_contact: bool = False) -> dict[str, Any]:
     payload = {
         'user_id': user.id,
         'name': user.name,
@@ -343,7 +359,12 @@ def task_member_to_dict(task_member, user, include_contact=False):
     return payload
 
 
-def build_task_member_list(task_id, viewer_user_id=None, include_contact=False, users_map=None):
+def build_task_member_list(
+    task_id: int,
+    viewer_user_id: int | None = None,
+    include_contact: bool = False,
+    users_map: dict[int, Any] | None = None,
+) -> list[dict[str, Any]]:
     members = list_task_members(task_id)
     result = []
     viewer_role = None
@@ -365,7 +386,12 @@ def build_task_member_list(task_id, viewer_user_id=None, include_contact=False, 
     return result, viewer_role
 
 
-def task_list_item_to_dict(task, member_list, subtask_list, is_owner):
+def task_list_item_to_dict(
+    task: Task,
+    member_list: list[dict[str, Any]],
+    subtask_list: list[dict[str, Any]],
+    is_owner: bool,
+) -> dict[str, Any]:
     return {
         'task_id': task.task_id,
         'name': task.name,
@@ -390,7 +416,7 @@ def task_list_item_to_dict(task, member_list, subtask_list, is_owner):
     }
 
 
-def task_comment_to_dict(comment, user):
+def task_comment_to_dict(comment: TaskComment, user: Any) -> dict[str, Any]:
     return {
         'comment_id': comment.comment_id,
         'user_id': comment.user_id,
@@ -412,7 +438,7 @@ def _find_active_task_or_404(task_id):
     return task
 
 
-def list_tasks_for_user(user_id):
+def list_tasks_for_user(user_id: int) -> list[dict[str, Any]]:
     own_tasks = get_owned_active_tasks(user_id)
     assigned_task_ids = get_assigned_task_ids_for_user(user_id)
     assigned_tasks = get_active_tasks_by_ids(assigned_task_ids)
@@ -459,7 +485,7 @@ def list_tasks_for_user(user_id):
     return result
 
 
-def create_task_for_user(user_id, data):
+def create_task_for_user(user_id: int, data: dict[str, Any]) -> int:
     unknown_fields = find_unknown_fields(data, TASK_CREATE_ALLOWED_FIELDS)
     if unknown_fields:
         raise TaskOperationError(f'不允許的欄位: {", ".join(unknown_fields)}', 400)
@@ -476,7 +502,7 @@ def create_task_for_user(user_id, data):
     return _create_task_with_members_and_notifications(user_id=user_id, data=data, payload=payload)
 
 
-def update_task_for_member(task_id, data):
+def update_task_for_member(task_id: int, data: dict[str, Any]) -> None:
     task = _find_active_task_or_404(task_id)
 
     unknown_fields = find_unknown_fields(data, TASK_UPDATE_ALLOWED_FIELDS)
@@ -540,20 +566,20 @@ def update_task_for_member(task_id, data):
             task.end_date = update_input.end_date
 
 
-def soft_delete_task_for_owner(task_id):
+def soft_delete_task_for_owner(task_id: int) -> None:
     task = _find_active_task_or_404(task_id)
     with transaction(TaskOperationError, '任務刪除失敗，請稍後再試'):
         task.deleted_at = _utcnow_naive()
 
 
-def toggle_task_for_member(task_id):
+def toggle_task_for_member(task_id: int) -> bool:
     task = _find_active_task_or_404(task_id)
     with transaction(TaskOperationError, '狀態更新失敗，請稍後再試'):
         task.change_status('pending' if task.completed else 'completed', completed_at_fallback=_utcnow_naive())
     return task.completed
 
 
-def list_upcoming_tasks_for_user(user_id):
+def list_upcoming_tasks_for_user(user_id: int) -> list[dict[str, Any]]:
     today = datetime.now(timezone.utc).date()
     threshold = today + timedelta(days=3)
 
@@ -588,12 +614,17 @@ def list_upcoming_tasks_for_user(user_id):
     return result
 
 
-def get_task_members_with_contact(task_id):
+def get_task_members_with_contact(task_id: int) -> list[dict[str, Any]]:
     members, _ = build_task_member_list(task_id, include_contact=True)
     return members
 
 
-def add_task_member_for_operator(task_id, operator_user_id, new_user_id, role=1):
+def add_task_member_for_operator(
+    task_id: int,
+    operator_user_id: int,
+    new_user_id: int,
+    role: int = 1,
+) -> None:
     task = get_task_by_id(task_id)
     if not task:
         raise TaskOperationError('找不到該任務', 404)
@@ -626,7 +657,7 @@ def add_task_member_for_operator(task_id, operator_user_id, new_user_id, role=1)
     return {'message': '成員新增成功'}
 
 
-def remove_task_member_for_owner(task_id, member_id):
+def remove_task_member_for_owner(task_id: int, member_id: int) -> None:
     target = get_task_member(task_id, member_id)
     if target and target.role == 0:
         raise TaskOperationError('無法移除負責人', 400)
@@ -635,7 +666,12 @@ def remove_task_member_for_owner(task_id, member_id):
         remove_task_member(task_id, member_id)
 
 
-def update_task_member_role_for_operator(task_id, member_id, new_role, operator_user_id):
+def update_task_member_role_for_operator(
+    task_id: int,
+    member_id: int,
+    new_role: int,
+    operator_user_id: int,
+) -> None:
     if new_role not in (0, 1):
         raise TaskOperationError('role 只允許 0(負責人) 或 1(協作者)', 400)
 
@@ -667,7 +703,7 @@ def update_task_member_role_for_operator(task_id, member_id, new_role, operator_
             target.role = 0
 
 
-def list_task_comments_for_member(task_id):
+def list_task_comments_for_member(task_id: int) -> list[dict[str, Any]]:
     comments = list_active_task_comments(task_id)
 
     result = []
@@ -677,7 +713,7 @@ def list_task_comments_for_member(task_id):
     return result
 
 
-def add_task_comment_for_member(task_id, user_id, data):
+def add_task_comment_for_member(task_id: int, user_id: int, data: dict[str, Any]) -> int:
     message = data.get('message') or data.get('task_message')
     if not message:
         raise TaskOperationError('請提供留言內容', 400)
@@ -721,7 +757,7 @@ def add_task_comment_for_member(task_id, user_id, data):
     }
 
 
-def soft_delete_task_comment_for_user(task_id, comment_id, user_id):
+def soft_delete_task_comment_for_user(task_id: int, comment_id: int, user_id: int) -> None:
     comment = get_active_task_comment(task_id, comment_id)
 
     if not comment:
@@ -734,12 +770,12 @@ def soft_delete_task_comment_for_user(task_id, comment_id, user_id):
         comment.deleted_at = _utcnow_naive()
 
 
-def list_subtasks_for_task(task_id):
+def list_subtasks_for_task(task_id: int) -> list[dict[str, Any]]:
     subtasks = list_subtasks(task_id)
     return [subtask.to_dict() for subtask in subtasks]
 
 
-def create_subtask_for_task(task_id, name):
+def create_subtask_for_task(task_id: int, name: str) -> int:
     if not name:
         raise TaskOperationError('請提供子任務名稱', 400)
 
@@ -762,7 +798,7 @@ def _find_subtask_or_404(task_id, subtask_id):
     return subtask
 
 
-def update_subtask_for_task(task_id, subtask_id, data):
+def update_subtask_for_task(task_id: int, subtask_id: int, data: dict[str, Any]) -> None:
     subtask = _find_subtask_or_404(task_id, subtask_id)
 
     with transaction(TaskOperationError, '子任務更新失敗，請稍後再試'):
@@ -775,21 +811,21 @@ def update_subtask_for_task(task_id, subtask_id, data):
     return subtask.to_dict()
 
 
-def delete_subtask_for_task(task_id, subtask_id):
+def delete_subtask_for_task(task_id: int, subtask_id: int) -> None:
     subtask = _find_subtask_or_404(task_id, subtask_id)
 
     with transaction(TaskOperationError, '子任務刪除失敗，請稍後再試'):
         delete_entity(subtask)
 
 
-def toggle_subtask_for_task(task_id, subtask_id):
+def toggle_subtask_for_task(task_id: int, subtask_id: int) -> bool:
     subtask = _find_subtask_or_404(task_id, subtask_id)
     with transaction(TaskOperationError, '狀態更新失敗，請稍後再試'):
         subtask.completed = not subtask.completed
     return subtask.to_dict()
 
 
-def update_task_status_for_member(task_id, new_status):
+def update_task_status_for_member(task_id: int, new_status: str) -> None:
     task = _find_active_task_or_404(task_id)
     status_input = _validate_task_status_update_input(new_status)
 
@@ -801,7 +837,7 @@ def update_task_status_for_member(task_id, new_status):
     }
 
 
-def summarize_task_comments_for_member(task_id):
+def summarize_task_comments_for_member(task_id: int) -> dict[str, Any]:
     task = _find_active_task_or_404(task_id)
 
     comments = list_active_task_comments(task_id, ascending=True)
@@ -842,7 +878,7 @@ def summarize_task_comments_for_member(task_id):
         raise TaskOperationError('AI 摘要失敗，請稍後再試', 500) from exc
 
 
-def is_allowed_task_file(filename):
+def is_allowed_task_file(filename: str) -> bool:
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_TASK_FILE_EXTENSIONS
 
 
@@ -864,7 +900,7 @@ def _cleanup_task_upload_files(*file_paths):
         _remove_file_if_exists(file_path)
 
 
-def list_task_files_for_member(task_id):
+def list_task_files_for_member(task_id: int) -> list[dict[str, Any]]:
     files = list_task_files(task_id)
     result = []
     for task_file in files:
@@ -882,7 +918,7 @@ def list_task_files_for_member(task_id):
     return result
 
 
-def upload_task_file_for_member(task_id, user_id, file_storage):
+def upload_task_file_for_member(task_id: int, user_id: int, file_storage: Any) -> dict[str, Any]:
     if not file_storage or not file_storage.filename:
         raise TaskOperationError('檔案名稱為空', 400)
 
@@ -935,7 +971,7 @@ def upload_task_file_for_member(task_id, user_id, file_storage):
         raise TaskOperationError('檔案上傳失敗，請稍後再試', 500) from exc
 
 
-def delete_task_file_for_user(task_id, file_id, user_id):
+def delete_task_file_for_user(task_id: int, file_id: int, user_id: int) -> None:
     role = get_user_task_role(user_id, task_id)
     if role is None:
         raise TaskOperationError('你沒有權限存取此任務', 403)
@@ -954,7 +990,7 @@ def delete_task_file_for_user(task_id, file_id, user_id):
     _remove_file_if_exists(file_path)
 
 
-def resolve_task_file_download_for_user(filename, user_id):
+def resolve_task_file_download_for_user(filename: str, user_id: int) -> tuple[str, str]:
     task_file = get_task_file_by_filename(filename)
     if not task_file:
         raise TaskOperationError('找不到該檔案', 404)
@@ -1082,7 +1118,11 @@ def _parse_fallback_summary(raw_text):
     )
 
 
-def build_task_comment_summary_context(task, comment_items, max_chars=12000):
+def build_task_comment_summary_context(
+    task: Task,
+    comment_items: list[TaskComment],
+    max_chars: int = 12000,
+) -> str:
     entries = []
     for item in comment_items:
         author = (item.get('user_name') or '未知使用者').strip()
@@ -1130,7 +1170,7 @@ def build_task_comment_summary_context(task, comment_items, max_chars=12000):
     }
 
 
-def generate_task_comment_summary(task, comment_items):
+def generate_task_comment_summary(task: Task, comment_items: list[TaskComment]) -> dict[str, Any]:
     """使用可配置的 AI Provider 生成任務留言摘要（決議/風險/下一步）"""
 
     context, meta = build_task_comment_summary_context(task, comment_items)

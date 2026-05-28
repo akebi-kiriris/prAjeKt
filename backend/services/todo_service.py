@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from typing import Any
 
 from models.todo import Todo
 from repositories.session_repository import add_entity
@@ -13,17 +14,17 @@ TODO_UPDATE_ALLOWED_FIELDS = {'title', 'content', 'type', 'deadline', 'priority'
 
 
 class TodoOperationError(Exception):
-    def __init__(self, message, status_code):
+    def __init__(self, message: str, status_code: int):
         super().__init__(message)
         self.message = message
         self.status_code = status_code
 
 
-def find_unknown_fields(payload, allowed_fields):
+def find_unknown_fields(payload: dict[str, Any], allowed_fields: set[str]) -> list[str]:
     return sorted(set(payload.keys()) - allowed_fields)
 
 
-def todo_to_dict(todo: Todo):
+def todo_to_dict(todo: Todo) -> dict[str, Any]:
     return {
         'id': todo.id,
         'title': todo.title,
@@ -37,11 +38,11 @@ def todo_to_dict(todo: Todo):
     }
 
 
-def _utcnow_naive():
+def _utcnow_naive() -> datetime:
     return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
-def _parse_priority(priority):
+def _parse_priority(priority: Any) -> int:
     try:
         parsed = int(priority)
     except (TypeError, ValueError):
@@ -53,21 +54,21 @@ def _parse_priority(priority):
     return parsed
 
 
-def _parse_deadline(deadline_value):
+def _parse_deadline(deadline_value: str | None) -> datetime | None:
     try:
         return datetime.fromisoformat(deadline_value) if deadline_value else None
     except ValueError:
         raise TodoOperationError('deadline 格式錯誤', 400)
 
 
-def _find_active_todo_or_404(todo_id, user_id):
+def _find_active_todo_or_404(todo_id: int, user_id: int) -> Todo:
     todo = get_active_todo_by_id_for_user(todo_id, user_id)
     if not todo:
         raise TodoOperationError('找不到該待辦事項', 404)
     return todo
 
 
-def list_todos_for_user(user_id, todo_id=None):
+def list_todos_for_user(user_id: int, todo_id: int | None = None) -> list[Todo]:
     if todo_id:
         todo = _find_active_todo_or_404(todo_id, user_id)
         return [todo]
@@ -75,7 +76,7 @@ def list_todos_for_user(user_id, todo_id=None):
     return list_active_todos_for_user(user_id)
 
 
-def create_todo_for_user(user_id, data):
+def create_todo_for_user(user_id: int, data: dict[str, Any]) -> int:
     unknown_fields = find_unknown_fields(data, TODO_CREATE_ALLOWED_FIELDS)
     if unknown_fields:
         raise TodoOperationError(f'不允許的欄位: {", ".join(unknown_fields)}', 400)
@@ -106,7 +107,7 @@ def create_todo_for_user(user_id, data):
     return new_todo.id
 
 
-def update_todo_for_user(todo_id, user_id, data):
+def update_todo_for_user(todo_id: int, user_id: int, data: dict[str, Any]) -> None:
     todo = _find_active_todo_or_404(todo_id, user_id)
 
     unknown_fields = find_unknown_fields(data, TODO_UPDATE_ALLOWED_FIELDS)
@@ -144,14 +145,14 @@ def update_todo_for_user(todo_id, user_id, data):
         pass
 
 
-def soft_delete_todo_for_user(todo_id, user_id):
+def soft_delete_todo_for_user(todo_id: int, user_id: int) -> None:
     todo = _find_active_todo_or_404(todo_id, user_id)
 
     with transaction(TodoOperationError, '待辦事項刪除失敗，請稍後再試'):
         todo.deleted_at = _utcnow_naive()
 
 
-def toggle_todo_for_user(todo_id, user_id):
+def toggle_todo_for_user(todo_id: int, user_id: int) -> bool:
     todo = _find_active_todo_or_404(todo_id, user_id)
     todo.completed = not todo.completed
     todo.completed_at = _utcnow_naive() if todo.completed else None

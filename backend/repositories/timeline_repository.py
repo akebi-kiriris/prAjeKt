@@ -1,4 +1,6 @@
 from sqlalchemy import or_
+from collections.abc import Sequence
+from datetime import datetime
 
 from models import db
 from models.task import Task
@@ -9,11 +11,11 @@ from models.timeline_user import TimelineUser
 from models.user import User
 
 
-def get_active_timeline_by_id(timeline_id):
+def get_active_timeline_by_id(timeline_id: int) -> Timeline | None:
     return Timeline.query.filter_by(id=timeline_id).filter(Timeline.deleted_at.is_(None)).first()
 
 
-def get_timeline_memberships_for_user(user_id):
+def get_timeline_memberships_for_user(user_id: int) -> list[tuple[Timeline, int]]:
     return (
         db.session.query(Timeline, TimelineUser.role)
         .join(TimelineUser, Timeline.id == TimelineUser.timeline_id)
@@ -22,7 +24,7 @@ def get_timeline_memberships_for_user(user_id):
     )
 
 
-def get_timeline_memberships_for_user_ordered_desc(user_id):
+def get_timeline_memberships_for_user_ordered_desc(user_id: int) -> list[tuple[Timeline, int]]:
     return (
         db.session.query(Timeline, TimelineUser.role)
         .join(TimelineUser, Timeline.id == TimelineUser.timeline_id)
@@ -32,11 +34,11 @@ def get_timeline_memberships_for_user_ordered_desc(user_id):
     )
 
 
-def get_active_tasks_by_timeline_id(timeline_id):
+def get_active_tasks_by_timeline_id(timeline_id: int) -> list[Task]:
     return Task.query.filter_by(timeline_id=timeline_id).filter(Task.deleted_at.is_(None)).all()
 
 
-def get_active_tasks_by_timeline_ids(timeline_ids):
+def get_active_tasks_by_timeline_ids(timeline_ids: Sequence[int]) -> list[Task]:
     if not timeline_ids:
         return []
 
@@ -46,7 +48,7 @@ def get_active_tasks_by_timeline_ids(timeline_ids):
     ).all()
 
 
-def get_active_incomplete_tasks_by_timeline_id(timeline_id):
+def get_active_incomplete_tasks_by_timeline_id(timeline_id: int) -> list[Task]:
     return (
         Task.query.filter_by(timeline_id=timeline_id)
         .filter(
@@ -57,7 +59,7 @@ def get_active_incomplete_tasks_by_timeline_id(timeline_id):
     )
 
 
-def get_active_tasks_by_timeline_id_ordered_end_date(timeline_id):
+def get_active_tasks_by_timeline_id_ordered_end_date(timeline_id: int) -> list[Task]:
     return (
         Task.query.filter_by(timeline_id=timeline_id)
         .filter(Task.deleted_at.is_(None))
@@ -66,44 +68,44 @@ def get_active_tasks_by_timeline_id_ordered_end_date(timeline_id):
     )
 
 
-def get_timeline_members(timeline_id):
+def get_timeline_members(timeline_id: int) -> list[TimelineUser]:
     return TimelineUser.query.filter_by(timeline_id=timeline_id).all()
 
 
-def get_timeline_member(timeline_id, user_id):
+def get_timeline_member(timeline_id: int, user_id: int) -> TimelineUser | None:
     return TimelineUser.query.filter_by(timeline_id=timeline_id, user_id=user_id).first()
 
 
-def get_timeline_role(timeline_id, user_id):
+def get_timeline_role(timeline_id: int, user_id: int) -> int | None:
     member = get_timeline_member(timeline_id, user_id)
     return member.role if member is not None else None
 
 
-def get_user_by_email(email):
+def get_user_by_email(email: str) -> User | None:
     return User.query.filter_by(email=email).first()
 
 
-def get_user_by_id(user_id):
+def get_user_by_id(user_id: int) -> User | None:
     return db.session.get(User, user_id)
 
 
-def get_task_users_by_task_ids(task_ids):
+def get_task_users_by_task_ids(task_ids: Sequence[int]) -> list[TaskUser]:
     if not task_ids:
         return []
     return TaskUser.query.filter(TaskUser.task_id.in_(task_ids)).all()
 
 
-def get_task_user_membership(task_id, user_id):
+def get_task_user_membership(task_id: int, user_id: int) -> TaskUser | None:
     return TaskUser.query.filter_by(task_id=task_id, user_id=user_id).first()
 
 
-def get_users_by_ids(user_ids):
+def get_users_by_ids(user_ids: Sequence[int]) -> list[User]:
     if not user_ids:
         return []
     return User.query.filter(User.id.in_(user_ids)).all()
 
 
-def get_active_timelines_by_ids(timeline_ids):
+def get_active_timelines_by_ids(timeline_ids: Sequence[int]) -> list[Timeline]:
     if not timeline_ids:
         return []
     return Timeline.query.filter(
@@ -112,11 +114,18 @@ def get_active_timelines_by_ids(timeline_ids):
     ).all()
 
 
-def get_timeline_by_id(timeline_id):
+def get_timeline_by_id(timeline_id: int) -> Timeline | None:
     return db.session.get(Timeline, timeline_id)
 
 
-def build_timeline_entity(*, user_id, name, start_date, end_date, remark):
+def build_timeline_entity(
+    *,
+    user_id: int,
+    name: str,
+    start_date: datetime | None,
+    end_date: datetime | None,
+    remark: str | None,
+) -> Timeline:
     return Timeline(
         user_id=user_id,
         name=name,
@@ -126,18 +135,18 @@ def build_timeline_entity(*, user_id, name, start_date, end_date, remark):
     )
 
 
-def build_timeline_member_entity(*, timeline_id, user_id, role):
+def build_timeline_member_entity(*, timeline_id: int, user_id: int, role: int) -> TimelineUser:
     return TimelineUser(timeline_id=timeline_id, user_id=user_id, role=role)
 
 
-def soft_delete_tasks_by_timeline_id(timeline_id, deleted_at):
+def soft_delete_tasks_by_timeline_id(timeline_id: int, deleted_at: datetime) -> int:
     return Task.query.filter_by(timeline_id=timeline_id).update(
         {'deleted_at': deleted_at},
         synchronize_session=False,
     )
 
 
-def soft_delete_tasks_by_ids(task_ids, deleted_at):
+def soft_delete_tasks_by_ids(task_ids: Sequence[int], deleted_at: datetime) -> int:
     if not task_ids:
         return 0
 
@@ -147,7 +156,12 @@ def soft_delete_tasks_by_ids(task_ids, deleted_at):
     )
 
 
-def list_recent_task_comments_for_timeline_period(timeline_id, period_start_dt, period_end_dt, limit=20):
+def list_recent_task_comments_for_timeline_period(
+    timeline_id: int,
+    period_start_dt: datetime,
+    period_end_dt: datetime,
+    limit: int = 20,
+) -> list[TaskComment]:
     return (
         TaskComment.query.join(Task, Task.task_id == TaskComment.task_id)
         .filter(
@@ -163,11 +177,11 @@ def list_recent_task_comments_for_timeline_period(timeline_id, period_start_dt, 
     )
 
 
-def list_task_ids_by_assignee_user_id(user_id):
+def list_task_ids_by_assignee_user_id(user_id: int) -> list[int]:
     return [task_user.task_id for task_user in TaskUser.query.filter(TaskUser.user_id == user_id).all()]
 
 
-def list_task_ids_by_assignee_user_id_within(user_id, task_ids):
+def list_task_ids_by_assignee_user_id_within(user_id: int, task_ids: Sequence[int]) -> list[int]:
     if not task_ids:
         return []
 
@@ -181,13 +195,13 @@ def list_task_ids_by_assignee_user_id_within(user_id, task_ids):
 
 
 def list_cross_project_active_tasks_for_assignee(
-    assignee_user_id,
-    current_timeline_id,
-    assignee_task_id_set,
-    excluded_task_id=None,
-    window_start=None,
-    window_end=None,
-):
+    assignee_user_id: int,
+    current_timeline_id: int,
+    assignee_task_id_set: Sequence[int],
+    excluded_task_id: int | None = None,
+    window_start: datetime | None = None,
+    window_end: datetime | None = None,
+) -> list[Task]:
     query = Task.query.filter(
         Task.deleted_at.is_(None),
         Task.completed == False,
@@ -220,12 +234,12 @@ def list_cross_project_active_tasks_for_assignee(
 
 
 def list_active_tasks_for_assignee(
-    assignee_user_id,
-    assignee_task_id_set,
-    excluded_task_id=None,
-    window_start=None,
-    window_end=None,
-):
+    assignee_user_id: int,
+    assignee_task_id_set: Sequence[int],
+    excluded_task_id: int | None = None,
+    window_start: datetime | None = None,
+    window_end: datetime | None = None,
+) -> list[Task]:
     query = Task.query.filter(
         Task.deleted_at.is_(None),
         Task.completed == False,
@@ -258,16 +272,16 @@ def list_active_tasks_for_assignee(
 
 def build_timeline_task_entity(
     *,
-    user_id,
-    timeline_id,
-    name,
-    priority,
-    status,
-    task_remark,
-    start_date,
-    end_date,
-    is_work=1,
-):
+    user_id: int,
+    timeline_id: int,
+    name: str,
+    priority: int,
+    status: str,
+    task_remark: str | None,
+    start_date: datetime | None,
+    end_date: datetime | None,
+    is_work: int = 1,
+) -> Task:
     return Task(
         user_id=user_id,
         timeline_id=timeline_id,

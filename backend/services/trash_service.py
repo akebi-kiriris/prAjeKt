@@ -1,4 +1,7 @@
 import os
+from typing import Any
+from models.task import Task
+from models.timeline import Timeline
 
 from repositories.trash_repository import (
     get_deleted_task_by_owner,
@@ -16,13 +19,13 @@ from services.transactions import transaction
 
 
 class TrashOperationError(Exception):
-    def __init__(self, message, status_code):
+    def __init__(self, message: str, status_code: int):
         super().__init__(message)
         self.message = message
         self.status_code = status_code
 
 
-def trash_task_to_dict(task, user_id):
+def trash_task_to_dict(task: Task, user_id: int) -> dict[str, Any]:
     return {
         'task_id': task.task_id,
         'name': task.name,
@@ -33,7 +36,7 @@ def trash_task_to_dict(task, user_id):
     }
 
 
-def trash_timeline_to_dict(timeline, user_id):
+def trash_timeline_to_dict(timeline: Timeline, user_id: int) -> dict[str, Any]:
     return {
         'id': timeline.id,
         'name': timeline.name,
@@ -44,12 +47,12 @@ def trash_timeline_to_dict(timeline, user_id):
     }
 
 
-def remove_task_files(task):
+def remove_task_files(task: Task) -> None:
     for file_path in get_task_file_paths(task):
         remove_file_if_exists(file_path)
 
 
-def get_task_file_paths(task):
+def get_task_file_paths(task: Task) -> list[str]:
     paths = []
     for task_file in task.files:
         if task_file.file_path:
@@ -57,12 +60,12 @@ def get_task_file_paths(task):
     return paths
 
 
-def remove_file_if_exists(file_path):
+def remove_file_if_exists(file_path: str | None) -> None:
     if file_path and os.path.exists(file_path):
         os.remove(file_path)
 
 
-def get_trash_payload(user_id):
+def get_trash_payload(user_id: int) -> dict[str, list[dict[str, Any]]]:
     own_deleted_tasks = list_deleted_owned_tasks(user_id)
 
     assigned_ids = list_member_task_ids(user_id)
@@ -82,7 +85,7 @@ def get_trash_payload(user_id):
     return {'tasks': tasks_result, 'timelines': timelines_result}
 
 
-def restore_task_for_owner(task_id, user_id):
+def restore_task_for_owner(task_id: int, user_id: int) -> None:
     task = get_deleted_task_by_owner(task_id, user_id)
     if not task:
         raise TrashOperationError('找不到該任務，或你沒有權限還原', 404)
@@ -91,7 +94,7 @@ def restore_task_for_owner(task_id, user_id):
         task.deleted_at = None
 
 
-def permanently_delete_task_for_owner(task_id, user_id):
+def permanently_delete_task_for_owner(task_id: int, user_id: int) -> None:
     task = get_deleted_task_by_owner(task_id, user_id)
     if not task:
         raise TrashOperationError('找不到該任務，或你沒有權限刪除', 404)
@@ -103,7 +106,7 @@ def permanently_delete_task_for_owner(task_id, user_id):
         remove_file_if_exists(file_path)
 
 
-def restore_timeline_for_owner(timeline_id, user_id):
+def restore_timeline_for_owner(timeline_id: int, user_id: int) -> None:
     timeline = get_deleted_timeline_by_owner(timeline_id, user_id)
     if not timeline:
         raise TrashOperationError('找不到該專案，或你沒有權限還原', 404)
@@ -112,7 +115,7 @@ def restore_timeline_for_owner(timeline_id, user_id):
         timeline.deleted_at = None
 
 
-def permanently_delete_timeline_for_owner(timeline_id, user_id):
+def permanently_delete_timeline_for_owner(timeline_id: int, user_id: int) -> None:
     timeline = get_deleted_timeline_by_owner(timeline_id, user_id)
     if not timeline:
         raise TrashOperationError('找不到該專案，或你沒有權限刪除', 404)

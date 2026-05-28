@@ -28,7 +28,7 @@ from services.transactions import transaction
 
 
 class KnowledgeOperationError(Exception):
-    def __init__(self, message, status_code=400):
+    def __init__(self, message: str, status_code: int = 400):
         super().__init__(message)
         self.message = message
         self.status_code = status_code
@@ -104,7 +104,7 @@ def _decode_text_content(filename: str, payload: bytes) -> str:
     raise KnowledgeOperationError("不支援的檔案格式", 400)
 
 
-def _doc_to_dict(document, chunk_count=None):
+def _doc_to_dict(document: Any, chunk_count: int | None = None) -> dict[str, Any]:
     return {
         "id": document.id,
         "filename": document.filename,
@@ -124,7 +124,7 @@ def _doc_to_dict(document, chunk_count=None):
     }
 
 
-def _event_to_dict(event):
+def _event_to_dict(event: Any) -> dict[str, Any]:
     return {
         "id": event.id,
         "document_id": event.document_id,
@@ -136,7 +136,7 @@ def _event_to_dict(event):
     }
 
 
-def _resolve_project_storage_path(project_id: int, filename: str):
+def _resolve_project_storage_path(project_id: int, filename: str) -> tuple[str, str]:
     upload_root = current_app.config.get("UPLOAD_FOLDER") or os.path.join(os.path.dirname(__file__), "..", "uploads")
     ext = _extract_extension(filename)
     token = uuid.uuid4().hex
@@ -146,7 +146,7 @@ def _resolve_project_storage_path(project_id: int, filename: str):
     return storage_key, abs_path
 
 
-def _save_project_file(project_id: int, filename: str, payload: bytes):
+def _save_project_file(project_id: int, filename: str, payload: bytes) -> tuple[str, str]:
     storage_key, abs_path = _resolve_project_storage_path(project_id=project_id, filename=filename)
     os.makedirs(os.path.dirname(abs_path), exist_ok=True)
     with open(abs_path, "wb") as fh:
@@ -154,7 +154,7 @@ def _save_project_file(project_id: int, filename: str, payload: bytes):
     return storage_key, abs_path
 
 
-def _delete_physical_file(file_path: str | None):
+def _delete_physical_file(file_path: str | None) -> None:
     if not file_path:
         return
     try:
@@ -165,13 +165,13 @@ def _delete_physical_file(file_path: str | None):
 
 
 def _record_project_document_event(
-    document_id,
-    project_id,
-    actor_user_id,
-    event_type,
-    event_payload=None,
-    error_message="建立專案檔案操作紀錄失敗",
-):
+    document_id: int,
+    project_id: int | None,
+    actor_user_id: int | None,
+    event_type: str,
+    event_payload: dict[str, Any] | None = None,
+    error_message: str = "建立專案檔案操作紀錄失敗",
+) -> None:
     if project_id is None:
         return
     with transaction(KnowledgeOperationError, error_message):
@@ -185,16 +185,16 @@ def _record_project_document_event(
 
 
 def _create_uploaded_document(
-    user_id,
-    project_id,
-    filename,
-    sha256,
-    mime_type,
-    content_size,
-    text_content,
-    file_path=None,
-    storage_key=None,
-):
+    user_id: int,
+    project_id: int | None,
+    filename: str,
+    sha256: str,
+    mime_type: str | None,
+    content_size: int,
+    text_content: str,
+    file_path: str | None = None,
+    storage_key: str | None = None,
+) -> Any:
     try:
         with transaction(KnowledgeOperationError, "建立知識文件失敗"):
             document = create_knowledge_document(
@@ -224,17 +224,17 @@ def _create_uploaded_document(
         raise
 
 
-def _mark_document_indexing(user_id, document_id):
+def _mark_document_indexing(user_id: int, document_id: int) -> None:
     with transaction(KnowledgeOperationError, "更新知識文件狀態失敗"):
         update_knowledge_document_status(user_id=user_id, document_id=document_id, status="indexing")
 
 
-def _mark_document_indexing_by_id(document_id):
+def _mark_document_indexing_by_id(document_id: int) -> None:
     with transaction(KnowledgeOperationError, "更新知識文件狀態失敗"):
         update_knowledge_document_status_by_id(document_id=document_id, status="indexing")
 
 
-def _build_chunk_rows(chunks, embeddings):
+def _build_chunk_rows(chunks: list[dict[str, Any]], embeddings: list[list[float]]) -> list[dict[str, Any]]:
     chunk_rows = []
     for chunk, embedding in zip(chunks, embeddings):
         metadata = dict(chunk.get("metadata") or {})
@@ -251,7 +251,12 @@ def _build_chunk_rows(chunks, embeddings):
     return chunk_rows
 
 
-def _replace_chunks_and_mark_ready(user_id, document_id, chunk_rows, project_id=None):
+def _replace_chunks_and_mark_ready(
+    user_id: int,
+    document_id: int,
+    chunk_rows: list[dict[str, Any]],
+    project_id: int | None = None,
+) -> None:
     with transaction(KnowledgeOperationError, "索引流程失敗"):
         replace_knowledge_chunks_for_document(
             user_id=user_id,
@@ -267,7 +272,12 @@ def _replace_chunks_and_mark_ready(user_id, document_id, chunk_rows, project_id=
         )
 
 
-def _replace_chunks_and_mark_ready_by_id(user_id, document_id, chunk_rows, project_id=None):
+def _replace_chunks_and_mark_ready_by_id(
+    user_id: int,
+    document_id: int,
+    chunk_rows: list[dict[str, Any]],
+    project_id: int | None = None,
+) -> None:
     with transaction(KnowledgeOperationError, "重建索引失敗"):
         replace_knowledge_chunks_for_document(
             user_id=user_id,
@@ -282,7 +292,7 @@ def _replace_chunks_and_mark_ready_by_id(user_id, document_id, chunk_rows, proje
         )
 
 
-def _mark_document_failed(user_id, document_id, error_message):
+def _mark_document_failed(user_id: int, document_id: int, error_message: str) -> None:
     with transaction(KnowledgeOperationError, "更新知識文件失敗狀態失敗"):
         update_knowledge_document_status(
             user_id=user_id,
@@ -292,7 +302,7 @@ def _mark_document_failed(user_id, document_id, error_message):
         )
 
 
-def _mark_document_failed_by_id(document_id, error_message):
+def _mark_document_failed_by_id(document_id: int, error_message: str) -> None:
     with transaction(KnowledgeOperationError, "更新知識文件失敗狀態失敗"):
         update_knowledge_document_status_by_id(
             document_id=document_id,
@@ -301,7 +311,11 @@ def _mark_document_failed_by_id(document_id, error_message):
         )
 
 
-def upload_and_index_knowledge_document(user_id, file_storage, project_id=None):
+def upload_and_index_knowledge_document(
+    user_id: int,
+    file_storage: Any,
+    project_id: int | None = None,
+) -> dict[str, Any]:
     content_bytes = _read_uploaded_file(file_storage)
     filename = str(file_storage.filename).strip()
     mime_type = getattr(file_storage, "mimetype", None)
@@ -387,14 +401,14 @@ def upload_and_index_knowledge_document(user_id, file_storage, project_id=None):
 
 
 def list_knowledge_documents(
-    user_id,
-    limit=50,
-    offset=0,
-    project_id=None,
-    q=None,
-    sort="created_desc",
-    status=None,
-):
+    user_id: int,
+    limit: int = 50,
+    offset: int = 0,
+    project_id: int | None = None,
+    q: str | None = None,
+    sort: str = "created_desc",
+    status: str | None = None,
+) -> dict[str, Any]:
     docs = list_knowledge_documents_for_user(
         user_id=user_id,
         limit=limit,
@@ -425,13 +439,17 @@ def list_knowledge_documents(
     }
 
 
-def _resolve_document_for_operation(user_id, document_id, project_id=None):
+def _resolve_document_for_operation(
+    user_id: int,
+    document_id: int,
+    project_id: int | None = None,
+) -> Any:
     if project_id is not None:
         return get_knowledge_document_by_project_id(document_id=document_id, project_id=project_id)
     return get_knowledge_document_by_id(user_id=user_id, document_id=document_id)
 
 
-def delete_knowledge_document(user_id, document_id, project_id=None):
+def delete_knowledge_document(user_id: int, document_id: int, project_id: int | None = None) -> dict[str, Any]:
     document = _resolve_document_for_operation(user_id=user_id, document_id=document_id, project_id=project_id)
     if document is None:
         raise KnowledgeOperationError("找不到知識文件", 404)
@@ -453,7 +471,7 @@ def delete_knowledge_document(user_id, document_id, project_id=None):
     return {"message": "知識文件已刪除", "document_id": document_id}
 
 
-def reindex_knowledge_document(user_id, document_id, project_id=None):
+def reindex_knowledge_document(user_id: int, document_id: int, project_id: int | None = None) -> dict[str, Any]:
     document = _resolve_document_for_operation(user_id=user_id, document_id=document_id, project_id=project_id)
     if document is None:
         raise KnowledgeOperationError("找不到知識文件", 404)
@@ -510,7 +528,11 @@ def reindex_knowledge_document(user_id, document_id, project_id=None):
     }
 
 
-def batch_delete_knowledge_documents(user_id, project_id, document_ids):
+def batch_delete_knowledge_documents(
+    user_id: int,
+    project_id: int,
+    document_ids: list[int],
+) -> dict[str, Any]:
     results = []
     for raw_id in document_ids:
         document_id = int(raw_id)
@@ -528,7 +550,11 @@ def batch_delete_knowledge_documents(user_id, project_id, document_ids):
     }
 
 
-def batch_reindex_knowledge_documents(user_id, project_id, document_ids):
+def batch_reindex_knowledge_documents(
+    user_id: int,
+    project_id: int,
+    document_ids: list[int],
+) -> dict[str, Any]:
     results = []
     for raw_id in document_ids:
         document_id = int(raw_id)
@@ -554,7 +580,12 @@ def batch_reindex_knowledge_documents(user_id, project_id, document_ids):
     }
 
 
-def get_project_knowledge_document_file(user_id, project_id, document_id, event_type="download"):
+def get_project_knowledge_document_file(
+    user_id: int,
+    project_id: int,
+    document_id: int,
+    event_type: str = "download",
+) -> Any:
     document = _resolve_document_for_operation(user_id=user_id, document_id=document_id, project_id=project_id)
     if document is None or document.deleted_at is not None:
         raise KnowledgeOperationError("找不到知識文件", 404)
@@ -571,7 +602,7 @@ def get_project_knowledge_document_file(user_id, project_id, document_id, event_
     return document
 
 
-def list_project_knowledge_events(project_id, limit=50, offset=0):
+def list_project_knowledge_events(project_id: int, limit: int = 50, offset: int = 0) -> dict[str, Any]:
     events = list_knowledge_document_events(project_id=project_id, limit=limit, offset=offset)
     return {
         "message": "專案檔案操作紀錄",

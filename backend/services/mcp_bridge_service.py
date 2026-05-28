@@ -5,6 +5,7 @@ import sys
 import threading
 from pathlib import Path
 from typing import Any
+from types import TracebackType
 
 
 class MCPBridgeError(Exception):
@@ -21,12 +22,17 @@ class _MCPSubprocessClient:
         self._request_id = 0
         self._process: subprocess.Popen[str] | None = None
 
-    def __enter__(self):
+    def __enter__(self) -> "_MCPSubprocessClient":
         self._start_process()
         self._initialize()
         return self
 
-    def __exit__(self, exc_type, exc, tb):
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> None:
         self._shutdown()
 
     def _start_process(self) -> None:
