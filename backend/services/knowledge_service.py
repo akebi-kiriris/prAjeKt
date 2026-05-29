@@ -1,4 +1,4 @@
-import hashlib
+﻿import hashlib
 import os
 import uuid
 from io import BytesIO
@@ -316,6 +316,19 @@ def upload_and_index_knowledge_document(
     file_storage: Any,
     project_id: int | None = None,
 ) -> dict[str, Any]:
+    """上傳單一知識文件並完成切塊、向量化與索引入庫。
+
+    參數:
+        user_id: 擁有者使用者 id。
+        file_storage: 上傳檔案物件。
+        project_id: 可選的專案範圍知識 id。
+
+    回傳:
+        含文件資訊與切塊數量的回應資料。
+
+    例外:
+        KnowledgeOperationError: 驗證失敗、解析失敗、向量化失敗或資料寫入失敗。
+    """
     content_bytes = _read_uploaded_file(file_storage)
     filename = str(file_storage.filename).strip()
     mime_type = getattr(file_storage, "mimetype", None)
@@ -409,6 +422,7 @@ def list_knowledge_documents(
     sort: str = "created_desc",
     status: str | None = None,
 ) -> dict[str, Any]:
+    """列出知識文件，支援查詢與排序選項。"""
     docs = list_knowledge_documents_for_user(
         user_id=user_id,
         limit=limit,
@@ -450,6 +464,11 @@ def _resolve_document_for_operation(
 
 
 def delete_knowledge_document(user_id: int, document_id: int, project_id: int | None = None) -> dict[str, Any]:
+    """刪除單一知識文件（個人文件為硬刪除、專案文件為軟刪除）。
+
+    例外:
+        KnowledgeOperationError: 文件不存在或刪除失敗。
+    """
     document = _resolve_document_for_operation(user_id=user_id, document_id=document_id, project_id=project_id)
     if document is None:
         raise KnowledgeOperationError("找不到知識文件", 404)
@@ -472,6 +491,11 @@ def delete_knowledge_document(user_id: int, document_id: int, project_id: int | 
 
 
 def reindex_knowledge_document(user_id: int, document_id: int, project_id: int | None = None) -> dict[str, Any]:
+    """針對既有文件重建切塊與向量索引。
+
+    例外:
+        KnowledgeOperationError: 來源文字無效或重建索引失敗。
+    """
     document = _resolve_document_for_operation(user_id=user_id, document_id=document_id, project_id=project_id)
     if document is None:
         raise KnowledgeOperationError("找不到知識文件", 404)
@@ -533,6 +557,7 @@ def batch_delete_knowledge_documents(
     project_id: int,
     document_ids: list[int],
 ) -> dict[str, Any]:
+    """批次刪除專案知識文件，並回傳逐筆結果摘要。"""
     results = []
     for raw_id in document_ids:
         document_id = int(raw_id)
@@ -555,6 +580,7 @@ def batch_reindex_knowledge_documents(
     project_id: int,
     document_ids: list[int],
 ) -> dict[str, Any]:
+    """批次重建專案知識文件索引，並回傳逐筆結果摘要。"""
     results = []
     for raw_id in document_ids:
         document_id = int(raw_id)
@@ -586,6 +612,7 @@ def get_project_knowledge_document_file(
     document_id: int,
     event_type: str = "download",
 ) -> Any:
+    """解析專案知識檔案供下載/開啟流程使用。"""
     document = _resolve_document_for_operation(user_id=user_id, document_id=document_id, project_id=project_id)
     if document is None or document.deleted_at is not None:
         raise KnowledgeOperationError("找不到知識文件", 404)
@@ -603,9 +630,12 @@ def get_project_knowledge_document_file(
 
 
 def list_project_knowledge_events(project_id: int, limit: int = 50, offset: int = 0) -> dict[str, Any]:
+    """列出專案知識操作事件。"""
     events = list_knowledge_document_events(project_id=project_id, limit=limit, offset=offset)
     return {
         "message": "專案檔案操作紀錄",
         "events": [_event_to_dict(event) for event in events],
         "meta": {"limit": limit, "offset": offset, "count": len(events)},
     }
+
+

@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+﻿from datetime import datetime, timezone
 from typing import Any
 
 import networkx as nx
@@ -144,6 +144,15 @@ def _suggest_actions(is_critical: bool, is_overdue: bool, is_schedule_incomplete
 
 
 def build_critical_path_analysis_payload(timeline: Any, tasks: list[Any]) -> dict[str, Any]:
+    """建立單一專案的關鍵路徑與風險分析 payload。
+
+    參數:
+        timeline: Timeline entity.
+        tasks: Task entities in the timeline scope.
+
+    回傳:
+        Analysis payload containing summary, critical path, risk items, and graph data.
+    """
     warnings = []
     task_map = {task.task_id: task for task in tasks}
     graph = nx.DiGraph()
@@ -407,3 +416,4 @@ def build_critical_path_analysis_payload(timeline: Any, tasks: list[Any]) -> dic
             'edges': graph_edges,
         },
     }
+

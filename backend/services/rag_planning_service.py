@@ -1,4 +1,4 @@
-import os
+﻿import os
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
 from datetime import datetime, timezone
@@ -276,6 +276,18 @@ def _generate_rag_plan_with_timeout(llm: Any, user_request: str, retrieval_conte
 
 
 def suggest_plan_with_rag(user_id: int, payload: dict[str, Any]) -> dict[str, Any]:
+    """使用歷史資料與知識檢索生成規劃建議。
+
+    參數:
+        user_id: Request user id.
+        payload: RAG request payload including request text and retrieval options.
+
+    回傳:
+        AI suggestion payload with source references and metadata.
+
+    例外:
+        RAGPlanningOperationError: payload 無效、權限不足或缺少參考資料。
+    """
     if not isinstance(payload, dict):
         raise RAGPlanningOperationError("請提供正確的 JSON 物件", 400)
 
@@ -381,3 +393,5 @@ def suggest_plan_with_rag(user_id: int, payload: dict[str, Any]) -> dict[str, An
             "message": "AI 規劃建議完成（降級模式）",
             **fallback,
         }
+
+

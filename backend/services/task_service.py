@@ -1,4 +1,4 @@
-from collections import defaultdict
+﻿from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 import json
 import os
@@ -113,10 +113,16 @@ class TaskOperationError(Exception):
 
 
 def find_unknown_fields(payload: dict[str, Any], allowed_fields: set[str]) -> list[str]:
+    """依白名單回傳請求資料中的未知欄位。"""
     return sorted(set(payload.keys()) - allowed_fields)
 
 
 def normalize_assignee_user_ids(raw_value: Any) -> list[int]:
+    """將指派者 id 正規化為去重複的正整數清單。
+
+    例外:
+        TaskOperationError: 輸入不是有效的指派者 id 清單。
+    """
     if raw_value in (None, ''):
         return []
 
@@ -144,6 +150,11 @@ def normalize_assignee_user_ids(raw_value: Any) -> list[int]:
 
 
 def normalize_depends_on_task_ids(raw_value: Any) -> list[int]:
+    """將相依任務 id 正規化為去重複的正整數清單。
+
+    例外:
+        TaskOperationError: 輸入不是有效的相依任務 id 清單。
+    """
     if raw_value in (None, ''):
         return []
 
@@ -302,7 +313,7 @@ def create_notification(
     content: str | None = None,
     link: str | None = None,
 ) -> None:
-    """建立通知的工具函式，失敗時靜默不影響主流程。"""
+    """建立站內通知，失敗時不影響主流程。"""
     try:
         notif = build_notification_entity(
             user_id=user_id,
@@ -317,7 +328,7 @@ def create_notification(
 
 
 def get_user_task_role(user_id: int, task_id: int) -> int | None:
-    """查詢使用者在某任務的角色。"""
+    """查詢使用者在任務中的角色（任務成員優先，其次專案成員）。"""
     member = get_task_member(task_id, user_id)
     if member:
         return member.role
@@ -332,7 +343,7 @@ def get_user_task_role(user_id: int, task_id: int) -> int | None:
 
 
 def can_manage_task_members(operator_user_id: int, task: Task) -> bool:
-    """檢查是否可管理任務成員（任務主責/建立者/專案主責）。"""
+    """檢查操作者是否可管理任務成員（任務主責/建立者/專案主責）。"""
     task_role = get_user_task_role(operator_user_id, task.task_id)
     is_task_owner = (task_role == 0) or (task.user_id == operator_user_id)
 
@@ -345,6 +356,7 @@ def can_manage_task_members(operator_user_id: int, task: Task) -> bool:
 
 
 def task_member_to_dict(task_member: TaskUser, user: Any, include_contact: bool = False) -> dict[str, Any]:
+    """序列化單一任務成員回應資料。"""
     payload = {
         'user_id': user.id,
         'name': user.name,
@@ -365,6 +377,7 @@ def build_task_member_list(
     include_contact: bool = False,
     users_map: dict[int, Any] | None = None,
 ) -> list[dict[str, Any]]:
+    """建立任務成員清單，並依需求決定是否包含聯絡資訊。"""
     members = list_task_members(task_id)
     result = []
     viewer_role = None
@@ -392,6 +405,7 @@ def task_list_item_to_dict(
     subtask_list: list[dict[str, Any]],
     is_owner: bool,
 ) -> dict[str, Any]:
+    """序列化任務列表項目，整合成員、子任務與可見欄位。"""
     return {
         'task_id': task.task_id,
         'name': task.name,
@@ -417,6 +431,7 @@ def task_list_item_to_dict(
 
 
 def task_comment_to_dict(comment: TaskComment, user: Any) -> dict[str, Any]:
+    """序列化單一任務留言資料。"""
     return {
         'comment_id': comment.comment_id,
         'user_id': comment.user_id,
@@ -439,6 +454,7 @@ def _find_active_task_or_404(task_id):
 
 
 def list_tasks_for_user(user_id: int) -> list[dict[str, Any]]:
+    """列出使用者可存取任務，含成員與子任務資料。"""
     own_tasks = get_owned_active_tasks(user_id)
     assigned_task_ids = get_assigned_task_ids_for_user(user_id)
     assigned_tasks = get_active_tasks_by_ids(assigned_task_ids)
@@ -486,6 +502,11 @@ def list_tasks_for_user(user_id: int) -> list[dict[str, Any]]:
 
 
 def create_task_for_user(user_id: int, data: dict[str, Any]) -> int:
+    """為使用者建立任務，並可同時指定受指派者。
+
+    例外:
+        TaskOperationError: 驗證失敗、權限不足或資料寫入失敗。
+    """
     unknown_fields = find_unknown_fields(data, TASK_CREATE_ALLOWED_FIELDS)
     if unknown_fields:
         raise TaskOperationError(f'不允許的欄位: {", ".join(unknown_fields)}', 400)
@@ -503,6 +524,11 @@ def create_task_for_user(user_id: int, data: dict[str, Any]) -> int:
 
 
 def update_task_for_member(task_id: int, data: dict[str, Any]) -> None:
+    """由授權成員更新任務欄位（含狀態與相依關係）。
+
+    例外:
+        TaskOperationError: 驗證衝突、權限不足或更新失敗。
+    """
     task = _find_active_task_or_404(task_id)
 
     unknown_fields = find_unknown_fields(data, TASK_UPDATE_ALLOWED_FIELDS)
@@ -567,12 +593,14 @@ def update_task_for_member(task_id: int, data: dict[str, Any]) -> None:
 
 
 def soft_delete_task_for_owner(task_id: int) -> None:
+    """將任務標記為刪除，不移除實體資料。"""
     task = _find_active_task_or_404(task_id)
     with transaction(TaskOperationError, '任務刪除失敗，請稍後再試'):
         task.deleted_at = _utcnow_naive()
 
 
 def toggle_task_for_member(task_id: int) -> bool:
+    """切換任務完成狀態，並回傳更新後狀態。"""
     task = _find_active_task_or_404(task_id)
     with transaction(TaskOperationError, '狀態更新失敗，請稍後再試'):
         task.change_status('pending' if task.completed else 'completed', completed_at_fallback=_utcnow_naive())
@@ -580,6 +608,7 @@ def toggle_task_for_member(task_id: int) -> bool:
 
 
 def list_upcoming_tasks_for_user(user_id: int) -> list[dict[str, Any]]:
+    """列出接近截止日的任務供儀表板通知使用。"""
     today = datetime.now(timezone.utc).date()
     threshold = today + timedelta(days=3)
 
@@ -615,6 +644,7 @@ def list_upcoming_tasks_for_user(user_id: int) -> list[dict[str, Any]]:
 
 
 def get_task_members_with_contact(task_id: int) -> list[dict[str, Any]]:
+    """列出含聯絡欄位的任務成員。"""
     members, _ = build_task_member_list(task_id, include_contact=True)
     return members
 
@@ -625,6 +655,11 @@ def add_task_member_for_operator(
     new_user_id: int,
     role: int = 1,
 ) -> None:
+    """新增任務成員並設定角色，必要時發送通知。
+
+    例外:
+        TaskOperationError: 權限不足、使用者無效或成員重複。
+    """
     task = get_task_by_id(task_id)
     if not task:
         raise TaskOperationError('找不到該任務', 404)
@@ -658,6 +693,7 @@ def add_task_member_for_operator(
 
 
 def remove_task_member_for_owner(task_id: int, member_id: int) -> None:
+    """移除任務成員；若為負責人則拒絕移除。"""
     target = get_task_member(task_id, member_id)
     if target and target.role == 0:
         raise TaskOperationError('無法移除負責人', 400)
@@ -672,6 +708,7 @@ def update_task_member_role_for_operator(
     new_role: int,
     operator_user_id: int,
 ) -> None:
+    """更新任務成員角色，並套用負責人唯一性與權限限制。"""
     if new_role not in (0, 1):
         raise TaskOperationError('role 只允許 0(負責人) 或 1(協作者)', 400)
 
@@ -704,6 +741,7 @@ def update_task_member_role_for_operator(
 
 
 def list_task_comments_for_member(task_id: int) -> list[dict[str, Any]]:
+    """列出任務留言。"""
     comments = list_active_task_comments(task_id)
 
     result = []
@@ -714,6 +752,7 @@ def list_task_comments_for_member(task_id: int) -> list[dict[str, Any]]:
 
 
 def add_task_comment_for_member(task_id: int, user_id: int, data: dict[str, Any]) -> int:
+    """建立任務留言並通知其他相關成員。"""
     message = data.get('message') or data.get('task_message')
     if not message:
         raise TaskOperationError('請提供留言內容', 400)
@@ -758,6 +797,7 @@ def add_task_comment_for_member(task_id: int, user_id: int, data: dict[str, Any]
 
 
 def soft_delete_task_comment_for_user(task_id: int, comment_id: int, user_id: int) -> None:
+    """軟刪除單一任務留言。"""
     comment = get_active_task_comment(task_id, comment_id)
 
     if not comment:
@@ -771,11 +811,13 @@ def soft_delete_task_comment_for_user(task_id: int, comment_id: int, user_id: in
 
 
 def list_subtasks_for_task(task_id: int) -> list[dict[str, Any]]:
+    """列出單一任務的子任務。"""
     subtasks = list_subtasks(task_id)
     return [subtask.to_dict() for subtask in subtasks]
 
 
 def create_subtask_for_task(task_id: int, name: str) -> int:
+    """建立子任務並依既有排序追加到末端。"""
     if not name:
         raise TaskOperationError('請提供子任務名稱', 400)
 
@@ -799,6 +841,7 @@ def _find_subtask_or_404(task_id, subtask_id):
 
 
 def update_subtask_for_task(task_id: int, subtask_id: int, data: dict[str, Any]) -> None:
+    """更新子任務名稱、完成狀態或排序欄位。"""
     subtask = _find_subtask_or_404(task_id, subtask_id)
 
     with transaction(TaskOperationError, '子任務更新失敗，請稍後再試'):
@@ -812,6 +855,7 @@ def update_subtask_for_task(task_id: int, subtask_id: int, data: dict[str, Any])
 
 
 def delete_subtask_for_task(task_id: int, subtask_id: int) -> None:
+    """刪除指定子任務。"""
     subtask = _find_subtask_or_404(task_id, subtask_id)
 
     with transaction(TaskOperationError, '子任務刪除失敗，請稍後再試'):
@@ -819,6 +863,7 @@ def delete_subtask_for_task(task_id: int, subtask_id: int) -> None:
 
 
 def toggle_subtask_for_task(task_id: int, subtask_id: int) -> bool:
+    """切換子任務完成狀態並回傳更新後資料。"""
     subtask = _find_subtask_or_404(task_id, subtask_id)
     with transaction(TaskOperationError, '狀態更新失敗，請稍後再試'):
         subtask.completed = not subtask.completed
@@ -826,6 +871,7 @@ def toggle_subtask_for_task(task_id: int, subtask_id: int) -> bool:
 
 
 def update_task_status_for_member(task_id: int, new_status: str) -> None:
+    """依狀態契約驗證後更新任務狀態。"""
     task = _find_active_task_or_404(task_id)
     status_input = _validate_task_status_update_input(new_status)
 
@@ -838,6 +884,11 @@ def update_task_status_for_member(task_id: int, new_status: str) -> None:
 
 
 def summarize_task_comments_for_member(task_id: int) -> dict[str, Any]:
+    """從任務留言生成 AI 摘要。
+
+    例外:
+        TaskOperationError: 無可摘要留言內容或 AI 生成失敗。
+    """
     task = _find_active_task_or_404(task_id)
 
     comments = list_active_task_comments(task_id, ascending=True)
@@ -879,6 +930,7 @@ def summarize_task_comments_for_member(task_id: int) -> dict[str, Any]:
 
 
 def is_allowed_task_file(filename: str) -> bool:
+    """檢查檔名副檔名是否在允許上傳清單中。"""
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_TASK_FILE_EXTENSIONS
 
 
@@ -901,6 +953,7 @@ def _cleanup_task_upload_files(*file_paths):
 
 
 def list_task_files_for_member(task_id: int) -> list[dict[str, Any]]:
+    """列出任務檔案清單與上傳者資訊。"""
     files = list_task_files(task_id)
     result = []
     for task_file in files:
@@ -919,6 +972,11 @@ def list_task_files_for_member(task_id: int) -> list[dict[str, Any]]:
 
 
 def upload_task_file_for_member(task_id: int, user_id: int, file_storage: Any) -> dict[str, Any]:
+    """為任務上傳單一檔案。
+
+    例外:
+        TaskOperationError: 權限不足、驗證失敗或儲存/寫入失敗。
+    """
     if not file_storage or not file_storage.filename:
         raise TaskOperationError('檔案名稱為空', 400)
 
@@ -972,6 +1030,7 @@ def upload_task_file_for_member(task_id: int, user_id: int, file_storage: Any) -
 
 
 def delete_task_file_for_user(task_id: int, file_id: int, user_id: int) -> None:
+    """刪除任務檔案紀錄，並同步刪除實體檔案。"""
     role = get_user_task_role(user_id, task_id)
     if role is None:
         raise TaskOperationError('你沒有權限存取此任務', 403)
@@ -991,6 +1050,7 @@ def delete_task_file_for_user(task_id: int, file_id: int, user_id: int) -> None:
 
 
 def resolve_task_file_download_for_user(filename: str, user_id: int) -> tuple[str, str]:
+    """驗證下載權限後，回傳檔案路徑與下載檔名資訊。"""
     task_file = get_task_file_by_filename(filename)
     if not task_file:
         raise TaskOperationError('找不到該檔案', 404)
@@ -1123,6 +1183,7 @@ def build_task_comment_summary_context(
     comment_items: list[TaskComment],
     max_chars: int = 12000,
 ) -> str:
+    """建立留言摘要模型使用的精簡上下文文字。"""
     entries = []
     for item in comment_items:
         author = (item.get('user_name') or '未知使用者').strip()
@@ -1171,7 +1232,11 @@ def build_task_comment_summary_context(
 
 
 def generate_task_comment_summary(task: Task, comment_items: list[TaskComment]) -> dict[str, Any]:
-    """使用可配置的 AI Provider 生成任務留言摘要（決議/風險/下一步）"""
+    """使用設定的 AI 提供者生成結構化任務留言摘要。
+
+    例外:
+        TaskOperationError: AI 提供者呼叫失敗或解析失敗。
+    """
 
     context, meta = build_task_comment_summary_context(task, comment_items)
 
@@ -1216,3 +1281,5 @@ def generate_task_comment_summary(task: Task, comment_items: list[TaskComment]) 
     provider_name = os.getenv("AI_PROVIDER", "gemini").lower()
     meta['provider'] = provider_name if provider_name in ["gemini", "mock"] else "gemini"
     return summary, meta
+
+

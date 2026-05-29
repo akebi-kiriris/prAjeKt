@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+﻿from datetime import datetime, timezone
 from typing import Any
 
 from models.todo import Todo
@@ -21,10 +21,27 @@ class TodoOperationError(Exception):
 
 
 def find_unknown_fields(payload: dict[str, Any], allowed_fields: set[str]) -> list[str]:
+    """回傳 payload 中未預期的欄位鍵值。
+
+    參數:
+        payload: 輸入請求 payload。
+        allowed_fields: 允許的欄位集合。
+
+    回傳:
+        排序後的未知欄位名稱。
+    """
     return sorted(set(payload.keys()) - allowed_fields)
 
 
 def todo_to_dict(todo: Todo) -> dict[str, Any]:
+    """序列化待辦事項模型為 API payload。
+
+    參數:
+        todo: Todo 模型實例。
+
+    回傳:
+        可序列化的待辦事項 payload。
+    """
     return {
         'id': todo.id,
         'title': todo.title,
@@ -69,6 +86,18 @@ def _find_active_todo_or_404(todo_id: int, user_id: int) -> Todo:
 
 
 def list_todos_for_user(user_id: int, todo_id: int | None = None) -> list[Todo]:
+    """列出使用者待辦事項，或回傳指定待辦事項。
+
+    參數:
+        user_id: 擁有者使用者 id。
+        todo_id: 可選的單一待辦事項 id。
+
+    回傳:
+        Todo 模型清單。
+
+    例外:
+        TodoOperationError: 指定待辦事項不存在。
+    """
     if todo_id:
         todo = _find_active_todo_or_404(todo_id, user_id)
         return [todo]
@@ -77,6 +106,18 @@ def list_todos_for_user(user_id: int, todo_id: int | None = None) -> list[Todo]:
 
 
 def create_todo_for_user(user_id: int, data: dict[str, Any]) -> int:
+    """為使用者建立待辦事項。
+
+    參數:
+        user_id: 擁有者使用者 id。
+        data: 建立 payload。
+
+    回傳:
+        新建立的待辦事項 id。
+
+    例外:
+        TodoOperationError: 驗證失敗或資料寫入失敗。
+    """
     unknown_fields = find_unknown_fields(data, TODO_CREATE_ALLOWED_FIELDS)
     if unknown_fields:
         raise TodoOperationError(f'不允許的欄位: {", ".join(unknown_fields)}', 400)
@@ -108,6 +149,16 @@ def create_todo_for_user(user_id: int, data: dict[str, Any]) -> int:
 
 
 def update_todo_for_user(todo_id: int, user_id: int, data: dict[str, Any]) -> None:
+    """更新使用者的單一待辦事項。
+
+    參數:
+        todo_id: 目標待辦事項 id。
+        user_id: 擁有者使用者 id。
+        data: 更新 payload。
+
+    例外:
+        TodoOperationError: 驗證失敗或交易失敗。
+    """
     todo = _find_active_todo_or_404(todo_id, user_id)
 
     unknown_fields = find_unknown_fields(data, TODO_UPDATE_ALLOWED_FIELDS)
@@ -146,6 +197,15 @@ def update_todo_for_user(todo_id: int, user_id: int, data: dict[str, Any]) -> No
 
 
 def soft_delete_todo_for_user(todo_id: int, user_id: int) -> None:
+    """軟刪除單一待辦事項。
+
+    參數:
+        todo_id: 目標待辦事項 id。
+        user_id: 擁有者使用者 id。
+
+    例外:
+        TodoOperationError: 待辦事項不存在或刪除交易失敗。
+    """
     todo = _find_active_todo_or_404(todo_id, user_id)
 
     with transaction(TodoOperationError, '待辦事項刪除失敗，請稍後再試'):
@@ -153,6 +213,18 @@ def soft_delete_todo_for_user(todo_id: int, user_id: int) -> None:
 
 
 def toggle_todo_for_user(todo_id: int, user_id: int) -> bool:
+    """切換待辦事項完成狀態。
+
+    參數:
+        todo_id: 目標待辦事項 id。
+        user_id: 擁有者使用者 id。
+
+    回傳:
+        更新後的完成狀態。
+
+    例外:
+        TodoOperationError: 待辦事項不存在或更新交易失敗。
+    """
     todo = _find_active_todo_or_404(todo_id, user_id)
     todo.completed = not todo.completed
     todo.completed_at = _utcnow_naive() if todo.completed else None
@@ -161,3 +233,4 @@ def toggle_todo_for_user(todo_id: int, user_id: int) -> bool:
         pass
 
     return todo.completed
+

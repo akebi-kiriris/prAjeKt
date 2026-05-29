@@ -1,4 +1,4 @@
-import os
+﻿import os
 from typing import Any
 from models.task import Task
 from models.timeline import Timeline
@@ -26,6 +26,7 @@ class TrashOperationError(Exception):
 
 
 def trash_task_to_dict(task: Task, user_id: int) -> dict[str, Any]:
+    """序列化已刪除任務資料。"""
     return {
         'task_id': task.task_id,
         'name': task.name,
@@ -37,6 +38,7 @@ def trash_task_to_dict(task: Task, user_id: int) -> dict[str, Any]:
 
 
 def trash_timeline_to_dict(timeline: Timeline, user_id: int) -> dict[str, Any]:
+    """序列化已刪除專案資料。"""
     return {
         'id': timeline.id,
         'name': timeline.name,
@@ -48,11 +50,13 @@ def trash_timeline_to_dict(timeline: Timeline, user_id: int) -> dict[str, Any]:
 
 
 def remove_task_files(task: Task) -> None:
+    """刪除任務關聯的所有實體檔案。"""
     for file_path in get_task_file_paths(task):
         remove_file_if_exists(file_path)
 
 
 def get_task_file_paths(task: Task) -> list[str]:
+    """從任務實體收集實體檔案路徑。"""
     paths = []
     for task_file in task.files:
         if task_file.file_path:
@@ -61,11 +65,13 @@ def get_task_file_paths(task: Task) -> list[str]:
 
 
 def remove_file_if_exists(file_path: str | None) -> None:
+    """若路徑存在則刪除本機檔案。"""
     if file_path and os.path.exists(file_path):
         os.remove(file_path)
 
 
 def get_trash_payload(user_id: int) -> dict[str, list[dict[str, Any]]]:
+    """建立目前使用者的垃圾桶總覽資料。"""
     own_deleted_tasks = list_deleted_owned_tasks(user_id)
 
     assigned_ids = list_member_task_ids(user_id)
@@ -86,6 +92,11 @@ def get_trash_payload(user_id: int) -> dict[str, list[dict[str, Any]]]:
 
 
 def restore_task_for_owner(task_id: int, user_id: int) -> None:
+    """還原單一已刪除任務。
+
+    例外:
+        TrashOperationError: 任務不存在或還原失敗。
+    """
     task = get_deleted_task_by_owner(task_id, user_id)
     if not task:
         raise TrashOperationError('找不到該任務，或你沒有權限還原', 404)
@@ -95,6 +106,11 @@ def restore_task_for_owner(task_id: int, user_id: int) -> None:
 
 
 def permanently_delete_task_for_owner(task_id: int, user_id: int) -> None:
+    """永久刪除單一任務與其關聯檔案。
+
+    例外:
+        TrashOperationError: 任務不存在或刪除失敗。
+    """
     task = get_deleted_task_by_owner(task_id, user_id)
     if not task:
         raise TrashOperationError('找不到該任務，或你沒有權限刪除', 404)
@@ -107,6 +123,11 @@ def permanently_delete_task_for_owner(task_id: int, user_id: int) -> None:
 
 
 def restore_timeline_for_owner(timeline_id: int, user_id: int) -> None:
+    """還原單一已刪除專案。
+
+    例外:
+        TrashOperationError: 專案不存在或還原失敗。
+    """
     timeline = get_deleted_timeline_by_owner(timeline_id, user_id)
     if not timeline:
         raise TrashOperationError('找不到該專案，或你沒有權限還原', 404)
@@ -116,6 +137,11 @@ def restore_timeline_for_owner(timeline_id: int, user_id: int) -> None:
 
 
 def permanently_delete_timeline_for_owner(timeline_id: int, user_id: int) -> None:
+    """永久刪除專案、其任務與關聯檔案。
+
+    例外:
+        TrashOperationError: 專案不存在或刪除失敗。
+    """
     timeline = get_deleted_timeline_by_owner(timeline_id, user_id)
     if not timeline:
         raise TrashOperationError('找不到該專案，或你沒有權限刪除', 404)
@@ -132,3 +158,5 @@ def permanently_delete_timeline_for_owner(timeline_id: int, user_id: int) -> Non
         delete_entity(timeline)
     for file_path in file_paths:
         remove_file_if_exists(file_path)
+
+

@@ -1,4 +1,4 @@
-"""AI Provider 抽象層 - 支援多種 AI 模型服務的可替換介面"""
+﻿"""AI 服務提供者抽象層，支援多模型服務替換。"""
 
 from abc import ABC, abstractmethod
 import json
@@ -11,29 +11,29 @@ from chains.llm_factory import get_default_llm
 
 
 class AIProvider(ABC):
-    """AI Provider 基類 - 定義所有 AI 服務的共同介面"""
+    """AI 服務提供者基類，定義共用介面。"""
 
     @abstractmethod
     def generate_content(self, system_prompt: str, user_message: str, response_format: str = "json") -> str:
         """
         生成內容 - 支援多種格式
 
-        Args:
+        參數:
             system_prompt: 系統提示詞（包含指令）
             user_message: 用戶訊息（業務內容）
             response_format: 回應格式 - "json" 或 "json_array"（預設 "json"）
 
-        Returns:
+        回傳:
             str: 根據格式回傳的結果（JSON 物件或 JSON 陣列）
 
-        Raises:
+        例外:
             RuntimeError: 服務連線或處理失敗
         """
         pass
 
 
 class GeminiProvider(AIProvider):
-    """Google Gemini AI Provider - 使用 LangChain"""
+    """Google Gemini 提供者實作（透過 LangChain 呼叫）。"""
 
     def __init__(self, api_key: str = None, model: str = None):
         self.api_key = api_key or os.getenv("GOOGLE_API_KEY")
@@ -109,7 +109,7 @@ class GeminiProvider(AIProvider):
 
 
 class MockProvider(AIProvider):
-    """Mock AI Provider - 用於測試與開發環境"""
+    """模擬 AI 提供者，供測試與開發環境使用。"""
 
     def __init__(self):
         pass
@@ -149,10 +149,10 @@ def get_ai_provider() -> AIProvider:
     - "mock"：使用 Mock Provider（開發/測試用）
     - 其他值：回退到 Gemini
 
-    Returns:
+    回傳:
         AIProvider: 根據環境配置選定的 AI 服務實例
 
-    Raises:
+    例外:
         RuntimeError: Provider 配置失敗時
     """
     provider_name = os.getenv("AI_PROVIDER", "gemini").lower()
@@ -164,4 +164,6 @@ def get_ai_provider() -> AIProvider:
     else:
         # 預設或其他所有提供者目前皆使用 GeminiProvider，可傳入 model
         return GeminiProvider(model=model)
+
+
 
