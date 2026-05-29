@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+﻿from datetime import datetime, timedelta, timezone
 from collections import Counter, defaultdict
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
 import hashlib
@@ -76,16 +76,17 @@ class TimelineOperationError(Exception):
 
 
 def find_unknown_fields(payload: dict[str, Any], allowed_fields: set[str]) -> list[str]:
+    """依白名單回傳請求資料中的未知欄位。"""
     return sorted(set(payload.keys()) - allowed_fields)
 
 
 def get_user_timeline_role(user_id: int, timeline_id: int) -> int | None:
-    """查詢使用者在某專案的角色。"""
+    """取得使用者在單一專案中的角色。"""
     return get_timeline_role(timeline_id, user_id)
 
 
 def get_task_access(user_id: int, task: Task) -> int | None:
-    """查詢使用者對某任務的存取權限（支援 timeline 任務與獨立任務）。"""
+    """解析任務存取角色（專案任務或獨立任務）。"""
     if task.timeline_id:
         role = get_user_timeline_role(user_id, task.timeline_id)
         if role is not None:
@@ -107,6 +108,7 @@ def timeline_list_item_to_dict(
     total_tasks: int,
     completed_tasks: int,
 ) -> dict[str, Any]:
+    """序列化專案列表卡片回應資料。"""
     return {
         'id': timeline.id,
         'name': timeline.name,
@@ -125,6 +127,7 @@ def timeline_task_item_to_dict(
     assistant_list: list[str],
     can_manage_members: bool = False,
 ) -> dict[str, Any]:
+    """序列化專案任務詳情回應資料。"""
     return {
         'task_id': task.task_id,
         'name': task.name,
@@ -146,6 +149,7 @@ def timeline_task_item_to_dict(
 
 
 def timeline_member_item_to_dict(timeline_member: TimelineUser, user: Any) -> dict[str, Any]:
+    """序列化專案成員回應資料。"""
     return {
         'user_id': user.id,
         'name': user.name,
@@ -270,6 +274,11 @@ def generate_timeline_tasks_with_ai(
     project_name: str,
     description: str = '',
 ) -> dict[str, Any]:
+    """以既有任務脈絡讓 AI 生成專案任務建議。
+
+    例外:
+        TimelineAIGenerationError: AI payload invalid or provider invocation failure.
+    """
     existing_tasks_info = _build_existing_tasks_info(timeline_id)
 
     try:
@@ -304,6 +313,7 @@ def _utcnow_naive():
 
 
 def get_active_timeline_or_404(timeline_id: int) -> Timeline:
+    """依專案識別碼載入有效專案，找不到時拋錯。"""
     timeline = get_active_timeline_by_id(timeline_id)
     if not timeline:
         raise TimelineOperationError('找不到該專案', 404)
@@ -311,6 +321,7 @@ def get_active_timeline_or_404(timeline_id: int) -> Timeline:
 
 
 def list_timeline_items_for_user(user_id: int) -> list[dict[str, Any]]:
+    """列出使用者可見的專案卡片，含任務計數。"""
     memberships = get_timeline_memberships_for_user_ordered_desc(user_id)
     timeline_ids = [timeline.id for timeline, _role in memberships]
     tasks = get_active_tasks_by_timeline_ids(timeline_ids)
@@ -330,6 +341,11 @@ def list_timeline_items_for_user(user_id: int) -> list[dict[str, Any]]:
 
 
 def create_timeline_for_user(user_id: int, data: dict[str, Any]) -> int:
+    """建立專案並建立預設擁有者成員關係。
+
+    例外:
+        TimelineOperationError: 驗證失敗或資料寫入失敗。
+    """
     name = data.get('name')
     start_date_raw = data.get('start_date', '')
     end_date_raw = data.get('end_date', '')
@@ -372,6 +388,11 @@ def create_timeline_for_user(user_id: int, data: dict[str, Any]) -> int:
 
 
 def update_timeline_for_member(timeline_id: int, data: dict[str, Any]) -> None:
+    """Update editable timeline fields.
+
+    例外:
+        TimelineOperationError: payload 欄位無效或更新失敗。
+    """
     timeline = get_active_timeline_or_404(timeline_id)
 
     unknown_fields = find_unknown_fields(data, TIMELINE_UPDATE_ALLOWED_FIELDS)
@@ -413,6 +434,7 @@ def update_timeline_for_member(timeline_id: int, data: dict[str, Any]) -> None:
 
 
 def soft_delete_timeline_for_owner(timeline_id: int) -> None:
+    """軟刪除專案與其關聯任務。"""
     timeline = get_active_timeline_or_404(timeline_id)
 
     with transaction(TimelineOperationError, '專案刪除失敗，請稍後再試'):
@@ -422,6 +444,7 @@ def soft_delete_timeline_for_owner(timeline_id: int) -> None:
 
 
 def list_timeline_tasks_detail(timeline_id: int, viewer_user_id: int | None = None) -> list[dict[str, Any]]:
+    """列出專案的任務詳情清單。"""
     tasks = get_active_tasks_by_timeline_id_ordered_end_date(timeline_id)
     task_ids = [task.task_id for task in tasks]
     task_users = get_task_users_by_task_ids(task_ids)
@@ -856,6 +879,7 @@ def _build_conflict_risk_context_text(timeline, conflicts):
 
 
 def build_timeline_risk_analysis(timeline_id: int) -> dict[str, Any]:
+    """建立專案關鍵路徑與風險分析結果。"""
     timeline = get_active_timeline_or_404(timeline_id)
     tasks = get_active_tasks_by_timeline_id(timeline_id)
 
@@ -868,6 +892,7 @@ def build_timeline_risk_analysis(timeline_id: int) -> dict[str, Any]:
 
 
 def trigger_timeline_risk_notifications(timeline_id: int) -> dict[str, Any]:
+    """從專案分析生成並儲存風險通知。"""
     timeline = get_active_timeline_or_404(timeline_id)
     analysis = build_timeline_risk_analysis(timeline_id)
 
@@ -940,6 +965,7 @@ def build_weekly_report_for_timeline(
     start_date_raw: str | None = None,
     end_date_raw: str | None = None,
 ) -> dict[str, Any]:
+    """建立每週專案報告，並可選擇附上 AI 摘要。"""
     timeline = get_active_timeline_or_404(timeline_id)
     input_payload = _validate_weekly_report_input(start_date_raw, end_date_raw)
     start_date, end_date = _normalize_report_period(
@@ -1165,6 +1191,11 @@ def check_timeline_task_conflicts(
     payload: dict[str, Any],
     actor_user_id: int,
 ) -> dict[str, Any]:
+    """Check timeline task conflicts before batch apply.
+
+    例外:
+        TimelineOperationError: payload 無效、權限不足或衝突解決失敗。
+    """
     input_payload = _validate_conflict_payload(payload)
     timeline = get_active_timeline_or_404(timeline_id)
 
@@ -1440,6 +1471,7 @@ def check_timeline_task_conflicts(
 
 
 def update_timeline_remark_for_member(timeline_id: int, remark: str) -> None:
+    """更新專案備註文字。"""
     timeline = get_active_timeline_or_404(timeline_id)
 
     if not isinstance(remark, str):
@@ -1450,6 +1482,7 @@ def update_timeline_remark_for_member(timeline_id: int, remark: str) -> None:
 
 
 def search_timeline_user_by_email(timeline_id: int, requester_user_id: int, email: str) -> dict[str, Any]:
+    """以電子郵件搜尋可加入的專案成員候選人，並套用成員保護規則。"""
     if timeline_id in (None, ''):
         raise TimelineOperationError('請提供 timeline_id', 400)
 
@@ -1469,6 +1502,7 @@ def search_timeline_user_by_email(timeline_id: int, requester_user_id: int, emai
 
 
 def list_timeline_members_payload(timeline_id: int) -> list[dict[str, Any]]:
+    """列出專案成員清單資料。"""
     members = get_timeline_members(timeline_id)
     users_map = {user.id: user for user in get_users_by_ids([member.user_id for member in members])}
 
@@ -1486,6 +1520,7 @@ def add_timeline_member_for_owner(
     role: int,
     actor_user_id: int,
 ) -> None:
+    """新增專案成員並發送邀請通知。"""
     if not invited_user_id:
         raise TimelineOperationError('請提供使用者 ID', 400)
 
@@ -1512,6 +1547,7 @@ def add_timeline_member_for_owner(
 
 
 def remove_timeline_member_for_owner(timeline_id: int, member_user_id: int, operator_user_id: int) -> None:
+    """由擁有者移除專案成員。"""
     if member_user_id == operator_user_id:
         raise TimelineOperationError('不能將自己移出專案', 400)
 
@@ -1528,6 +1564,11 @@ def batch_create_tasks_for_timeline(
     user_id: int,
     task_payloads: list[dict[str, Any]],
 ) -> dict[str, Any]:
+    """Batch create timeline tasks from normalized payloads.
+
+    例外:
+        TimelineOperationError: 驗證失敗、相依檢查失敗或資料寫入失敗。
+    """
     timeline = get_active_timeline_or_404(timeline_id)
     task_payloads = _validate_batch_task_payloads(task_payloads)
 
@@ -1581,6 +1622,7 @@ def batch_create_tasks_for_timeline(
 
 
 def list_upcoming_timelines_for_user(user_id: int) -> list[dict[str, Any]]:
+    """列出即將開始的專案供提醒流程使用。"""
     today = datetime.now(timezone.utc).date()
     threshold = today + timedelta(days=3)
 
@@ -1615,6 +1657,7 @@ def list_upcoming_timelines_for_user(user_id: int) -> list[dict[str, Any]]:
 
 
 def build_timeline_member_stats_payload(timeline_id: int) -> dict[str, Any]:
+    """建立專案內每位成員的統計資料。"""
     members = get_timeline_members(timeline_id)
     member_ids = [member.user_id for member in members]
     users_map = {user.id: user.name for user in get_users_by_ids(member_ids)}
@@ -1656,3 +1699,5 @@ def build_timeline_member_stats_payload(timeline_id: int) -> dict[str, Any]:
         'status_distribution': status_dist,
         'total_tasks': len(tasks),
     }
+
+

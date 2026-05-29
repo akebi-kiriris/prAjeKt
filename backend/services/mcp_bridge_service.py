@@ -1,4 +1,4 @@
-import json
+﻿import json
 import os
 import subprocess
 import sys
@@ -228,6 +228,17 @@ def _build_env_overrides(access_token: str | None = None) -> dict[str, str]:
 
 
 def list_mcp_tools(access_token: str | None = None) -> list[dict[str, Any]]:
+    """列出子程序橋接器可用的 MCP 工具。
+
+    參數:
+        access_token: 可選的驗證權杖，會傳入 MCP 環境。
+
+    回傳:
+        MCP 工具中繼資料清單。
+
+    例外:
+        MCPBridgeError: MCP 啟動或 RPC 溝通失敗。
+    """
     env_overrides = _build_env_overrides(access_token)
     with _MCPSubprocessClient(env_overrides=env_overrides) as client:
         return client.list_tools()
@@ -238,6 +249,19 @@ def execute_mcp_tool(
     arguments: dict[str, Any] | None = None,
     access_token: str | None = None,
 ) -> dict[str, Any]:
+    """執行單一 MCP 工具，並回傳原始與正規化結果。
+
+    參數:
+        tool_name: MCP 工具名稱。
+        arguments: 可選的工具參數。
+        access_token: 可選的 MCP Server 驗證權杖。
+
+    回傳:
+        包含原始結果、解析後結果與工具清單的資料。
+
+    例外:
+        MCPBridgeError: 找不到工具或 MCP RPC 執行失敗。
+    """
     env_overrides = _build_env_overrides(access_token)
     with _MCPSubprocessClient(env_overrides=env_overrides) as client:
         tools = client.list_tools()
@@ -254,3 +278,5 @@ def execute_mcp_tool(
         "parsed_result": parsed_result,
         "available_tools": tools,
     }
+
+

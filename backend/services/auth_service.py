@@ -1,4 +1,4 @@
-from werkzeug.security import check_password_hash, generate_password_hash
+﻿from werkzeug.security import check_password_hash, generate_password_hash
 from sqlalchemy.exc import IntegrityError
 from models.user import User
 from typing import Any
@@ -15,6 +15,14 @@ class AuthOperationError(Exception):
 
 
 def auth_user_to_dict(user: User) -> dict[str, Any]:
+    """序列化登入/註冊回應所需的使用者資料。
+
+    參數:
+        user: 使用者模型實例。
+
+    回傳:
+        登入/註冊相關的最小使用者回應 payload。
+    """
     return {
         'id': user.id,
         'name': user.name,
@@ -24,6 +32,14 @@ def auth_user_to_dict(user: User) -> dict[str, Any]:
 
 
 def current_user_to_dict(user: User) -> dict[str, Any]:
+    """序列化目前登入使用者資訊。
+
+    參數:
+        user: 使用者模型實例。
+
+    回傳:
+        含 `phone` 欄位的目前使用者 payload。
+    """
     return {
         'id': user.id,
         'name': user.name,
@@ -34,6 +50,17 @@ def current_user_to_dict(user: User) -> dict[str, Any]:
 
 
 def register_user(data: dict[str, Any]) -> int:
+    """註冊新帳號。
+
+    參數:
+        data: API 層傳入的註冊 payload。
+
+    回傳:
+        新建立的使用者 id。
+
+    例外:
+        AuthOperationError: 欄位缺漏、帳號重複或交易失敗。
+    """
     name = (data.get('name') or '').strip()
     username = data.get('username')
     email = (data.get('email') or '').strip().lower()
@@ -76,6 +103,18 @@ def register_user(data: dict[str, Any]) -> int:
 
 
 def authenticate_user(email: str, password: str) -> User:
+    """以 email/password 驗證使用者身份。
+
+    參數:
+        email: 使用者輸入的 email。
+        password: 使用者輸入的明文密碼。
+
+    回傳:
+        驗證成功的使用者模型。
+
+    例外:
+        AuthOperationError: 輸入不合法或帳密不正確。
+    """
     normalized_email = email.strip().lower() if isinstance(email, str) else ''
     if not normalized_email or not password:
         raise AuthOperationError('請提供 email 和密碼', 400)
@@ -88,7 +127,19 @@ def authenticate_user(email: str, password: str) -> User:
 
 
 def get_current_user_or_404(user_id: int) -> User:
+    """依 user id 取得目前使用者，若不存在則拋錯。
+
+    參數:
+        user_id: 使用者主鍵。
+
+    回傳:
+        已存在的使用者模型。
+
+    例外:
+        AuthOperationError: 使用者不存在。
+    """
     user = get_user_by_id(user_id)
     if not user:
         raise AuthOperationError('使用者不存在', 404)
     return user
+

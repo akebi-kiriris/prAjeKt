@@ -1,4 +1,4 @@
-from typing import Any
+﻿from typing import Any
 
 from chains import get_default_llm, select_tools
 from services.mcp_bridge_service import MCPBridgeError, execute_mcp_tool, list_mcp_tools
@@ -243,6 +243,22 @@ def execute_copilot_mcp_request(
     auto_create_generated_tasks: bool = False,
     access_token: str | None = None,
 ) -> dict[str, Any]:
+    """Plan and execute one MCP tool call for copilot workflow.
+
+    參數:
+        user_message: End-user natural language instruction.
+        context: 可選的執行期上下文（timeline/task/group ids）。
+        preferred_tool: 可選的強制工具名稱。
+        tool_arguments: 可選的明確工具參數。
+        auto_create_generated_tasks: Whether to auto call batch-create after generation.
+        access_token: 可選的 MCP 驗證轉傳權杖。
+
+    回傳:
+        Tool selection/execution payload including result and applied arguments.
+
+    例外:
+        CopilotOperationError: Tool selection, argument validation, or MCP execution failure.
+    """
     message = (user_message or "").strip()
     if not message:
         raise CopilotOperationError("message 不可為空。", 400)
@@ -321,3 +337,5 @@ def execute_copilot_mcp_request(
             response_payload["auto_create_result"] = auto_created.get("parsed_result")
 
     return response_payload
+
+

@@ -1,4 +1,4 @@
-from concurrent.futures import ThreadPoolExecutor
+﻿from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 import json
 import os
@@ -69,26 +69,32 @@ def _get_int_env(name: str, default_value: int) -> int:
 
 
 def get_snapshot_chunk_size() -> int:
+    """從環境變數讀取快照分塊大小，並提供安全預設值。"""
     return max(1, _get_int_env('SNAPSHOT_CHUNK_SIZE', 50))
 
 
 def get_snapshot_async_threshold() -> int:
+    """從環境變數讀取非同步執行門檻。"""
     return max(1, _get_int_env('SNAPSHOT_ASYNC_THRESHOLD', 500))
 
 
 def get_snapshot_window_days_default() -> int:
+    """從環境變數讀取預設快照時間窗天數。"""
     return max(1, _get_int_env('SNAPSHOT_WINDOW_DAYS', 30))
 
 
 def get_snapshot_job_ttl_seconds() -> int:
+    """從環境變數讀取快照工作存活秒數。"""
     return max(60, _get_int_env('SNAPSHOT_JOB_TTL_SECONDS', 3600))
 
 
 def get_snapshot_job_max_records() -> int:
+    """從環境變數讀取快照工作最大保留筆數。"""
     return max(50, _get_int_env('SNAPSHOT_JOB_MAX_RECORDS', 500))
 
 
 def generate_unique_invite_code() -> str:
+    """產生唯一的群組邀請碼。"""
     while True:
         invite_code = f"{random.randint(0, 999999):06d}"
         existing = get_group_by_invite_code(invite_code)
@@ -97,6 +103,7 @@ def generate_unique_invite_code() -> str:
 
 
 def group_to_dict(group: Group) -> dict[str, Any]:
+    """將群組模型轉為前端可用的回應資料。"""
     return {
         'group_id': group.group_id,
         'group_name': group.group_name,
@@ -107,6 +114,7 @@ def group_to_dict(group: Group) -> dict[str, Any]:
 
 
 def group_member_to_dict(member: GroupMemberRow | Any, include_email: bool = True) -> dict[str, Any]:
+    """將群組成員列或物件轉為統一回應格式。"""
     if isinstance(member, dict):
         user_id = int(member["user_id"])
         name = str(member["name"])
@@ -126,6 +134,7 @@ def group_member_to_dict(member: GroupMemberRow | Any, include_email: bool = Tru
 
 
 def group_message_to_dict(message: GroupMessageRow | Any) -> dict[str, Any]:
+    """將群組訊息列或物件轉為統一回應格式。"""
     if isinstance(message, dict):
         message_id = int(message["message_id"])
         content = str(message["content"])
@@ -146,19 +155,27 @@ def group_message_to_dict(message: GroupMessageRow | Any) -> dict[str, Any]:
 
 
 def is_group_member(group_id: int, user_id: int) -> bool:
+    """檢查使用者是否屬於該群組。"""
     return get_group_member(group_id, user_id) is not None
 
 
 def group_room_name(group_id: int) -> str:
+    """建立群組即時通訊使用的房間名稱。"""
     return f'group_{group_id}'
 
 
 def list_groups_for_user(user_id: int) -> list[dict[str, Any]]:
+    """列出使用者加入的群組。"""
     groups = list_groups_for_user_query(user_id)
     return [group_to_dict(group) for group in groups]
 
 
 def create_group_for_user(user_id: int, group_name: str) -> dict[str, Any]:
+    """建立群組並將建立者加入為第一位成員。
+
+    例外:
+        GroupOperationError: 輸入無效或資料寫入失敗。
+    """
     normalized_name = group_name.strip() if isinstance(group_name, str) else ''
     if not normalized_name:
         raise GroupOperationError('請輸入群組名稱', 400)
@@ -194,6 +211,11 @@ def create_group_for_user(user_id: int, group_name: str) -> dict[str, Any]:
 
 
 def join_group_by_invite_code(user_id: int, invite_code: str) -> None:
+    """透過邀請碼加入群組。
+
+    例外:
+        GroupOperationError: 邀請碼無效、成員重複或交易失敗。
+    """
     normalized_code = invite_code.strip() if isinstance(invite_code, str) else ''
     if not normalized_code:
         raise GroupOperationError('請輸入邀請碼', 400)
@@ -219,6 +241,11 @@ def join_group_by_invite_code(user_id: int, invite_code: str) -> None:
 
 
 def leave_group_for_user(group_id: int, user_id: int) -> None:
+    """離開群組成員關係。
+
+    例外:
+        GroupOperationError: 成員不存在或刪除失敗。
+    """
     member = get_group_member(group_id, user_id)
     if not member:
         raise GroupOperationError('您不是該群組成員', 404)
@@ -228,11 +255,17 @@ def leave_group_for_user(group_id: int, user_id: int) -> None:
 
 
 def list_group_members_payload(group_id: int, include_email: bool = False) -> list[dict[str, Any]]:
+    """列出群組成員清單，供介面回應使用。"""
     members = list_group_members_query(group_id)
     return [group_member_to_dict(member, include_email=include_email) for member in members]
 
 
 def list_group_messages_for_member(group_id: int, user_id: int) -> list[dict[str, Any]]:
+    """在成員權限有效時列出群組訊息。
+
+    例外:
+        GroupOperationError: 請求者不是群組成員。
+    """
     if not is_group_member(group_id, user_id):
         raise GroupOperationError('您不是該群組成員', 403)
 
@@ -241,6 +274,19 @@ def list_group_messages_for_member(group_id: int, user_id: int) -> list[dict[str
 
 
 def send_group_message_for_member(group_id: int, user_id: int, content: str) -> int:
+    """以成員身分發送群組訊息並回傳訊息 id。
+
+    參數:
+        group_id: 目標群組 id。
+        user_id: 發送者使用者 id。
+        content: 訊息內容。
+
+    回傳:
+        新建立的訊息 id。
+
+    例外:
+        GroupOperationError: 內容為空、權限不足或資料寫入失敗。
+    """
     normalized_content = content.strip() if isinstance(content, str) else ''
     if not normalized_content:
         raise GroupOperationError('訊息內容不可為空', 400)
@@ -260,6 +306,7 @@ def send_group_message_for_member(group_id: int, user_id: int, content: str) -> 
 
 
 def group_snapshot_to_dict(snapshot: GroupAISnapshot) -> dict[str, Any]:
+    """將快照模型轉為介面回應資料。"""
     return {
         'snapshot_id': snapshot.snapshot_id,
         'group_id': snapshot.group_id,
@@ -502,6 +549,17 @@ def _finalize_snapshot_payload(payload):
 
 
 def parse_ai_snapshot_response(raw_text: str) -> dict[str, Any]:
+    """解析 LLM 回傳 JSON，並收斂為快照標準結構。
+
+    參數:
+        raw_text: 模型回傳的原始文字。
+
+    回傳:
+        正規化後的快照資料結構。
+
+    例外:
+        GroupOperationError: 回傳內容不是有效 JSON 物件。
+    """
     try:
         parsed = json.loads(raw_text)
     except json.JSONDecodeError as exc:
@@ -521,6 +579,7 @@ def _merge_message_ids(existing_ids, incoming_ids):
 
 
 def merge_chunk_summaries(chunk_summaries: list[dict[str, Any]]) -> dict[str, Any]:
+    """合併多個分塊 AI 摘要為單一標準化結果。"""
     topic_map = {}
     decision_map = {}
     action_map = {}
@@ -579,11 +638,13 @@ def merge_chunk_summaries(chunk_summaries: list[dict[str, Any]]) -> dict[str, An
 
 
 def count_group_messages_for_snapshot(group_id: int, window_days: int) -> int:
+    """計算時間窗內可用於快照的來源訊息數量。"""
     cutoff = _utcnow_naive() - timedelta(days=window_days)
     return count_group_messages_for_snapshot_query(group_id, cutoff)
 
 
 def fetch_group_messages(group_id: int, window_days: int) -> list[SnapshotMessageRow]:
+    """取得並正規化快照來源訊息。"""
     cutoff = _utcnow_naive() - timedelta(days=window_days)
     rows = list_group_messages_for_snapshot(group_id, cutoff)
 
@@ -603,11 +664,13 @@ def fetch_group_messages(group_id: int, window_days: int) -> list[SnapshotMessag
 
 
 def chunk_messages(messages: list[SnapshotMessageRow], size: int) -> list[list[SnapshotMessageRow]]:
+    """將訊息切分為固定大小分塊。"""
     chunk_size = max(1, size)
     return [messages[index:index + chunk_size] for index in range(0, len(messages), chunk_size)]
 
 
 def build_group_snapshot_system_prompt() -> str:
+    """建立群組快照生成用的系統提示詞。"""
     return (
         '你是專案協作知識整理助手。重點是給出可執行下一步，避免冗長敘述。'
         '請輸出 JSON 物件，schema 必須為：'
@@ -622,6 +685,7 @@ def build_group_snapshot_system_prompt() -> str:
 
 
 def build_chunk_prompt(chunk: list[SnapshotMessageRow]) -> str:
+    """建立分塊專用提示詞內容。"""
     lines = []
     for item in chunk:
         lines.append(
@@ -639,6 +703,7 @@ def persist_snapshot(
     provider: str | None,
     metadata_json: dict[str, Any] | None,
 ) -> dict[str, Any]:
+    """儲存單次快照結果，並回傳可供介面使用的資料。"""
     snapshot = GroupAISnapshot(
         group_id=group_id,
         summary_json=snapshot_payload,
@@ -660,6 +725,11 @@ def generate_group_snapshot(
     created_by: int | None = None,
     force: bool = False,
 ) -> dict[str, Any]:
+    """由 LLM 產生群組快照並持久化結果。
+
+    例外:
+        GroupOperationError: 驗證失敗、權限不足、LLM 失敗或資料寫入失敗。
+    """
     if not isinstance(window_days, int) or window_days <= 0:
         raise GroupOperationError('window_days 必須為正整數', 400)
 
@@ -712,6 +782,11 @@ def generate_group_snapshot(
 
 
 def get_latest_group_snapshot_for_member(group_id: int, user_id: int) -> dict[str, Any]:
+    """取得群組最新快照，僅允許群組成員讀取。
+
+    例外:
+        GroupOperationError: 權限不足或尚無快照。
+    """
     if not is_group_member(group_id, user_id):
         raise GroupOperationError('您不是該群組成員', 403)
 
@@ -723,6 +798,7 @@ def get_latest_group_snapshot_for_member(group_id: int, user_id: int) -> dict[st
 
 
 def should_enqueue_snapshot(source_count: int, async_requested: bool = False) -> bool:
+    """判斷快照是否應改走非同步流程。"""
     return bool(async_requested) or source_count > get_snapshot_async_threshold()
 
 
@@ -799,6 +875,7 @@ def _run_snapshot_job(app, job_id, group_id, user_id, window_days):
 
 
 def enqueue_snapshot_job(app: Any, group_id: int, user_id: int, window_days: int = 30) -> dict[str, Any]:
+    """建立並排入快照背景工作，立即回傳工作狀態。"""
     job_id = uuid.uuid4().hex
     now_iso = _to_iso_z(_utcnow_naive())
     payload = {
@@ -823,6 +900,11 @@ def enqueue_snapshot_job(app: Any, group_id: int, user_id: int, window_days: int
 
 
 def get_snapshot_job_status(job_id: str, requester_user_id: int | None = None) -> dict[str, Any]:
+    """取得快照非同步工作的目前狀態資料。
+
+    例外:
+        GroupOperationError: 找不到工作或請求者權限不符。
+    """
     with _snapshot_jobs_lock:
         _cleanup_snapshot_jobs_locked()
         payload = dict(_snapshot_jobs.get(job_id, {}))
@@ -834,3 +916,5 @@ def get_snapshot_job_status(job_id: str, requester_user_id: int | None = None) -
         raise GroupOperationError('無權查看此工作', 403)
 
     return payload
+
+

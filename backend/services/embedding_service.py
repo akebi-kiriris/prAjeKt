@@ -12,13 +12,10 @@ class EmbeddingOperationError(Exception):
 
 
 class GeminiEmbeddingService:
-    """
-    統一的 Embedding 服務，支持多個 LangChain provider。
-    透過 EMBEDDING_PROVIDER 環境變數選擇 provider：
-    - "google" (預設): Google Generative AI
-    - "openai": OpenAI Embeddings
-    - "huggingface": HuggingFace Sentence Transformers (本地)
-    - "ollama": Ollama (本地)
+    """統一的向量嵌入服務。
+
+    透過 `EMBEDDING_PROVIDER` 決定實際供應者，並統一對外提供
+    `embed_documents` / `embed_query` 介面，供知識索引與檢索流程共用。
     """
 
     def __init__(self, api_key=None, model_name=None, provider=None):
@@ -119,7 +116,14 @@ class GeminiEmbeddingService:
         retry=retry_if_exception_type(Exception),
     )
     def embed_documents(self, texts: List[str]) -> List[List[float]]:
-        """嵌入多個文件（用於索引）"""
+        """將多段文字批次轉為向量（索引階段使用）。
+
+        參數:
+            texts: 待嵌入的文字清單。
+
+        回傳:
+            與輸入順序對齊的向量清單；空輸入時回傳空清單。
+        """
         if not texts:
             return []
 
@@ -135,7 +139,17 @@ class GeminiEmbeddingService:
         retry=retry_if_exception_type(Exception),
     )
     def embed_query(self, text: str) -> List[float]:
-        """嵌入查詢文本（用於檢索）"""
+        """將單一查詢文字轉為向量（檢索階段使用）。
+
+        參數:
+            text: 查詢文字。
+
+        回傳:
+            單一查詢向量。
+
+        例外:
+            EmbeddingOperationError: 查詢內容為空。
+        """
         text = (text or "").strip()
         if not text:
             raise EmbeddingOperationError("查詢內容不可為空", 400)
@@ -146,7 +160,14 @@ class GeminiEmbeddingService:
             raise RuntimeError(f"Embedding 失敗: {exc}") from exc
 
     def embed_document(self, text: str) -> List[float]:
-        """嵌入單個文件（向後相容）"""
+        """將單一文件文字轉為向量（向後相容入口）。
+
+        參數:
+            text: 文件文字內容。
+
+        回傳:
+            單一文件向量；若流程異常會轉為 `EmbeddingOperationError`。
+        """
         text = (text or "").strip()
         if not text:
             raise EmbeddingOperationError("索引內容不可為空", 400)

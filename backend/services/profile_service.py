@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+﻿from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -37,10 +37,27 @@ class ProfileOperationError(Exception):
 
 
 def find_unknown_fields(payload: dict[str, Any], allowed_fields: set[str]) -> list[str]:
+    """回傳 payload 中未預期的欄位。
+
+    參數:
+        payload: 輸入的 payload 字典。
+        allowed_fields: 允許的欄位集合。
+
+    回傳:
+        排序後的未預期欄位名稱。
+    """
     return sorted(set(payload.keys()) - allowed_fields)
 
 
 def profile_to_dict(user: User) -> dict[str, Any]:
+    """序列化個人資料回應 payload。
+
+    參數:
+        user: 使用者模型實例。
+
+    回傳:
+        個人資料回應 payload。
+    """
     return {
         'id': user.id,
         'name': user.name,
@@ -54,6 +71,14 @@ def profile_to_dict(user: User) -> dict[str, Any]:
 
 
 def search_user_to_dict(user: User) -> dict[str, Any]:
+    """序列化使用者搜尋結果 payload。
+
+    參數:
+        user: 使用者模型實例。
+
+    回傳:
+        提供搜尋端點使用的精簡使用者 payload。
+    """
     return {
         'id': user.id,
         'name': user.name,
@@ -63,6 +88,17 @@ def search_user_to_dict(user: User) -> dict[str, Any]:
 
 
 def get_profile_user_or_404(user_id: int) -> User:
+    """依使用者 id 載入個人資料，找不到時拋錯。
+
+    參數:
+        user_id: 使用者 id。
+
+    回傳:
+        已存在的使用者模型。
+
+    例外:
+        ProfileOperationError: 使用者不存在。
+    """
     user = get_user_by_id(user_id)
     if not user:
         raise ProfileOperationError('使用者不存在', 404)
@@ -70,6 +106,15 @@ def get_profile_user_or_404(user_id: int) -> User:
 
 
 def update_profile_for_user(user_id: int, data: dict[str, Any]) -> None:
+    """更新使用者個人資料欄位與密碼。
+
+    參數:
+        user_id: 目標使用者 id。
+        data: 更新 payload。
+
+    例外:
+        ProfileOperationError: 驗證衝突、驗證失敗或交易失敗。
+    """
     if not isinstance(data, dict):
         raise ProfileOperationError('請提供正確的 JSON 物件', 400)
 
@@ -121,6 +166,17 @@ def update_profile_for_user(user_id: int, data: dict[str, Any]) -> None:
 
 
 def search_user_by_query(query: str) -> User:
+    """依使用者名稱或 email 搜尋使用者。
+
+    參數:
+        query: 搜尋關鍵字。
+
+    回傳:
+        符合條件的使用者模型。
+
+    例外:
+        ProfileOperationError: 查詢為空或找不到使用者。
+    """
     normalized_query = query.strip() if isinstance(query, str) else ''
     if not normalized_query:
         raise ProfileOperationError('請提供搜尋條件', 400)
@@ -134,6 +190,14 @@ def search_user_by_query(query: str) -> User:
 
 
 def build_chart_stats_for_user(user_id: int) -> dict[str, Any]:
+    """建立個人頁儀表板圖表統計資料。
+
+    參數:
+        user_id: 目標使用者 id。
+
+    回傳:
+        彙整狀態分布、每日完成數與各專案任務統計。
+    """
     today = datetime.now(timezone.utc).date()
 
     timeline_ids = list_timeline_ids_for_user(user_id)
@@ -183,3 +247,5 @@ def build_chart_stats_for_user(user_id: int) -> dict[str, Any]:
         'daily_completions': daily_completions,
         'tasks_by_project': tasks_by_project,
     }
+
+
