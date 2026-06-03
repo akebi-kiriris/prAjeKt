@@ -37,18 +37,6 @@ describe('copilotService', () => {
     expect(mockedApi.post).toHaveBeenCalledWith('/copilot/mcp/execute', payload);
   });
 
-  it('should map POST /copilot/agent/execute correctly', () => {
-    const payload = {
-      message: '幫我整理這個任務並檢查衝突',
-      context: { user_id: 1, timeline_id: 10, task_id: 8 },
-      max_loops: 6,
-    };
-
-    copilotService.executeAgent(payload);
-
-    expect(mockedApi.post).toHaveBeenCalledWith('/copilot/agent/execute', payload);
-  });
-
   it('should map POST /copilot/agent/plan correctly', () => {
     const payload = {
       message: '幫我建立專案並拆任務',

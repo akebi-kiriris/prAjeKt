@@ -36,13 +36,6 @@ export interface CopilotMcpExecuteResponse {
   auto_create_result?: CopilotAutoCreateResult;
 }
 
-export interface CopilotAgentExecutePayload {
-  message: string;
-  context?: CopilotAgentContext;
-  tool_payloads?: Record<string, Record<string, unknown>>;
-  max_loops?: number;
-}
-
 export interface CopilotAgentPlanPayload {
   message: string;
   context?: CopilotAgentContext;

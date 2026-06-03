@@ -1,7 +1,6 @@
 import api from './api';
 import type { AxiosResponse } from 'axios';
 import type {
-  CopilotAgentExecutePayload,
   CopilotAgentExecuteByPlanPayload,
   CopilotAgentExecuteByPlanResponse,
   CopilotAgentPlanPayload,
@@ -9,7 +8,6 @@ import type {
   CopilotAgentRejectPayload,
   CopilotAgentRejectResponse,
   CopilotAgentReplanPayload,
-  CopilotAgentExecuteResponse,
   CopilotMcpExecutePayload,
   CopilotMcpExecuteResponse,
 } from '../types';
@@ -18,9 +16,6 @@ export const copilotService = {
   executeMcp: (
     payload: CopilotMcpExecutePayload,
   ): Promise<AxiosResponse<CopilotMcpExecuteResponse>> => api.post('/copilot/mcp/execute', payload),
-  executeAgent: (
-    payload: CopilotAgentExecutePayload,
-  ): Promise<AxiosResponse<CopilotAgentExecuteResponse>> => api.post('/copilot/agent/execute', payload),
   createAgentPlan: (
     payload: CopilotAgentPlanPayload,
   ): Promise<AxiosResponse<CopilotAgentPlanResponse>> => api.post('/copilot/agent/plan', payload),

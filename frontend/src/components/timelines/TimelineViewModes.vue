@@ -187,7 +187,9 @@ const completedTasks = ref<Task[]>([]);
 const hasActiveFilters = computed<boolean>(() => {
   return filterPriority.value !== null || filterTag.value.trim().length > 0;
 });
-const activeFilterCount = computed(() => (filterPriority.value ? 1 : 0) + (filterTag.value ? 1 : 0));
+const activeFilterCount = computed(() =>
+  (filterPriority.value !== null ? 1 : 0) + (filterTag.value.trim().length > 0 ? 1 : 0)
+);
 
 const clearFilters = () => { filterPriority.value = null; filterTag.value = ''; };
 
