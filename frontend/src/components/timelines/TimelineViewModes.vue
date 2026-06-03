@@ -19,6 +19,7 @@
       :get-subtask-progress="getSubtaskProgress"
       :get-completed-subtask-count="getCompletedSubtaskCount"
       :get-task-timeline-name="getTaskTimelineName"
+      :format-date-fn="formatDate"
       @update:selected-kanban-timeline="selectedKanbanTimeline = $event"
       @update:search-query="searchQuery = $event"
       @toggle-filter-panel="showFilterPanel = !showFilterPanel"
@@ -123,6 +124,8 @@ import TimelineGanttView from './TimelineGanttView.vue';
 import TimelineKanbanTaskModal from './TimelineKanbanTaskModal.vue';
 import type { CalendarOptions, EventClickArg, EventMountArg, DayCellMountArg } from '@fullcalendar/core';
 import { taskService } from '../../services/taskService';
+import { formatDate } from '../../utils/formatters';
+import { buildGanttPopupHtml } from '../../utils/ganttPopup';
 import type { Task, Timeline, Subtask, TaskUpdatePayload, TimelineViewModesProps, DaysRemainingResult } from '../../types';
 
 const props = defineProps<TimelineViewModesProps>();
@@ -172,14 +175,32 @@ const filteredTasks = computed(() => {
   return tasks;
 });
 
-const pendingTasks = computed(() => filteredTasks.value.filter(t => t.status === 'pending' && !t.completed));
-const inProgressTasks = computed(() => filteredTasks.value.filter(t => t.status === 'in_progress' && !t.completed));
-const completedTasks = computed(() => filteredTasks.value.filter(t => t.status === 'completed' || t.completed));
+const pendingTasksComputed = computed(() => filteredTasks.value.filter(t => t.status === 'pending' && !t.completed));
+const inProgressTasksComputed = computed(() => filteredTasks.value.filter(t => t.status === 'in_progress' && !t.completed));
+const completedTasksComputed = computed(() => filteredTasks.value.filter(t => t.status === 'completed' || t.completed));
 
-const hasActiveFilters = computed(() => filterPriority.value || filterTag.value);
+// vuedraggable 需要可變陣列；以本地清單承接，避免直接操作 computed 衍生結果。
+const pendingTasks = ref<Task[]>([]);
+const inProgressTasks = ref<Task[]>([]);
+const completedTasks = ref<Task[]>([]);
+
+const hasActiveFilters = computed<boolean>(() => {
+  return filterPriority.value !== null || filterTag.value.trim().length > 0;
+});
 const activeFilterCount = computed(() => (filterPriority.value ? 1 : 0) + (filterTag.value ? 1 : 0));
 
 const clearFilters = () => { filterPriority.value = null; filterTag.value = ''; };
+
+watch(
+  [pendingTasksComputed, inProgressTasksComputed, completedTasksComputed, isDragging],
+  () => {
+    if (isDragging.value) return;
+    pendingTasks.value = [...pendingTasksComputed.value];
+    inProgressTasks.value = [...inProgressTasksComputed.value];
+    completedTasks.value = [...completedTasksComputed.value];
+  },
+  { immediate: true }
+);
 
 // ────────────── 甘特圖相關 ──────────────
 const ganttContainerRef = ref<HTMLElement | null>(null);
@@ -217,6 +238,11 @@ const ganttSaveTimers = new Map<number, ReturnType<typeof setTimeout>>();
 const ganttClickLockedUntil = new Map<number, number>();
 const SUPPRESS_CLICK_AFTER_DRAG_MS = 800;
 
+const clearGantt = () => {
+  if (ganttContainerRef.value) ganttContainerRef.value.innerHTML = '';
+  ganttInstance = null;
+};
+
 const parseDateToDay = (raw: string | null | undefined): Date | null => {
   if (!raw) return null;
   const d = new Date(raw);
@@ -228,7 +254,10 @@ const parseDateToDay = (raw: string | null | undefined): Date | null => {
 const dayToIso = (date: Date): string => {
   const d = new Date(date);
   d.setHours(0, 0, 0, 0);
-  return d.toISOString().split('T')[0];
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 };
 
 const getDurationDays = (startDate: string, endDate: string): number => {
@@ -403,16 +432,15 @@ const renderGantt = async () => {
       const dependencyNames = (hit?.depends_on_task_ids || [])
         .map((dependencyTaskId) => props.allTasks.find((item) => item.task_id === dependencyTaskId)?.name || `#${dependencyTaskId}`)
         .join('、');
-      return `
-        <div class="details-container">
-          <h5>${fullName}</h5>
-          <p>專案：${timelineName}</p>
-          <p>狀態：${statusLabel}</p>
-          <p>日期：${task.start} ~ ${task.end}</p>
-          <p>進度：${progress}</p>
-          <p>依賴：${dependencyNames || '無'}</p>
-        </div>
-      `;
+      return buildGanttPopupHtml({
+        fullName,
+        timelineName,
+        statusLabel,
+        start: task.start,
+        end: task.end,
+        progress,
+        dependencyNames: dependencyNames || '無',
+      });
     },
     on_click: (task) => {
       const taskId = Number(task.id);
@@ -471,13 +499,25 @@ watch(
   { immediate: true }
 );
 
+watch(
+  () => props.viewMode,
+  (viewMode) => {
+    // 避免切換視圖後殘留遮罩或拖曳狀態，導致整頁無法點擊
+    isDragging.value = false;
+    showFilterPanel.value = false;
+    showKanbanTaskModal.value = false;
+    selectedKanbanTask.value = null;
+    newSubtaskName.value = '';
+    if (viewMode !== 'gantt') clearGantt();
+  }
+);
+
 onBeforeUnmount(() => {
   ganttSaveTimers.forEach(timer => clearTimeout(timer));
   ganttSaveTimers.clear();
   ganttSavingTaskIds.clear();
   ganttClickLockedUntil.clear();
-  if (ganttContainerRef.value) ganttContainerRef.value.innerHTML = '';
-  ganttInstance = null;
+  clearGantt();
 });
 
 // ────────────── 月曆相關 ──────────────
@@ -567,10 +607,10 @@ const addDays = (dateStr: string | null, days: number) => {
 };
 
 const getDaysRemaining = (endDate: string | null | undefined): DaysRemainingResult => {
-  if (!endDate) return { days: null, text: '未設定', display: '未設定', colorClass: 'text-gray-400' };
+  if (!endDate) return { days: null, text: '未設定', display: '未設定', colorClass: 'text-slate-400' };
   const today = new Date(); today.setHours(0, 0, 0, 0);
   const end = parseDateOnlyLocal(endDate);
-  if (!end) return { days: null, text: '未設定', display: '未設定', colorClass: 'text-gray-400' };
+  if (!end) return { days: null, text: '未設定', display: '未設定', colorClass: 'text-slate-400' };
   end.setHours(0, 0, 0, 0);
   const diffDays = Math.ceil((end.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
   if (diffDays < 0) return { days: diffDays, text: `已過期 ${Math.abs(diffDays)} 天`, display: `過期 ${Math.abs(diffDays)} 天`, colorClass: 'text-red-500' };
@@ -613,7 +653,7 @@ const getTimelineStatus = (timeline: Timeline) => {
   const { days } = getDaysRemaining(timeline.endDate);
   const progress = getTaskProgress(timeline);
   if (progress === 100) return { label: '已完成', icon: '✅', bgClass: 'bg-green-100', textClass: 'text-green-600', badgeClass: 'bg-green-100 text-green-700', borderClass: 'border-green-200', barClass: 'bg-gradient-to-r from-green-400 to-green-500' };
-  if (days === null) return { label: '進行中', icon: '📋', bgClass: 'bg-gray-100', textClass: 'text-gray-600', badgeClass: 'bg-gray-100 text-gray-600', borderClass: 'border-gray-200', barClass: 'bg-gradient-to-r from-gray-300 to-gray-400' };
+  if (days === null) return { label: '進行中', icon: '📋', bgClass: 'bg-slate-100', textClass: 'text-slate-600', badgeClass: 'bg-slate-100 text-slate-600', borderClass: 'border-slate-200', barClass: 'bg-gradient-to-r from-slate-300 to-slate-400' };
   if (days < 0) return { label: '已過期', icon: '⚠️', bgClass: 'bg-red-100', textClass: 'text-red-600', badgeClass: 'bg-red-100 text-red-700', borderClass: 'border-red-200', barClass: 'bg-gradient-to-r from-red-400 to-red-500' };
   if (days <= 3) return { label: '緊急', icon: '🔥', bgClass: 'bg-orange-100', textClass: 'text-orange-600', badgeClass: 'bg-orange-100 text-orange-700', borderClass: 'border-orange-200', barClass: 'bg-gradient-to-r from-orange-400 to-orange-500' };
   if (days <= 7) return { label: '即將到期', icon: '⏰', bgClass: 'bg-yellow-100', textClass: 'text-yellow-600', badgeClass: 'bg-yellow-100 text-yellow-700', borderClass: 'border-yellow-200', barClass: 'bg-gradient-to-r from-yellow-400 to-yellow-500' };
@@ -632,7 +672,7 @@ const getProgressTextColor = (timeline: Timeline) => {
   const progress = getTaskProgress(timeline);
   if (progress === 100) return 'text-green-600';
   if (progress >= 50) return 'text-blue-600';
-  return 'text-gray-600';
+  return 'text-slate-600';
 };
 
 const getPriorityLabel = (priority: number) => ({ 1: '🔴 高', 2: '🟡 中', 3: '🟢 低' }[priority] || '🟡 中');
@@ -641,7 +681,7 @@ const getPriorityBadgeClass = (priority: number) => ({
   1: 'bg-gradient-to-r from-red-100 to-rose-100 text-red-700 border border-red-200',
   2: 'bg-gradient-to-r from-yellow-100 to-amber-100 text-yellow-700 border border-yellow-200',
   3: 'bg-gradient-to-r from-green-100 to-emerald-100 text-green-700 border border-green-200'
-}[priority] || 'bg-gray-100 text-gray-700 border border-gray-200');
+}[priority] || 'bg-slate-100 text-slate-700 border border-slate-200');
 
 const getSubtaskProgress = (task: Task): number => {
   if (!task.subtasks || task.subtasks.length === 0) return 0;

@@ -1,7 +1,10 @@
-﻿from typing import Any
+from typing import Any
 
-from chains import get_default_llm, select_tools
+from services.agent_plan_service import AgentPlanRecord, agent_plan_store
 from services.mcp_bridge_service import MCPBridgeError, execute_mcp_tool, list_mcp_tools
+from services.tool_plan_service import ToolPlanError, propose_plan_with_llm
+from services.tools.registry import get_tool_definition
+from services.tools.registry import list_registered_tools
 
 
 class CopilotOperationError(Exception):
@@ -9,6 +12,104 @@ class CopilotOperationError(Exception):
         super().__init__(message)
         self.message = message
         self.status_code = status_code
+
+
+def _serialize_plan(record: AgentPlanRecord) -> dict[str, Any]:
+    return {
+        "ok": True,
+        "plan_id": record.plan_id,
+        "status": record.status,
+        "summary": record.summary,
+        "steps_preview": record.steps_preview,
+        "risk_notes": record.risk_notes,
+        "expires_at": record.expires_at.isoformat(),
+        "proposal_source": record.proposal_source,
+        "proposal_reason": record.proposal_reason,
+    }
+
+
+def _build_plan_preview(pending_tools: list[str]) -> tuple[list[str], list[str]]:
+    steps_preview: list[str] = []
+    risk_notes: list[str] = []
+
+    for tool_name in pending_tools:
+        tool = get_tool_definition(tool_name)
+        if tool is None:
+            steps_preview.append(f"執行工具：{tool_name}")
+            risk_notes.append("包含未標註契約工具，請先確認流程。")
+            continue
+        steps_preview.append(tool.user_visible_label)
+        if tool.requires_confirmation:
+            risk_notes.append(f"包含可能改動資料的步驟：{tool.user_visible_label}")
+
+    return steps_preview, list(dict.fromkeys(risk_notes))
+
+
+def _build_plan_summary(user_message: str, steps_preview: list[str]) -> str:
+    if not steps_preview:
+        return "目前沒有可執行的步驟。"
+    return f"目標「{user_message}」將依序執行：{', '.join(steps_preview)}。"
+
+
+def _sanitize_tool_payloads(tool_payloads: dict[str, dict[str, Any]] | None) -> dict[str, dict[str, Any]]:
+    if not isinstance(tool_payloads, dict):
+        return {}
+    protected = {"user_id", "actor_user_id", "created_by", "timeline_id", "task_id", "group_id"}
+    sanitized: dict[str, dict[str, Any]] = {}
+    for tool_name, payload in tool_payloads.items():
+        if not isinstance(payload, dict):
+            continue
+        item = dict(payload)
+        for key in protected:
+            item.pop(key, None)
+        sanitized[tool_name] = item
+    return sanitized
+
+
+def _merge_tool_payloads(
+    *,
+    incoming: dict[str, dict[str, Any]] | None,
+    draft: dict[str, dict[str, Any]] | None,
+) -> dict[str, dict[str, Any]]:
+    merged = _sanitize_tool_payloads(incoming)
+    if not isinstance(draft, dict):
+        return merged
+    for tool_name, payload in draft.items():
+        if not isinstance(payload, dict):
+            continue
+        merged.setdefault(tool_name, {})
+        merged[tool_name].update(_sanitize_tool_payloads({tool_name: payload}).get(tool_name, {}))
+    return merged
+
+
+def _propose_pending_tools(
+    *,
+    user_message: str,
+    context: dict[str, Any],
+    force_model_proposal: bool,
+) -> tuple[list[str], dict[str, dict[str, Any]], str, str | None]:
+    available_tools = list_registered_tools()
+    try:
+        proposal = propose_plan_with_llm(
+            user_message=user_message,
+            context=context,
+            tools=available_tools,
+        )
+        steps = [str(item).strip() for item in proposal.get("steps", []) if str(item).strip()]
+        if not steps:
+            raise ToolPlanError("模型未產出可執行步驟")
+        payload_draft = proposal.get("payload_draft", {})
+        if not isinstance(payload_draft, dict):
+            payload_draft = {}
+        reason = str(proposal.get("reason") or "").strip() or None
+        return steps, payload_draft, "llm_proposal", reason
+    except ToolPlanError as exc:
+        if force_model_proposal:
+            raise CopilotOperationError(f"模型重規劃失敗：{exc.message}", 409) from exc
+        from chains.agent_nodes import build_pending_tools
+
+        fallback = build_pending_tools(user_message)
+        return fallback, {}, "rule_fallback", f"模型提案失敗，改用規則：{exc.message}"
 
 
 def _to_int(value: Any) -> int | None:
@@ -94,6 +195,8 @@ def _ai_select_tool(
         raise CopilotOperationError("MCP 工具清單為空。", 500)
 
     try:
+        from chains import get_default_llm, select_tools
+
         llm = get_default_llm(provider="google-generativeai")
         parsed = select_tools(
             llm=llm,
@@ -337,5 +440,160 @@ def execute_copilot_mcp_request(
             response_payload["auto_create_result"] = auto_created.get("parsed_result")
 
     return response_payload
+
+
+def create_copilot_agent_plan(
+    user_message: str,
+    *,
+    user_id: int,
+    context: dict[str, Any] | None = None,
+    tool_payloads: dict[str, dict[str, Any]] | None = None,
+    force_model_proposal: bool = False,
+) -> dict[str, Any]:
+    """建立 agent 執行計畫（不執行工具）。"""
+    message = (user_message or "").strip()
+    if not message:
+        raise CopilotOperationError("message 不可為空。", 400)
+
+    normalized_context = _normalize_context(context)
+    pending_tools, payload_draft, proposal_source, proposal_reason = _propose_pending_tools(
+        user_message=message,
+        context=normalized_context,
+        force_model_proposal=force_model_proposal,
+    )
+    steps_preview, risk_notes = _build_plan_preview(pending_tools)
+    summary = _build_plan_summary(message, steps_preview)
+
+    record = agent_plan_store.create_plan(
+        user_id=user_id,
+        goal=message,
+        context=normalized_context,
+        approved_tool_payloads=_merge_tool_payloads(incoming=tool_payloads, draft=payload_draft),
+        pending_tools=pending_tools,
+        summary=summary,
+        steps_preview=steps_preview,
+        risk_notes=risk_notes,
+        proposal_source=proposal_source,
+        proposal_reason=proposal_reason,
+    )
+    return _serialize_plan(record)
+
+
+def reject_copilot_agent_plan(
+    plan_id: str,
+    *,
+    user_id: int,
+    reason: str | None = None,
+) -> dict[str, Any]:
+    """拒絕既有 agent 計畫。"""
+    safe_plan_id = (plan_id or "").strip()
+    if not safe_plan_id:
+        raise CopilotOperationError("plan_id 不可為空。", 400)
+    record = agent_plan_store.reject_plan(safe_plan_id, user_id=user_id, reason=reason)
+    if record is None:
+        raise CopilotOperationError("找不到對應計畫。", 404)
+    if record.status == "expired":
+        raise CopilotOperationError("計畫已過期，請重新規劃。", 409)
+    return {
+        "ok": True,
+        "plan_id": record.plan_id,
+        "status": record.status,
+    }
+
+
+def execute_copilot_agent_plan(
+    *,
+    plan_id: str,
+    user_id: int,
+    confirm: bool,
+    tool_payloads: dict[str, dict[str, Any]] | None = None,
+    max_loops: int = 6,
+) -> dict[str, Any]:
+    """執行已核准計畫。"""
+    safe_plan_id = (plan_id or "").strip()
+    if not safe_plan_id:
+        raise CopilotOperationError("plan_id 不可為空。", 400)
+    if not confirm:
+        raise CopilotOperationError("未確認執行，請先確認。", 400)
+    if isinstance(tool_payloads, dict) and len(tool_payloads) > 0:
+        raise CopilotOperationError("已確認計畫不可再覆寫執行參數，請改用 replan。", 409)
+
+    current = agent_plan_store.get_plan(safe_plan_id, user_id=user_id)
+    if current is None:
+        raise CopilotOperationError("找不到對應計畫。", 404)
+    if current.status == "expired":
+        raise CopilotOperationError("計畫已過期，請重新規劃。", 409)
+    if current.status == "rejected":
+        raise CopilotOperationError("此計畫已被拒絕，請重新規劃。", 409)
+    if current.status == "succeeded":
+        raise CopilotOperationError("此計畫已執行完成，不可重複執行。", 409)
+    if current.status == "failed":
+        raise CopilotOperationError("此計畫已執行失敗，請重新規劃後再試。", 409)
+    if current.status == "executing":
+        raise CopilotOperationError("此計畫正在執行中，請勿重複送出。", 409)
+
+    record = agent_plan_store.mark_executing(safe_plan_id, user_id=user_id)
+    if record is None:
+        raise CopilotOperationError("計畫狀態不允許執行，請重新規劃。", 409)
+
+    agent_payload = execute_copilot_agent_request(
+        user_message=record.goal,
+        context=record.context,
+        tool_payloads=record.approved_tool_payloads,
+        max_loops=max_loops,
+        approved_pending_tools=record.pending_tools,
+    )
+
+    succeeded = agent_payload.get("route") == "finalize"
+    if succeeded:
+        steps = agent_payload.get("steps", [])
+        if isinstance(steps, list) and steps:
+            succeeded = bool(steps[-1].get("output", {}).get("ok", False))
+    agent_plan_store.mark_executed(record.plan_id, user_id=user_id, succeeded=succeeded)
+
+    executed_tools = agent_payload.get("executed_tools", [])
+    diff_from_plan = []
+    if isinstance(executed_tools, list):
+        if executed_tools != record.pending_tools:
+            diff_from_plan.append("實際執行順序與計畫預覽不同。")
+    return {
+        "ok": True,
+        "plan_id": record.plan_id,
+        "execution_id": record.execution_id,
+        "status": "succeeded" if succeeded else "failed",
+        "summary": agent_payload.get("final_answer", ""),
+        "diff_from_plan": diff_from_plan,
+        "steps_result": agent_payload.get("steps", []),
+        "agent_result": agent_payload,
+    }
+
+
+def execute_copilot_agent_request(
+    user_message: str,
+    context: dict[str, Any] | None = None,
+    tool_payloads: dict[str, dict[str, Any]] | None = None,
+    max_loops: int = 6,
+    approved_pending_tools: list[str] | None = None,
+) -> dict[str, Any]:
+    """以單體 Tool Registry + LangGraph ReAct 流程執行使用者需求。"""
+    message = (user_message or "").strip()
+    if not message:
+        raise CopilotOperationError("message 不可為空。", 400)
+
+    normalized_context = _normalize_context(context)
+    safe_tool_payloads = _sanitize_tool_payloads(tool_payloads)
+
+    try:
+        from chains.agent_graph import run_react_agent
+
+        return run_react_agent(
+            user_message=message,
+            context=normalized_context,
+            tool_payloads=safe_tool_payloads,
+            max_loops=max_loops,
+            pending_tools=approved_pending_tools,
+        )
+    except Exception as exc:
+        raise CopilotOperationError(f"Agent 執行失敗：{exc}", 500) from exc
 
 

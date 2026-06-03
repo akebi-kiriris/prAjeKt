@@ -101,9 +101,14 @@
   - `PATCH /api/trash/timelines/:id/restore`
   - `DELETE /api/trash/timelines/:id`
 
-## Copilot
+## Copilot Agent API（Phase 9.5）
 
-- `POST /api/copilot/mcp/execute`：Copilot 工具執行入口（目前保留，9.3 單體版先不作主線）
+- `POST /api/copilot/agent/plan`：建立可確認的執行計畫，回傳摘要、步驟預覽、風險提示、`proposal_source`、`proposal_reason`
+- `POST /api/copilot/agent/execute`：僅執行已確認的 `plan_id`，不允許在 execute 階段覆寫參數
+- `POST /api/copilot/agent/reject`：拒絕既有計畫
+- `POST /api/copilot/agent/replan`：拒絕舊計畫後重新規劃，強制模型重提案並產生新 `plan_id`
+- `GET /api/copilot/agent/tools`：取得目前已註冊工具清單與輸入 schema
+- `POST /api/copilot/mcp/execute`：保留既有 MCP 路徑（相容舊流程）
 
 ---
 

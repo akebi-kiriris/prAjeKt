@@ -2,7 +2,7 @@
 
 基於 Vue 3 + Flask 的專案管理與協作平台，整合 Google Gemini AI 實現智能任務生成。
 
-> **開發狀態**：Phase 1~6.6+ 已完成 ✅；Phase 7.1、7.2 已完成核心功能 ✅；Phase 7.3 核心閉環已完成 ✅；Phase 8.1~8.7 已完成 ✅（交易邊界收斂、前端大型元件拆分、後端 service 契約化、CI/Deploy 拆分、單人精簡護欄與後端測試工廠化）；下一步進入 Phase 9（型別註解/Docstring/Tool Calling）。
+> **開發狀態**：Phase 1~6.6+ 已完成 ✅；Phase 7.1、7.2 已完成核心功能 ✅；Phase 7.3 核心閉環已完成 ✅；Phase 8.1~8.7 已完成 ✅（交易邊界收斂、前端大型元件拆分、後端 service 契約化、CI/Deploy 拆分、單人精簡護欄與後端測試工廠化）；Phase 9.1~9.5 已完成 ✅（型別基線、Docstring/tool 契約、單體 Tool Registry、雙階段確認、模型提案式 plan + replan 強制二次確認）；下一步進入 Phase 9.6 可觀測性與評測基線。
 
 ## 功能模組
 
@@ -17,6 +17,7 @@
 - **個人資料**：個人資訊編輯、密碼變更、使用統計
 - **數據分析儀表板**：整合於個人資料頁，Level 1 個人圖表（30 天完成趨勢、任務狀態分布、各專案任務量）+ Level 2 專案圖表（成員貢獻、任務狀態，負責人限定）
 - **AI 任務生成**：自然語言輸入 → AI 工具路由 → MCP 執行，支援批次創建與自動化（MCP Copilot 整合）；生成任務可帶入依賴欄位，缺漏時會套用順序鏈 fallback
+- **Copilot Agent（Phase 9.5）**：已完成單體 tool registry + LangGraph ReAct 最小閉環，並升級為 `plan -> confirm -> execute` 雙階段流程、模型提案式 plan、replan 強制重新提案與二次確認，前端 `CopilotDock` 可顯示步驟預覽、風險提示、提案來源與提案理由
 - **AI 群組快照（RAG-B 核心）**：群組聊天可生成「行動導向 Digest」（一句重點 / 你現在要做什麼 / 阻塞風險 / 精簡決議）
 - **個人知識庫（Phase 7.3）**：`/knowledge` 支援 md/txt/pdf 上傳、列表、狀態、搜尋、篩選、排序、刪除與重建索引，採 per-user 隔離檢索
 - **專案檔案區（Phase 7.3）**：Timeline 詳情內可管理 project-scoped knowledge files，支援上傳、篩選、批次刪除/重建、下載、預覽與最近操作紀錄
@@ -181,6 +182,7 @@ CI（GitHub Actions）：
 - **Payload 契約**：請參考 `docs/payload-contracts.md`，前後端 update/create 請遵守 allowlist
 - **錯誤碼契約**：請參考 `docs/API_錯誤碼表.md`，前端流程判斷請優先依 `error_code`
 - **文件同步流程**：請參考 `docs/文件更新與發布流程.md`
+
 
 ## 核心工程文件（架構/契約/Runbook）
 
