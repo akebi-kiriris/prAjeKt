@@ -1,154 +1,133 @@
 <template>
-  <div class="min-h-screen flex justify-center items-center p-8 bg-linear-to-br from-purple-500 to-purple-800 relative overflow-hidden">
-    <!-- Decorative shapes -->
-    <div class="absolute inset-0 overflow-hidden pointer-events-none">
-      <div class="absolute w-72 h-72 bg-white/10 rounded-full -top-24 -left-24 animate-float"></div>
-      <div class="absolute w-48 h-48 bg-white/10 rounded-full -bottom-12 -right-12 animate-float" style="animation-delay: 5s"></div>
-      <div class="absolute w-36 h-36 bg-white/10 rounded-full top-1/2 right-[10%] animate-float" style="animation-delay: 10s"></div>
+  <div class="relative min-h-screen overflow-hidden bg-slate-100 px-4 py-8 sm:px-6">
+    <div class="pointer-events-none absolute inset-0 overflow-hidden">
+      <div class="absolute -top-24 -left-14 h-60 w-60 rounded-full bg-primary/15 blur-3xl" />
+      <div class="absolute -right-14 bottom-4 h-64 w-64 rounded-full bg-cyan-200/35 blur-3xl" />
     </div>
-    
-    <div class="w-full max-w-xl relative z-10 bg-white/95 rounded-3xl shadow-2xl backdrop-blur-sm animate-slideUp">
-      <div class="p-10">
-        <div class="text-center mb-8">
-          <div class="mb-4">
-            <span class="text-5xl animate-pulse-custom inline-block">🚀</span>
-          </div>
-          <h2 class="text-3xl font-bold gradient-text mb-2">創建帳號</h2>
-          <p class="text-gray-500">加入 PrAjeKt 開始專案管理</p>
+
+    <div class="relative mx-auto grid min-h-[calc(100vh-4rem)] w-full max-w-5xl place-items-center">
+      <div class="w-full max-w-xl rounded-3xl border border-slate-200 bg-white p-7 shadow-[0_24px_50px_rgba(15,23,42,0.12)] sm:p-8">
+        <div class="mb-7">
+          <p class="mb-2 inline-flex rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[0.7rem] font-semibold tracking-[0.06em] text-slate-500">
+            ACCOUNT CREATE
+          </p>
+          <h2 class="text-3xl font-black tracking-[0.01em] text-slate-900">建立新帳號</h2>
+          <p class="mt-2 text-sm text-slate-500">加入 PrAjeKt 開始專案管理</p>
         </div>
-        
+
         <form @submit.prevent="handleRegister" class="space-y-5">
           <div>
-            <label class="block text-sm font-semibold text-gray-600 mb-2">姓名 *</label>
-            <div class="relative">
-              <span class="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400">👤</span>
-              <input 
-                v-model="formData.name" 
-                type="text" 
-                placeholder="請輸入姓名"
-                class="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
-                required
-              />
-            </div>
+            <label class="mb-2 block text-sm font-semibold text-slate-600">姓名 *</label>
+            <input
+              v-model="formData.name"
+              type="text"
+              placeholder="請輸入姓名"
+              class="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-400/20"
+              required
+            />
           </div>
-          
+
           <div>
-            <label class="block text-sm font-semibold text-gray-600 mb-2">用戶名（選填）</label>
-            <div class="relative">
-              <span class="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400">@</span>
-              <input 
-                v-model="formData.username" 
-                type="text" 
-                placeholder="請輸入唯一用戶名，如：john_doe"
-                class="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
-              />
-            </div>
-            <p class="text-xs text-gray-500 mt-1">用戶名可用於搜尋和標註，留空則使用 Email</p>
+            <label class="mb-2 block text-sm font-semibold text-slate-600">用戶名（選填）</label>
+            <input
+              v-model="formData.username"
+              type="text"
+              placeholder="請輸入唯一用戶名，如：john_doe"
+              class="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-400/20"
+            />
+            <p class="mt-1 text-xs text-slate-500">用戶名可用於搜尋和標註，留空則使用 Email</p>
           </div>
-          
+
           <div>
-            <label class="block text-sm font-semibold text-gray-600 mb-2">Email *</label>
-            <div class="relative">
-              <span class="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400">📧</span>
-              <input 
-                v-model="formData.email" 
-                type="email" 
-                placeholder="請輸入 email"
-                class="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
-                required
-              />
-            </div>
+            <label class="mb-2 block text-sm font-semibold text-slate-600">Email *</label>
+            <input
+              v-model="formData.email"
+              type="email"
+              placeholder="請輸入 email"
+              class="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-400/20"
+              required
+            />
           </div>
-          
+
           <div>
-            <label class="block text-sm font-semibold text-gray-600 mb-2">電話</label>
-            <div class="relative">
-              <span class="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400">📱</span>
-              <input 
-                v-model="formData.phone" 
-                type="tel" 
-                placeholder="請輸入電話"
-                class="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
-              />
-            </div>
+            <label class="mb-2 block text-sm font-semibold text-slate-600">電話</label>
+            <input
+              v-model="formData.phone"
+              type="tel"
+              placeholder="請輸入電話"
+              class="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-400/20"
+            />
           </div>
-          
+
           <div>
-            <label class="block text-sm font-semibold text-gray-600 mb-2">密碼 *</label>
+            <label class="mb-2 block text-sm font-semibold text-slate-600">密碼 *</label>
             <div class="relative">
-              <span class="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400">🔒</span>
-              <input 
-                v-model="formData.password" 
-                :type="showPassword ? 'text' : 'password'" 
+              <input
+                v-model="formData.password"
+                :type="showPassword ? 'text' : 'password'"
                 placeholder="請輸入密碼"
-                class="w-full pl-12 pr-12 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
+                class="w-full rounded-xl border border-slate-300 px-4 py-3 pr-16 text-sm outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-400/20"
                 required
               />
-              <button 
+              <button
                 type="button"
                 @click="showPassword = !showPassword"
-                class="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                class="absolute top-1/2 right-3 -translate-y-1/2 rounded-lg px-2 py-1 text-xs font-medium text-slate-500 transition hover:bg-slate-100 hover:text-slate-700"
               >
-                {{ showPassword ? '👁️' : '👁️‍🗨️' }}
+                {{ showPassword ? '隱藏' : '顯示' }}
               </button>
             </div>
           </div>
-          
+
           <div>
-            <label class="block text-sm font-semibold text-gray-600 mb-2">確認密碼 *</label>
+            <label class="mb-2 block text-sm font-semibold text-slate-600">確認密碼 *</label>
             <div class="relative">
-              <span class="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400">🔒</span>
-              <input 
-                v-model="confirmPassword" 
-                :type="showConfirmPassword ? 'text' : 'password'" 
+              <input
+                v-model="confirmPassword"
+                :type="showConfirmPassword ? 'text' : 'password'"
                 placeholder="請再次輸入密碼"
-                class="w-full pl-12 pr-12 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
+                class="w-full rounded-xl border border-slate-300 px-4 py-3 pr-16 text-sm outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-400/20"
                 required
               />
-              <button 
+              <button
                 type="button"
                 @click="showConfirmPassword = !showConfirmPassword"
-                class="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                class="absolute top-1/2 right-3 -translate-y-1/2 rounded-lg px-2 py-1 text-xs font-medium text-slate-500 transition hover:bg-slate-100 hover:text-slate-700"
               >
-                {{ showConfirmPassword ? '👁️' : '👁️‍🗨️' }}
+                {{ showConfirmPassword ? '隱藏' : '顯示' }}
               </button>
             </div>
           </div>
-          
-          <div v-if="errorMessage" class="p-3 bg-red-50 border border-red-200 text-red-600 rounded-lg text-sm">
+
+          <div v-if="errorMessage" class="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-600">
             {{ errorMessage }}
           </div>
-          
-          <div v-if="successMessage" class="p-3 bg-green-50 border border-green-200 text-green-600 rounded-lg text-sm">
+
+          <div v-if="successMessage" class="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700">
             {{ successMessage }}
           </div>
-          
-          <button 
-            type="submit" 
+
+          <button
+            type="submit"
             :disabled="loading"
-            class="w-full py-4 font-bold text-lg rounded-full border-4 shadow-xl hover:-translate-y-0.5 hover:shadow-2xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-            style="background: var(--color-primary); color: #fff; border-color: var(--color-primary);"
+            class="flex w-full items-center justify-center rounded-xl bg-primary px-4 py-3 text-sm font-bold text-white shadow-[0_8px_18px_rgba(37,99,235,0.26)] transition hover:-translate-y-px hover:shadow-[0_12px_22px_rgba(37,99,235,0.32)] disabled:cursor-not-allowed disabled:opacity-50"
           >
-            <span v-if="loading">註冊中...</span>
-            <span v-else class="flex items-center justify-center gap-2">
-              ✓ 立即註冊
-            </span>
+            {{ loading ? '註冊中...' : '立即註冊' }}
           </button>
-        </form>
-        
-        <div class="my-6 flex items-center">
-          <div class="flex-1 h-px bg-gray-200"></div>
-          <span class="px-4 text-gray-400 text-sm">已有帳號？</span>
-          <div class="flex-1 h-px bg-gray-200"></div>
-        </div>
-        
-        <div class="text-center">
-          <router-link to="/login">
-            <button class="w-full py-3 border-2 border-gray-400 text-gray-600 font-semibold rounded-full hover:bg-gray-100 transition-all">
-              前往登入
-            </button>
+
+          <div class="my-5 flex items-center">
+            <div class="h-px flex-1 bg-slate-200" />
+            <span class="px-3 text-xs text-slate-400">已有帳號？</span>
+            <div class="h-px flex-1 bg-slate-200" />
+          </div>
+
+          <router-link
+            to="/login"
+            class="flex w-full items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+          >
+            前往登入
           </router-link>
-        </div>
+        </form>
       </div>
     </div>
   </div>

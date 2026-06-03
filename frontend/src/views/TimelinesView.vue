@@ -1,6 +1,6 @@
 <template>
-  <div class="h-full w-full bg-linear-to-br from-slate-50 to-blue-50/30 px-6 pt-6 pb-24 md:pb-6 overflow-y-auto">
-    <div class="grid grid-cols-1 gap-6 max-w-7xl mx-auto">
+  <div class="h-full w-full overflow-y-auto bg-slate-100/70 px-4 pt-6 pb-24 md:px-6 md:pb-6">
+    <div class="mx-auto grid w-full max-w-6xl grid-cols-1 gap-6">
 
       <!-- Header + Stats + View Toggle -->
       <TimelineHeader
@@ -30,51 +30,50 @@
     </div>
 
     <!-- 新增 / 編輯專案 Modal（全域，覆蓋在最上層） -->
-    <div v-if="showCreateModal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg animate-slideUp max-h-[90vh] overflow-y-auto">
-        <div class="p-5 border-b border-gray-100 flex justify-between items-center bg-linear-to-r from-primary/5 to-transparent">
-          <h2 class="text-lg font-semibold text-gray-800 flex items-center gap-2">
-            <span class="w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center">📁</span>
+    <div v-if="showCreateModal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" @click.self="closeModal">
+      <div class="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-slate-200 bg-white shadow-2xl">
+        <div class="flex items-center justify-between border-b border-slate-200 bg-slate-50/70 p-5">
+          <h2 class="flex items-center gap-2 text-lg font-semibold text-slate-800">
+            <span class="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">📁</span>
             {{ editingTimeline ? '編輯專案' : '新增專案' }}
           </h2>
-          <button @click="closeModal" class="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">&times;</button>
+          <button @click="closeModal" class="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600">&times;</button>
         </div>
         <form @submit.prevent="handleSubmit" class="p-5 space-y-5">
           <div>
-            <label class="block text-sm font-semibold text-gray-700 mb-2">專案名稱 *</label>
+            <label class="mb-2 block text-sm font-semibold text-slate-700">專案名稱 *</label>
             <input
               v-model.lazy="timelineForm.name"
               type="text"
               placeholder="例如：Q1 產品開發計畫"
-              class="w-full px-4 py-3 text-base border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all bg-gray-50/50"
+              class="w-full rounded-xl border border-slate-300 bg-slate-50/60 px-4 py-3 text-base outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-400/20"
               required
             />
           </div>
           <div class="grid grid-cols-2 gap-4">
             <div>
-              <label class="block text-sm font-semibold text-gray-700 mb-2">開始日期</label>
-              <input v-model.lazy="timelineForm.start_date" type="date" class="w-full px-4 py-3 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all bg-gray-50/50" />
+              <label class="mb-2 block text-sm font-semibold text-slate-700">開始日期</label>
+              <input v-model.lazy="timelineForm.start_date" type="date" class="w-full rounded-xl border border-slate-300 bg-slate-50/60 px-4 py-3 text-sm outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-400/20" />
             </div>
             <div>
-              <label class="block text-sm font-semibold text-gray-700 mb-2">結束日期</label>
-              <input v-model.lazy="timelineForm.end_date" type="date" class="w-full px-4 py-3 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all bg-gray-50/50" />
+              <label class="mb-2 block text-sm font-semibold text-slate-700">結束日期</label>
+              <input v-model.lazy="timelineForm.end_date" type="date" class="w-full rounded-xl border border-slate-300 bg-slate-50/60 px-4 py-3 text-sm outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-400/20" />
             </div>
           </div>
           <div>
-            <label class="block text-sm font-semibold text-gray-700 mb-2">專案備註</label>
+            <label class="mb-2 block text-sm font-semibold text-slate-700">專案備註</label>
             <textarea
               v-model.lazy="timelineForm.remark"
               rows="3"
               placeholder="描述專案目標、重要里程碑..."
-              class="w-full px-4 py-3 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all resize-none bg-gray-50/50"
+              class="w-full resize-none rounded-xl border border-slate-300 bg-slate-50/60 px-4 py-3 text-sm outline-none transition focus:border-slate-500 focus:ring-2 focus:ring-slate-400/20"
             ></textarea>
           </div>
           <div class="flex gap-3 pt-2">
-            <button type="submit" class="flex-1 py-3 bg-primary text-white font-semibold rounded-xl shadow-lg shadow-primary/25 hover:shadow-xl hover:-translate-y-0.5 transition-all flex items-center justify-center gap-2">
-              <span>✓</span>
+            <button type="submit" class="flex flex-1 items-center justify-center gap-2 rounded-xl bg-primary py-3 font-semibold text-white shadow-[0_8px_18px_rgba(37,99,235,0.25)] transition-all hover:-translate-y-px hover:shadow-[0_12px_22px_rgba(37,99,235,0.32)]">
               {{ editingTimeline ? '更新專案' : '建立專案' }}
             </button>
-            <button type="button" @click="closeModal" class="flex-1 py-3 bg-gray-100 text-gray-700 font-semibold rounded-xl hover:bg-gray-200 transition-all">取消</button>
+            <button type="button" @click="closeModal" class="flex-1 rounded-xl border border-slate-300 bg-white py-3 font-semibold text-slate-700 transition-all hover:bg-slate-50">取消</button>
           </div>
         </form>
       </div>
@@ -95,7 +94,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import { toast } from 'vue-sonner';
 import { storeToRefs } from 'pinia';
 import { useTimelineStore } from '../stores/timelines';
@@ -117,6 +117,8 @@ const { confirm } = useConfirm();
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
 const timelineStore = useTimelineStore();
+const route = useRoute();
+const router = useRouter();
 
 // ────────────── Store 狀態（響應式解構）──────────────
 const { timelines, allTasks, urgentCount, totalCompletedTasks, totalTasks, sortedTimelines } = storeToRefs(timelineStore);
@@ -171,6 +173,7 @@ const buildTimelineUpdatePayload = (original: Timeline, form: TimelineForm): Upd
 // ────────────── 專案 CRUD ──────────────
 const viewTimeline = async (timeline: Timeline) => {
   selectedTimeline.value = timeline;
+  await router.replace({ query: { ...route.query, timeline_id: String(timeline.id) } });
   try {
     timelineTasks.value = await timelineStore.getTimelineTasks(timeline.id);
   } catch (error) {
@@ -258,11 +261,23 @@ const onDeleteTask = async (taskId: number) => {
   }
 };
 
+const clearTimelineQuery = async () => {
+  const nextQuery = { ...route.query };
+  delete nextQuery.timeline_id;
+  await router.replace({ query: nextQuery });
+};
+
 // ────────────── 子元件請求全域重整 ──────────────
 const onRefreshAll = async () => {
   await timelineStore.fetchAll();
   if (selectedTimeline.value) await viewTimeline(selectedTimeline.value);
 };
+
+watch(selectedTimeline, (nextValue, prevValue) => {
+  if (prevValue && !nextValue) {
+    void clearTimelineQuery();
+  }
+});
 
 onMounted(() => {
   void timelineStore.fetchAll();
@@ -314,6 +329,4 @@ onMounted(() => {
 .kanban-card { transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); }
 .kanban-card:hover { border-color: #3b82f6 !important; }
 .sortable-chosen { cursor: grabbing !important; }
-@keyframes slideIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
-.kanban-card { animation: slideIn 0.3s ease-out; }
 </style>

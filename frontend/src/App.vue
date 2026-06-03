@@ -11,6 +11,7 @@
     <main :class="mainClass" :style="sidebarOpen && !isMobile ? '' : 'background: #f3f4f6;'">
       <router-view />
     </main>
+    <CopilotDock />
   </div>
 </template>
 
@@ -23,6 +24,7 @@ import Header from './components/Header.vue';
 import Sidebar from './components/Sidebar.vue';
 import { Toaster } from 'vue-sonner';
 import ConfirmDialog from './components/ConfirmDialog.vue';
+import CopilotDock from './components/CopilotDock.vue';
 
 // 手機/桌面偵測（以 768px 為分界，對應 Tailwind md:）
 const isMobile = ref<boolean>(window.innerWidth < 768);

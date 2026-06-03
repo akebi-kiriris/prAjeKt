@@ -1,45 +1,45 @@
 <template>
   <div>
     <!-- 專案詳情 Dialog -->
-    <div v-if="selectedTimeline" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div class="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col animate-slideUp">
-        <div class="p-5 border-b border-gray-100 flex justify-between items-center bg-linear-to-r from-primary/5 to-transparent shrink-0">
+    <div v-if="selectedTimeline" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" @click.self="$emit('close')">
+      <div class="w-full max-w-4xl max-h-[90vh] flex flex-col rounded-2xl border border-slate-200 bg-white shadow-[0_20px_40px_rgba(15,23,42,0.14)]">
+        <div class="shrink-0 flex items-center justify-between border-b border-slate-200 bg-slate-50/80 p-5">
           <div>
-            <h2 class="text-xl font-bold text-gray-800">{{ selectedTimeline.name }}</h2>
-            <p class="text-sm text-gray-500 mt-1">{{ formatDate(selectedTimeline.startDate) }} - {{ formatDate(selectedTimeline.endDate) }}</p>
+            <h2 class="text-xl font-bold text-slate-800">{{ selectedTimeline.name }}</h2>
+            <p class="text-sm text-slate-500 mt-1">{{ formatDate(selectedTimeline.startDate) }} - {{ formatDate(selectedTimeline.endDate) }}</p>
           </div>
           <div class="flex items-center gap-2">
-            <button @click="showAiGenerateModal = true" class="flex items-center gap-2 px-4 py-2 bg-linear-to-r from-purple-500 to-indigo-500 text-white text-sm font-medium rounded-xl hover:brightness-110 transition-all shadow">
+            <button @click="showAiGenerateModal = true" class="flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-medium text-white shadow-[0_8px_18px_rgba(37,99,235,0.24)] transition-all hover:brightness-110">
               <span>🤖</span> AI 生成任務
             </button>
-            <button @click="showAddTaskModal = true" class="flex items-center gap-2 px-4 py-2 bg-primary text-white text-sm font-medium rounded-xl hover:brightness-110 transition-all shadow">
+            <button @click="showAddTaskModal = true" class="flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm font-medium text-white shadow-[0_8px_18px_rgba(37,99,235,0.24)] transition-all hover:brightness-110">
               <span>＋</span> 新增任務
             </button>
-            <button v-if="selectedTimeline?.role === 0" @click="isSharePanelOpen = true" class="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-gray-600 text-sm font-medium rounded-xl hover:bg-gray-50 transition-all shadow-sm">
+            <button v-if="selectedTimeline?.role === 0" @click="isSharePanelOpen = true" class="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 text-slate-600 text-sm font-medium rounded-xl hover:bg-slate-50 transition-all shadow-sm">
               <span>👥</span> 成員管理
             </button>
-            <button @click="$emit('close')" class="w-9 h-9 flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-xl transition-colors text-xl">&times;</button>
+            <button @click="$emit('close')" class="w-9 h-9 flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-colors text-xl">&times;</button>
           </div>
         </div>
 
         <div class="flex-1 overflow-y-auto p-5">
           <!-- 備註區域 -->
           <div v-if="!isEditingRemark && !timelineRemark" class="mb-4">
-            <button @click="isEditingRemark = true" class="text-sm text-gray-400 hover:text-primary transition-colors flex items-center gap-1">
+            <button @click="isEditingRemark = true" class="text-sm text-slate-400 hover:text-primary transition-colors flex items-center gap-1">
               <span>✏️</span> 新增備註
             </button>
           </div>
           <div v-if="!isEditingRemark && timelineRemark" class="mb-4 p-4 bg-yellow-50/70 border border-yellow-100 rounded-xl">
             <div class="flex items-start justify-between">
-              <p class="text-sm text-gray-600">{{ timelineRemark }}</p>
-              <button @click="startEditRemark" class="ml-2 text-gray-400 hover:text-primary transition-colors shrink-0">✏️</button>
+              <p class="text-sm text-slate-600">{{ timelineRemark }}</p>
+              <button @click="startEditRemark" class="ml-2 text-slate-400 hover:text-primary transition-colors shrink-0">✏️</button>
             </div>
           </div>
           <div v-if="isEditingRemark" class="mb-4">
-            <textarea v-model="localRemark" rows="3" placeholder="新增備註..." class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none resize-none"></textarea>
+            <textarea v-model="localRemark" rows="3" placeholder="新增備註..." class="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none resize-none"></textarea>
             <div class="flex gap-2 mt-2">
               <button @click="saveRemark" class="px-4 py-1.5 bg-primary text-white text-sm font-medium rounded-lg hover:brightness-110 transition-all">儲存</button>
-              <button @click="isEditingRemark = false" class="px-4 py-1.5 bg-gray-100 text-gray-600 text-sm font-medium rounded-lg hover:bg-gray-200 transition-all">取消</button>
+              <button @click="isEditingRemark = false" class="px-4 py-1.5 bg-slate-100 text-slate-600 text-sm font-medium rounded-lg hover:bg-slate-200 transition-all">取消</button>
             </div>
           </div>
 
@@ -379,20 +379,20 @@
 
           <!-- 任務列表 -->
           <div class="space-y-2">
-            <div v-for="task in timelineTasks" :key="task.task_id" class="flex items-center gap-3 p-3 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors group">
-              <input type="checkbox" :checked="task.completed" @change="$emit('toggle-task', task.task_id)" class="w-5 h-5 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer" />
+            <div v-for="task in timelineTasks" :key="task.task_id" class="flex items-center gap-3 p-3 bg-slate-50 rounded-xl hover:bg-slate-100 transition-colors group">
+              <input type="checkbox" :checked="task.completed" @change="$emit('toggle-task', task.task_id)" class="w-5 h-5 rounded border-slate-300 text-primary focus:ring-primary cursor-pointer" />
               <div class="flex-1 min-w-0">
-                <span :class="['text-sm cursor-pointer', task.completed ? 'line-through text-gray-400' : 'text-gray-700']" @click="openTaskDetail(task)">{{ task.name }}</span>
-                <p v-if="(task.depends_on_task_ids || []).length > 0" class="text-[11px] text-gray-400 mt-0.5 truncate">
+                <span :class="['text-sm cursor-pointer', task.completed ? 'line-through text-slate-400' : 'text-slate-700']" @click="openTaskDetail(task)">{{ task.name }}</span>
+                <p v-if="(task.depends_on_task_ids || []).length > 0" class="text-[11px] text-slate-400 mt-0.5 truncate">
                   前置：{{ (task.depends_on_task_ids || []).map(getTaskNameById).join('、') }}
                 </p>
               </div>
-              <span v-if="task.end_date" class="text-xs text-gray-400 hidden group-hover:inline">{{ formatDate(task.end_date) }}</span>
+              <span v-if="task.end_date" class="text-xs text-slate-400 hidden group-hover:inline">{{ formatDate(task.end_date) }}</span>
               <span :class="['text-xs px-2 py-0.5 rounded-full font-medium', getPriorityBadgeClass(task.priority)]">{{ getPriorityLabel(task.priority) }}</span>
               <button v-if="canManageTaskMembers(task)" @click.stop="openTaskMemberPanel(task)" class="opacity-100 md:opacity-0 md:group-hover:opacity-100 text-indigo-400 hover:text-indigo-600 transition-all text-sm" title="指派成員">👥</button>
               <button @click="$emit('delete-task', task.task_id)" class="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-600 transition-all text-sm">🗑️</button>
             </div>
-            <div v-if="timelineTasks.length === 0" class="text-center py-10 text-gray-400">
+            <div v-if="timelineTasks.length === 0" class="text-center py-10 text-slate-400">
               <span class="text-4xl block mb-2">📋</span>
               <p class="text-sm">尚無任務，點擊「新增任務」開始建立</p>
             </div>
@@ -402,41 +402,41 @@
     </div>
 
     <!-- 新增任務 Modal -->
-    <div v-if="showAddTaskModal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-60 p-4">
-      <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg animate-slideUp">
-        <div class="p-5 border-b border-gray-100 flex justify-between items-center">
-          <h3 class="text-lg font-semibold text-gray-800">新增任務</h3>
-          <button @click="showAddTaskModal = false; resetTaskForm()" class="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">&times;</button>
+    <div v-if="showAddTaskModal" class="fixed inset-0 z-60 flex items-center justify-center bg-black/50 p-4" @click.self="showAddTaskModal = false; resetTaskForm()">
+      <div class="w-full max-w-lg rounded-2xl border border-slate-200 bg-white shadow-[0_20px_40px_rgba(15,23,42,0.14)]">
+        <div class="p-5 border-b border-slate-200 flex justify-between items-center">
+          <h3 class="text-lg font-semibold text-slate-800">新增任務</h3>
+          <button @click="showAddTaskModal = false; resetTaskForm()" class="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">&times;</button>
         </div>
         <form @submit.prevent="handleAddTask" class="p-5 space-y-4">
           <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1.5">任務名稱 <span class="text-red-500">*</span></label>
-            <input v-model="taskForm.name" type="text" required placeholder="輸入任務名稱" class="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none" />
+            <label class="block text-sm font-medium text-slate-700 mb-1.5">任務名稱 <span class="text-red-500">*</span></label>
+            <input v-model="taskForm.name" type="text" required placeholder="輸入任務名稱" class="w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none" />
           </div>
           <div class="grid grid-cols-2 gap-4">
             <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1.5">開始日期</label>
-              <input v-model="taskForm.start_date" type="date" class="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none" />
+              <label class="block text-sm font-medium text-slate-700 mb-1.5">開始日期</label>
+              <input v-model="taskForm.start_date" type="date" class="w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none" />
             </div>
             <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1.5">截止日期</label>
-              <input v-model="taskForm.end_date" type="date" class="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none" />
+              <label class="block text-sm font-medium text-slate-700 mb-1.5">截止日期</label>
+              <input v-model="taskForm.end_date" type="date" class="w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none" />
             </div>
           </div>
           <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1.5">優先級</label>
-            <select v-model="taskForm.priority" class="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none bg-white">
+            <label class="block text-sm font-medium text-slate-700 mb-1.5">優先級</label>
+            <select v-model="taskForm.priority" class="w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none bg-white">
               <option :value="1">🔴 高優先</option>
               <option :value="2">🟡 中優先</option>
               <option :value="3">🟢 低優先</option>
             </select>
           </div>
           <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1.5">指派成員（可多選）</label>
+            <label class="block text-sm font-medium text-slate-700 mb-1.5">指派成員（可多選）</label>
             <select
               v-model="addTaskAssigneeIds"
               multiple
-              class="w-full min-h-30 px-3 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none bg-white text-sm"
+              class="w-full min-h-30 px-3 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none bg-white text-sm"
             >
               <option
                 v-for="member in timelineMembers"
@@ -446,7 +446,7 @@
                 {{ member.username || member.name }}
               </option>
             </select>
-            <p class="text-[11px] text-gray-500 mt-1.5">
+            <p class="text-[11px] text-slate-500 mt-1.5">
               未選擇時預設分派給自己。若分派給他人，衝突明細會只顯示件數。
             </p>
             <div v-if="addTaskAssigneeIds.length > 0" class="mt-2 flex flex-wrap gap-1.5">
@@ -460,11 +460,11 @@
             </div>
           </div>
           <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1.5">前置依賴任務（可多選）</label>
+            <label class="block text-sm font-medium text-slate-700 mb-1.5">前置依賴任務（可多選）</label>
             <select
               v-model="addTaskDependencyIds"
               multiple
-              class="w-full min-h-30 px-3 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none bg-white text-sm"
+              class="w-full min-h-30 px-3 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none bg-white text-sm"
             >
               <option
                 v-for="taskOption in availableDependencyTasks"
@@ -474,7 +474,7 @@
                 {{ taskOption.name }}
               </option>
             </select>
-            <p class="text-[11px] text-gray-500 mt-1.5">僅可依賴本專案任務；會自動去重與驗證。</p>
+            <p class="text-[11px] text-slate-500 mt-1.5">僅可依賴本專案任務；會自動去重與驗證。</p>
             <div v-if="addTaskDependencyIds.length > 0" class="mt-2 flex flex-wrap gap-1.5">
               <span
                 v-for="dependencyId in addTaskDependencyIds"
@@ -486,12 +486,12 @@
             </div>
           </div>
           <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1.5">標籤（逗號分隔）</label>
-            <input v-model="taskForm.tags" type="text" placeholder="例如：前端, 重要, Bug" class="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none" />
+            <label class="block text-sm font-medium text-slate-700 mb-1.5">標籤（逗號分隔）</label>
+            <input v-model="taskForm.tags" type="text" placeholder="例如：前端, 重要, Bug" class="w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none" />
           </div>
           <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1.5">備註</label>
-            <textarea v-model="taskForm.task_remark" rows="3" placeholder="任務備註（可選）" class="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none resize-none"></textarea>
+            <label class="block text-sm font-medium text-slate-700 mb-1.5">備註</label>
+            <textarea v-model="taskForm.task_remark" rows="3" placeholder="任務備註（可選）" class="w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none resize-none"></textarea>
           </div>
           <div v-if="addTaskConflictSummary.hasConflict" class="p-3 bg-amber-50 border border-amber-200 rounded-xl">
             <p class="text-sm font-semibold text-amber-700 mb-1">⚠️ 偵測到 {{ addTaskConflictSummary.totalSignals }} 個排程衝突訊號</p>
@@ -562,7 +562,7 @@
             </div>
           </div>
           <div class="flex gap-3 pt-2">
-            <button type="button" @click="showAddTaskModal = false; resetTaskForm()" class="flex-1 py-2.5 border border-gray-200 text-gray-600 font-medium rounded-xl hover:bg-gray-50 transition-colors">取消</button>
+            <button type="button" @click="showAddTaskModal = false; resetTaskForm()" class="flex-1 py-2.5 border border-slate-200 text-slate-600 font-medium rounded-xl hover:bg-slate-50 transition-colors">取消</button>
             <button type="submit" class="flex-1 py-2.5 bg-primary text-white font-semibold rounded-xl hover:brightness-110 transition-all shadow-md shadow-primary/25">新增</button>
           </div>
         </form>
@@ -570,48 +570,48 @@
     </div>
 
     <!-- 成員管理 Panel -->
-    <div v-if="isSharePanelOpen" class="fixed inset-0 bg-black/50 flex items-center justify-center z-60 p-4">
-      <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md animate-slideUp">
-        <div class="p-5 border-b border-gray-100 flex justify-between items-center">
-          <h3 class="text-lg font-semibold text-gray-800">👥 成員管理</h3>
-          <button @click="isSharePanelOpen = false" class="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">&times;</button>
+    <div v-if="isSharePanelOpen" class="fixed inset-0 z-60 flex items-center justify-center bg-black/50 p-4" @click.self="isSharePanelOpen = false">
+      <div class="w-full max-w-md rounded-2xl border border-slate-200 bg-white shadow-[0_20px_40px_rgba(15,23,42,0.14)]">
+        <div class="p-5 border-b border-slate-200 flex justify-between items-center">
+          <h3 class="text-lg font-semibold text-slate-800">👥 成員管理</h3>
+          <button @click="isSharePanelOpen = false" class="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">&times;</button>
         </div>
         <div class="p-5 space-y-4">
           <!-- 現有成員列表 -->
           <div v-if="timelineMembers.length > 0">
-            <p class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">目前成員</p>
+            <p class="text-xs font-medium text-slate-500 uppercase tracking-wide mb-2">目前成員</p>
             <div class="space-y-2">
-              <div v-for="member in timelineMembers" :key="member.user_id" class="flex items-center justify-between p-2.5 bg-gray-50 rounded-xl">
+              <div v-for="member in timelineMembers" :key="member.user_id" class="flex items-center justify-between p-2.5 bg-slate-50 rounded-xl">
                 <div class="flex items-center gap-2.5">
                   <div class="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center text-sm font-bold text-primary shrink-0">
                     {{ (member.username || member.name || '?')[0].toUpperCase() }}
                   </div>
                   <div>
-                    <p class="text-sm font-medium text-gray-800">{{ member.username || member.name }}</p>
-                    <p class="text-xs text-gray-500">{{ member.email }}</p>
+                    <p class="text-sm font-medium text-slate-800">{{ member.username || member.name }}</p>
+                    <p class="text-xs text-slate-500">{{ member.email }}</p>
                   </div>
                 </div>
                 <div class="flex items-center gap-1.5">
-                  <span :class="['px-2 py-0.5 text-xs font-medium rounded-full', member.role === 0 ? 'bg-primary/10 text-primary' : 'bg-gray-100 text-gray-500']">
+                  <span :class="['px-2 py-0.5 text-xs font-medium rounded-full', member.role === 0 ? 'bg-primary/10 text-primary' : 'bg-slate-100 text-slate-500']">
                     {{ member.role === 0 ? '負責人' : '協作者' }}
                   </span>
-                  <button v-if="member.role !== 0" @click="kickMember(member)" class="w-7 h-7 flex items-center justify-center text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors text-sm font-bold">✕</button>
+                  <button v-if="member.role !== 0" @click="kickMember(member)" class="w-7 h-7 flex items-center justify-center text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors text-sm font-bold">✕</button>
                 </div>
               </div>
             </div>
           </div>
           <!-- 邀請新成員 -->
-          <div :class="timelineMembers.length > 0 ? 'border-t border-gray-100 pt-4' : ''">
-            <p class="text-sm text-gray-500 mb-3">邀請成員加入「{{ selectedTimeline?.name }}」</p>
+          <div :class="timelineMembers.length > 0 ? 'border-t border-slate-200 pt-4' : ''">
+            <p class="text-sm text-slate-500 mb-3">邀請成員加入「{{ selectedTimeline?.name }}」</p>
             <div class="flex gap-2">
-              <input v-model="inputEmail" type="email" placeholder="輸入用戶 Email" class="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none" @keyup.enter="searchUser" />
+              <input v-model="inputEmail" type="email" placeholder="輸入用戶 Email" class="flex-1 px-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none" @keyup.enter="searchUser" />
               <button @click="searchUser" class="px-4 py-2.5 bg-primary text-white font-medium rounded-xl hover:brightness-110 transition-all">搜尋</button>
             </div>
             <div v-if="searchError" class="mt-2 p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-600">{{ searchError }}</div>
             <div v-if="searchResult" class="mt-2 p-4 bg-green-50 border border-green-200 rounded-xl">
               <div class="flex items-center justify-between">
                 <div>
-                  <p class="font-medium text-gray-800">{{ searchResult.name }}</p>
+                  <p class="font-medium text-slate-800">{{ searchResult.name }}</p>
                 </div>
                 <button @click="confirmShare" class="px-4 py-2 bg-primary text-white text-sm font-medium rounded-xl hover:brightness-110 transition-all">邀請</button>
               </div>
@@ -622,30 +622,30 @@
     </div>
 
     <!-- 任務成員指派 Panel -->
-    <div v-if="isTaskMemberPanelOpen" class="fixed inset-0 bg-black/50 flex items-center justify-center z-60 p-4">
-      <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md animate-slideUp">
-        <div class="p-5 border-b border-gray-100 flex justify-between items-center">
-          <h3 class="text-lg font-semibold text-gray-800">👥 任務成員 — {{ assignTask?.name }}</h3>
-          <button @click="isTaskMemberPanelOpen = false" class="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">&times;</button>
+    <div v-if="isTaskMemberPanelOpen" class="fixed inset-0 z-60 flex items-center justify-center bg-black/50 p-4" @click.self="isTaskMemberPanelOpen = false">
+      <div class="w-full max-w-md rounded-2xl border border-slate-200 bg-white shadow-[0_20px_40px_rgba(15,23,42,0.14)]">
+        <div class="p-5 border-b border-slate-200 flex justify-between items-center">
+          <h3 class="text-lg font-semibold text-slate-800">👥 任務成員 — {{ assignTask?.name }}</h3>
+          <button @click="isTaskMemberPanelOpen = false" class="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">&times;</button>
         </div>
         <div class="p-5 space-y-4">
           <!-- 現有任務成員 -->
           <div>
-            <p class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">目前成員</p>
-            <div v-if="taskMembersForAssign.length === 0" class="text-center py-3 text-gray-400 text-sm">尚無指派成員</div>
+            <p class="text-xs font-medium text-slate-500 uppercase tracking-wide mb-2">目前成員</p>
+            <div v-if="taskMembersForAssign.length === 0" class="text-center py-3 text-slate-400 text-sm">尚無指派成員</div>
             <div v-else class="space-y-2">
-              <div v-for="member in taskMembersForAssign" :key="member.user_id" class="flex items-center justify-between p-2.5 bg-gray-50 rounded-xl">
+              <div v-for="member in taskMembersForAssign" :key="member.user_id" class="flex items-center justify-between p-2.5 bg-slate-50 rounded-xl">
                 <div class="flex items-center gap-2.5">
                   <div class="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center text-sm font-bold text-primary shrink-0">
                     {{ (member.name || '?')[0].toUpperCase() }}
                   </div>
                   <div>
-                    <p class="text-sm font-medium text-gray-800">{{ member.name }}</p>
-                    <p class="text-xs text-gray-500">{{ member.email }}</p>
+                    <p class="text-sm font-medium text-slate-800">{{ member.name }}</p>
+                    <p class="text-xs text-slate-500">{{ member.email }}</p>
                   </div>
                 </div>
                 <div class="flex items-center gap-1.5">
-                  <span :class="['px-2 py-0.5 text-xs font-medium rounded-full', member.role === 0 ? 'bg-primary/10 text-primary' : 'bg-gray-100 text-gray-500']">
+                  <span :class="['px-2 py-0.5 text-xs font-medium rounded-full', member.role === 0 ? 'bg-primary/10 text-primary' : 'bg-slate-100 text-slate-500']">
                     {{ member.role === 0 ? '負責人' : '協作者' }}
                   </span>
                   <button
@@ -653,17 +653,17 @@
                     @click="setAssignedTaskOwner(member)"
                     class="px-2 py-1 text-[11px] font-medium rounded-lg bg-amber-100 text-amber-700 hover:bg-amber-200 transition-colors"
                   >設為主責</button>
-                  <button v-if="member.role !== 0" @click="kickAssignedMember(member)" class="w-7 h-7 flex items-center justify-center text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors text-sm font-bold">✕</button>
+                  <button v-if="member.role !== 0" @click="kickAssignedMember(member)" class="w-7 h-7 flex items-center justify-center text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors text-sm font-bold">✕</button>
                 </div>
               </div>
             </div>
           </div>
           <!-- 快速指派：專案成員 -->
-          <div class="border-t border-gray-100 pt-4">
-            <p class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">專案成員快速指派</p>
-            <div v-if="timelineMembers.length === 0" class="text-center py-3 text-gray-400 text-sm">載入中...</div>
+          <div class="border-t border-slate-200 pt-4">
+            <p class="text-xs font-medium text-slate-500 uppercase tracking-wide mb-2">專案成員快速指派</p>
+            <div v-if="timelineMembers.length === 0" class="text-center py-3 text-slate-400 text-sm">載入中...</div>
             <template v-else>
-              <div v-if="timelineMembers.filter(m => !taskMembersForAssign.some(tm => tm.user_id === m.user_id)).length === 0" class="text-center py-3 text-gray-400 text-sm">所有專案成員皆已加入此任務</div>
+              <div v-if="timelineMembers.filter(m => !taskMembersForAssign.some(tm => tm.user_id === m.user_id)).length === 0" class="text-center py-3 text-slate-400 text-sm">所有專案成員皆已加入此任務</div>
               <div v-else class="space-y-2">
                 <div
                   v-for="m in timelineMembers.filter(m => !taskMembersForAssign.some(tm => tm.user_id === m.user_id))"
@@ -675,8 +675,8 @@
                       {{ (m.username || m.name || '?')[0].toUpperCase() }}
                     </div>
                     <div>
-                      <p class="text-sm font-medium text-gray-800">{{ m.username || m.name }}</p>
-                      <p class="text-xs text-gray-500">{{ m.email }}</p>
+                      <p class="text-sm font-medium text-slate-800">{{ m.username || m.name }}</p>
+                      <p class="text-xs text-slate-500">{{ m.email }}</p>
                     </div>
                   </div>
                   <button @click="quickAssignTaskMember(m)" class="px-3 py-1 bg-primary text-white text-xs font-medium rounded-lg hover:brightness-110 transition-all">指派</button>
@@ -689,14 +689,14 @@
     </div>
 
     <!-- 任務詳情 Dialog -->
-    <div v-if="showTaskDetail && selectedTask" class="fixed inset-0 bg-black/50 flex items-center justify-center z-60 p-4">
-      <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto animate-slideUp">
-        <div class="p-5 border-b border-gray-100 flex justify-between items-center bg-linear-to-r from-primary/5 to-transparent sticky top-0 bg-white z-10">
-          <h2 class="text-lg font-semibold text-gray-800 flex items-center gap-2">
+    <div v-if="showTaskDetail && selectedTask" class="fixed inset-0 z-60 flex items-center justify-center bg-black/50 p-4" @click.self="showTaskDetail = false">
+      <div class="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl border border-slate-200 bg-white shadow-[0_20px_40px_rgba(15,23,42,0.14)]">
+        <div class="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-slate-50/80 p-5">
+          <h2 class="text-lg font-semibold text-slate-800 flex items-center gap-2">
             <span class="w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center">📌</span>
             {{ selectedTask.name }}
           </h2>
-          <button @click="showTaskDetail = false" class="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">&times;</button>
+          <button @click="showTaskDetail = false" class="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">&times;</button>
         </div>
         <TaskDetailPanel
           :selected-task="selectedTask"
@@ -738,14 +738,14 @@
     </div>
 
     <!-- AI 生成任務預覽 Modal -->
-    <div v-if="showAiGenerateModal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-60 p-4">
-      <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto animate-slideUp">
-        <div class="p-5 border-b border-gray-100 flex justify-between items-center bg-linear-to-r from-purple-50 to-indigo-50 sticky top-0 bg-white z-10">
-          <h2 class="text-lg font-semibold text-gray-800 flex items-center gap-2">
+    <div v-if="showAiGenerateModal" class="fixed inset-0 z-60 flex items-center justify-center bg-black/50 p-4" @click.self="showAiGenerateModal = false">
+      <div class="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl border border-slate-200 bg-white shadow-[0_20px_40px_rgba(15,23,42,0.14)]">
+        <div class="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-slate-50/80 p-5">
+          <h2 class="text-lg font-semibold text-slate-800 flex items-center gap-2">
             <span class="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center">🤖</span>
             AI 智能生成任務
           </h2>
-          <button @click="showAiGenerateModal = false" class="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">&times;</button>
+          <button @click="showAiGenerateModal = false" class="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">&times;</button>
         </div>
         <AiTaskGeneratePanel
           :is-generating-ai="isGeneratingAi"

@@ -14,6 +14,7 @@ import api from '../api';
 import { copilotService } from '../copilotService';
 
 const mockedApi = api as unknown as {
+  get: ReturnType<typeof vi.fn>;
   post: ReturnType<typeof vi.fn>;
 };
 
@@ -34,5 +35,48 @@ describe('copilotService', () => {
     copilotService.executeMcp(payload);
 
     expect(mockedApi.post).toHaveBeenCalledWith('/copilot/mcp/execute', payload);
+  });
+
+  it('should map POST /copilot/agent/plan correctly', () => {
+    const payload = {
+      message: '幫我建立專案並拆任務',
+      context: { user_id: 1 },
+    };
+    copilotService.createAgentPlan(payload);
+    expect(mockedApi.post).toHaveBeenCalledWith('/copilot/agent/plan', payload);
+  });
+
+  it('should map POST /copilot/agent/reject correctly', () => {
+    const payload = {
+      plan_id: 'plan_abc',
+      reason: '先取消',
+    };
+    copilotService.rejectAgentPlan(payload);
+    expect(mockedApi.post).toHaveBeenCalledWith('/copilot/agent/reject', payload);
+  });
+
+  it('should map POST /copilot/agent/execute by plan correctly', () => {
+    const payload = {
+      plan_id: 'plan_abc',
+      confirm: true,
+      max_loops: 6,
+    };
+    copilotService.executeAgentPlan(payload);
+    expect(mockedApi.post).toHaveBeenCalledWith('/copilot/agent/execute', payload);
+  });
+
+  it('should map POST /copilot/agent/replan correctly', () => {
+    const payload = {
+      plan_id: 'plan_abc',
+      message: '請改成只建立專案，不建立任務',
+      context: { user_id: 1 },
+    };
+    copilotService.replanAgent(payload);
+    expect(mockedApi.post).toHaveBeenCalledWith('/copilot/agent/replan', payload);
+  });
+
+  it('should map GET /copilot/agent/tools correctly', () => {
+    copilotService.listAgentTools();
+    expect(mockedApi.get).toHaveBeenCalledWith('/copilot/agent/tools');
   });
 });

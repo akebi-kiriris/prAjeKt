@@ -197,7 +197,7 @@ describe('TasksView Phase 7.1', () => {
 
     const editButton = wrapper
       .findAll('button')
-      .find((button) => button.attributes('title') === '編輯');
+      .find((button) => button.text().trim() === '編輯');
     expect(editButton).toBeTruthy();
     if (!editButton) {
       throw new Error('找不到編輯按鈕');

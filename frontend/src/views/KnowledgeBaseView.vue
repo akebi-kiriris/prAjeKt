@@ -1,11 +1,18 @@
 <template>
-  <div class="h-full w-full overflow-y-auto bg-slate-50 px-6 pt-6 pb-24 md:pb-6">
+  <div class="h-full w-full overflow-y-auto bg-slate-100/70 px-4 pt-6 pb-24 md:px-6 md:pb-6">
     <div class="mx-auto max-w-6xl space-y-6">
-      <header class="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-        <div>
-          <h1 class="text-2xl font-bold text-slate-800">個人知識庫</h1>
-          <p class="mt-1 text-sm text-slate-500">管理會被 RAG 規劃引用的私人文件。</p>
-        </div>
+      <header class="overflow-hidden rounded-3xl border border-slate-200 bg-linear-to-br from-white via-slate-50 to-slate-100 shadow-[0_20px_40px_rgba(15,23,42,0.08)]">
+        <div class="relative px-5 py-5 md:px-6 md:py-6">
+          <div class="pointer-events-none absolute -top-10 -right-10 h-28 w-28 rounded-full bg-primary/10 blur-2xl" />
+          <div class="pointer-events-none absolute -bottom-10 -left-8 h-24 w-24 rounded-full bg-slate-300/30 blur-2xl" />
+          <div class="relative flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+            <div>
+              <p class="mb-2 inline-flex rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[0.7rem] font-semibold tracking-[0.06em] text-slate-500">
+                PERSONAL KNOWLEDGE
+              </p>
+              <h1 class="text-2xl font-bold text-slate-800">個人知識庫</h1>
+              <p class="mt-1 text-sm text-slate-500">管理會被 RAG 規劃引用的私人文件。</p>
+            </div>
         <div class="flex items-center gap-2">
           <input
             ref="fileInput"
@@ -29,6 +36,8 @@
           >
             刷新
           </button>
+        </div>
+          </div>
         </div>
       </header>
 
