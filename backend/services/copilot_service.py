@@ -2,7 +2,7 @@ from typing import Any
 
 from services.agent_plan_service import AgentPlanRecord, agent_plan_store
 from services.mcp_bridge_service import MCPBridgeError, execute_mcp_tool, list_mcp_tools
-from services.tool_plan_service import ToolPlanError, propose_plan_with_llm
+from services.tool_plan_service import MAX_PLAN_STEPS, ToolPlanError, propose_plan_with_llm
 from services.tools.registry import get_tool_definition
 from services.tools.registry import list_registered_tools
 
@@ -473,8 +473,8 @@ def create_copilot_agent_plan(
         context=normalized_context,
         force_model_proposal=force_model_proposal,
     )
-    if len(pending_tools) > 6:
-        raise CopilotOperationError("模型提案步驟不可超過 6 步。", 409)
+    if len(pending_tools) > MAX_PLAN_STEPS:
+        raise CopilotOperationError(f"模型提案步驟不可超過 {MAX_PLAN_STEPS} 步。", 409)
     steps_preview, risk_notes = _build_plan_preview(pending_tools)
     summary = _build_plan_summary(message, steps_preview)
 

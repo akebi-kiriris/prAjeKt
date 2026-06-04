@@ -82,3 +82,4 @@ def test_execute_registered_tool_maps_handler_exception(monkeypatch):
     result = registry.execute_registered_tool("broken_tool", {"x": 1})
     assert result["ok"] is False
     assert result["error"]["error_code"] == "INTERNAL_ERROR"
+    assert result["error"]["message"] == "系統發生未預期錯誤，請稍後再試。"

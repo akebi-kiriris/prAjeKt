@@ -277,4 +277,4 @@ def test_create_plan_rejects_steps_exceeding_limit(monkeypatch):
         assert False, "should raise"
     except copilot_service.CopilotOperationError as err:
         assert err.status_code == 409
-        assert "不可超過" in err.message
+        assert err.message == "模型提案步驟不可超過 6 步。"
