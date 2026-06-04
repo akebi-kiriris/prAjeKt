@@ -1,4 +1,5 @@
 from chains.agent_graph import run_react_agent
+from chains.agent_nodes import finalize_node
 
 
 def test_agent_graph_runs_two_step_flow(monkeypatch):
@@ -166,3 +167,16 @@ def test_agent_graph_can_check_conflict_before_update_task(monkeypatch):
         "check_timeline_task_conflicts",
         "update_task_for_member",
     ]
+
+
+def test_finalize_node_handles_malformed_steps_without_crashing():
+    result = finalize_node(
+        {
+            "steps": ["broken-step"],
+            "route": "finalize",
+            "requires_write": True,
+            "unsupported_goal": False,
+        }
+    )
+
+    assert result["final_answer"] == "目前只完成查詢工具，尚未執行任何寫入操作；請補充可建立/更新所需資訊。"

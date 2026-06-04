@@ -98,6 +98,7 @@ describe('CopilotDock', () => {
         group_id: 7,
         timeline_name: 'Alpha',
       },
+      tool_payloads: {},
     });
     expect(wrapper.text()).toContain('Plan ID：plan_a');
     expect(wrapper.text()).toContain('模型提案');
@@ -131,6 +132,7 @@ describe('CopilotDock', () => {
         group_id: undefined,
         timeline_name: undefined,
       },
+      tool_payloads: {},
     });
     expect(wrapper.text()).toContain('Plan ID：plan_b');
     expect(mocks.executeAgentPlan).not.toHaveBeenCalled();

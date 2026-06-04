@@ -4,6 +4,16 @@ import json
 import re
 from typing import Any
 
+MAX_PLAN_STEPS = 6
+PROTECTED_PAYLOAD_KEYS = {
+    "user_id",
+    "actor_user_id",
+    "created_by",
+    "timeline_id",
+    "task_id",
+    "group_id",
+}
+
 
 class ToolPlanError(Exception):
     def __init__(self, message: str):
@@ -83,6 +93,8 @@ def _validate_steps(proposal: dict[str, Any], available_tool_names: set[str]) ->
         steps.append(step_name)
     if not steps:
         raise ToolPlanError("模型提案步驟為空")
+    if len(steps) > MAX_PLAN_STEPS:
+        raise ToolPlanError(f"模型提案步驟過多，最多只允許 {MAX_PLAN_STEPS} 步")
 
     payload_draft = proposal.get("payload_draft", {})
     if not isinstance(payload_draft, dict):
@@ -129,6 +141,7 @@ def propose_plan_with_llm(
     prompt = (
         "你是後端工具規劃器。請根據使用者需求與工具清單，輸出 JSON 提案。\n"
         "限制：只能挑選清單中工具，不可發明新工具，不可直接執行。\n"
+        f"不可在 payload_draft 中填入 {', '.join(sorted(PROTECTED_PAYLOAD_KEYS))}；這些 scope 欄位由系統 context 注入。\n"
         "輸出格式：\n"
         "{\n"
         '  "supported": true,\n'

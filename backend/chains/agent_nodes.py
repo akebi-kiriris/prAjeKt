@@ -36,6 +36,9 @@ def _build_payload(tool_name: str, state: AgentState) -> dict[str, Any]:
         payload.setdefault("user_id", context.get("user_id"))
     elif tool_name == "create_task_for_user":
         payload.setdefault("user_id", context.get("user_id"))
+    elif tool_name == "update_task_for_member":
+        payload.setdefault("actor_user_id", context.get("user_id"))
+        payload.setdefault("task_id", context.get("task_id"))
     elif tool_name == "check_timeline_task_conflicts":
         payload.setdefault("timeline_id", effective_timeline_id)
         payload.setdefault("actor_user_id", context.get("user_id"))
@@ -146,7 +149,9 @@ def _extract_project_name(user_message: str) -> str:
 def _extract_generated_tasks_from_state(state: AgentState) -> list[dict[str, Any]]:
     steps = state.get("steps", [])
     for step in reversed(steps):
-        if step["tool_name"] != "generate_timeline_tasks_with_ai":
+        if not isinstance(step, dict):
+            continue
+        if step.get("tool_name") != "generate_timeline_tasks_with_ai":
             continue
         output = step.get("output", {})
         data = output.get("data", {}) if isinstance(output, dict) else {}
@@ -293,12 +298,13 @@ def finalize_node(state: AgentState) -> AgentState:
     if not steps:
         return {"final_answer": "目前沒有可執行的工具步驟。"}
 
-    last = steps[-1]["output"]
+    last_step = steps[-1] if isinstance(steps[-1], dict) else {}
+    last = last_step.get("output", {}) if isinstance(last_step, dict) else {}
     if state.get("unsupported_goal"):
         return {"final_answer": "目前工具白名單尚未支援此目標（例如建立專案或依賴鍊規劃）。請先改為可用工具範圍，或擴充對應工具後再試。"}
     if state.get("requires_write"):
         has_write_tool = any(
-            step["tool_name"] in {
+            isinstance(step, dict) and step.get("tool_name") in {
                 "create_task_for_user",
                 "update_task_for_member",
                 "upload_and_index_knowledge_document",

@@ -387,13 +387,16 @@ def create_timeline_for_user(user_id: int, data: dict[str, Any]) -> int:
     return new_timeline.id
 
 
-def update_timeline_for_member(timeline_id: int, data: dict[str, Any]) -> None:
+def update_timeline_for_member(timeline_id: int, operator_user_id: int, data: dict[str, Any]) -> None:
     """Update editable timeline fields.
 
     例外:
         TimelineOperationError: payload 欄位無效或更新失敗。
     """
     timeline = get_active_timeline_or_404(timeline_id)
+    member = get_timeline_member(timeline_id, operator_user_id)
+    if timeline.user_id != operator_user_id and member is None:
+        raise TimelineOperationError('你沒有權限操作此專案', 403)
 
     unknown_fields = find_unknown_fields(data, TIMELINE_UPDATE_ALLOWED_FIELDS)
     if unknown_fields:

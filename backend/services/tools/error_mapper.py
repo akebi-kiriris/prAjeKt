@@ -47,7 +47,10 @@ def map_exception_to_tool_error(exc: Exception) -> ToolError:
 
     error_code = STATUS_TO_ERROR_CODE.get(status_code, "INTERNAL_ERROR")
     retryable = error_code in {"UPSTREAM_UNAVAILABLE", "UPSTREAM_TIMEOUT"}
-    message = str(getattr(exc, "message", str(exc)) or "工具執行失敗")
+    if error_code == "INTERNAL_ERROR":
+        message = ERROR_HINTS["INTERNAL_ERROR"]
+    else:
+        message = str(getattr(exc, "message", str(exc)) or "工具執行失敗")
 
     return ToolError(
         error_code=error_code,

@@ -7,11 +7,13 @@ from models.timeline import Timeline
 from models.timeline_user import TimelineUser
 from models.user import User
 from services.timeline_service import (
+    TimelineOperationError,
     get_task_access,
     get_user_timeline_role,
     timeline_list_item_to_dict,
     timeline_member_item_to_dict,
     timeline_task_item_to_dict,
+    update_timeline_for_member,
 )
 
 
@@ -88,3 +90,18 @@ def test_timeline_serializers(app, user_factory):
     assert task_payload["can_manage_members"] is False
     assert task_payload["start_date"].endswith("Z")
     assert member_payload["email"] == owner.email
+
+
+def test_update_timeline_for_member_rejects_unauthorized_operator(app, user_factory):
+    owner = user_factory("timeline-update-owner@example.com", "timeline_update_owner")
+    outsider = user_factory("timeline-update-outsider@example.com", "timeline_update_outsider")
+
+    timeline = Timeline(user_id=owner.id, name="Protected Timeline")
+    db.session.add(timeline)
+    db.session.commit()
+
+    try:
+        update_timeline_for_member(timeline.id, outsider.id, {"name": "不應成功"})
+        assert False, "outsider 應被拒絕"
+    except TimelineOperationError as exc:
+        assert exc.status_code == 403

@@ -60,3 +60,26 @@ def test_list_registered_tools_raises_in_strict_mode_when_docstring_missing(monk
         assert False, "strict mode 應該在缺 docstring 時拋錯"
     except ValueError as exc:
         assert "strict_tool" in str(exc)
+
+
+def test_execute_registered_tool_maps_handler_exception(monkeypatch):
+    def broken_handler(_payload):
+        raise RuntimeError("boom")
+
+    fake_tool = registry.ToolDefinition(
+        name="broken_tool",
+        description="broken",
+        input_model=object,
+        handler=broken_handler,
+        side_effects="none",
+        side_effect_level="low",
+        user_visible_label="壞掉工具",
+        requires_confirmation=False,
+        permission_note="none",
+    )
+    monkeypatch.setitem(registry.TOOL_REGISTRY, "broken_tool", fake_tool)
+
+    result = registry.execute_registered_tool("broken_tool", {"x": 1})
+    assert result["ok"] is False
+    assert result["error"]["error_code"] == "INTERNAL_ERROR"
+    assert result["error"]["message"] == "系統發生未預期錯誤，請稍後再試。"

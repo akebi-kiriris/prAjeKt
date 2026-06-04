@@ -39,6 +39,7 @@ export interface CopilotMcpExecuteResponse {
 export interface CopilotAgentPlanPayload {
   message: string;
   context?: CopilotAgentContext;
+  tool_payloads?: Record<string, Record<string, unknown>>;
 }
 
 export interface CopilotAgentPlanResponse {
@@ -67,7 +68,6 @@ export interface CopilotAgentRejectResponse {
 export interface CopilotAgentExecuteByPlanPayload {
   plan_id: string;
   confirm: boolean;
-  tool_payloads?: Record<string, Record<string, unknown>>;
   max_loops?: number;
 }
 
@@ -75,6 +75,7 @@ export interface CopilotAgentReplanPayload {
   plan_id?: string;
   message: string;
   context?: CopilotAgentContext;
+  tool_payloads?: Record<string, Record<string, unknown>>;
 }
 
 export interface CopilotAgentStep {

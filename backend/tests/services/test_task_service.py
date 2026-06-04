@@ -137,6 +137,7 @@ def test_update_task_for_member_validates_and_persists_fields(app, user_factory)
 
     update_task_for_member(
         task_id,
+        owner.id,
         {
             "name": "Updated task name",
             "priority": 3,
@@ -153,12 +154,29 @@ def test_update_task_for_member_validates_and_persists_fields(app, user_factory)
     assert task.estimated_hours == 8
 
     with pytest.raises(TaskOperationError) as empty_name_exc:
-        update_task_for_member(task_id, {"name": "   "})
+        update_task_for_member(task_id, owner.id, {"name": "   "})
     assert empty_name_exc.value.status_code == 400
 
     with pytest.raises(TaskOperationError) as bad_status_exc:
-        update_task_for_member(task_id, {"status": "not_a_real_status"})
+        update_task_for_member(task_id, owner.id, {"status": "not_a_real_status"})
     assert bad_status_exc.value.status_code == 400
+
+
+def test_update_task_for_member_rejects_unauthorized_operator(app, user_factory):
+    owner = user_factory("task-update-owner@example.com", "task_update_owner")
+    outsider = user_factory("task-update-outsider@example.com", "task_update_outsider")
+    task_id = create_task_for_user(
+        owner.id,
+        {
+            "name": "Protected task",
+            "end_date": "2026-04-20T18:00:00",
+        },
+    )
+
+    with pytest.raises(TaskOperationError) as excinfo:
+        update_task_for_member(task_id, outsider.id, {"name": "不應成功"})
+
+    assert excinfo.value.status_code == 403
 
 
 def test_list_tasks_for_user_includes_assigned_tasks_and_owner_flag(app, user_factory):
@@ -489,10 +507,10 @@ def test_task_service_validates_depends_on_task_ids(app, user_factory):
     assert cross_timeline_exc.value.status_code == 400
 
     with pytest.raises(TaskOperationError) as self_dependency_exc:
-        update_task_for_member(task_id, {"depends_on_task_ids": [task_id]})
+        update_task_for_member(task_id, owner.id, {"depends_on_task_ids": [task_id]})
     assert self_dependency_exc.value.status_code == 400
 
-    update_task_for_member(task_id, {"depends_on_task_ids": [base_task.task_id]})
+    update_task_for_member(task_id, owner.id, {"depends_on_task_ids": [base_task.task_id]})
     refreshed_task = db.session.get(Task, task_id)
     assert refreshed_task is not None
     assert refreshed_task.depends_on_task_ids == [base_task.task_id]
