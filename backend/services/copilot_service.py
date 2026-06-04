@@ -71,6 +71,15 @@ def _merge_tool_payloads(
     incoming: dict[str, dict[str, Any]] | None,
     draft: dict[str, dict[str, Any]] | None,
 ) -> dict[str, dict[str, Any]]:
+    def _deep_merge(base: dict[str, Any], patch: dict[str, Any]) -> dict[str, Any]:
+        merged = dict(base)
+        for key, value in patch.items():
+            if isinstance(value, dict) and isinstance(merged.get(key), dict):
+                merged[key] = _deep_merge(merged[key], value)
+            else:
+                merged[key] = value
+        return merged
+
     merged = _sanitize_tool_payloads(incoming)
     if not isinstance(draft, dict):
         return merged
@@ -78,7 +87,10 @@ def _merge_tool_payloads(
         if not isinstance(payload, dict):
             continue
         merged.setdefault(tool_name, {})
-        merged[tool_name].update(_sanitize_tool_payloads({tool_name: payload}).get(tool_name, {}))
+        merged[tool_name] = _deep_merge(
+            merged[tool_name],
+            _sanitize_tool_payloads({tool_name: payload}).get(tool_name, {}),
+        )
     return merged
 
 
@@ -461,6 +473,8 @@ def create_copilot_agent_plan(
         context=normalized_context,
         force_model_proposal=force_model_proposal,
     )
+    if len(pending_tools) > 6:
+        raise CopilotOperationError("模型提案步驟不可超過 6 步。", 409)
     steps_preview, risk_notes = _build_plan_preview(pending_tools)
     summary = _build_plan_summary(message, steps_preview)
 

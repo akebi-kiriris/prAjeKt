@@ -224,3 +224,57 @@ def test_plan_confirm_flow_keeps_update_conflict_tool_order(monkeypatch):
         "check_timeline_task_conflicts",
         "update_task_for_member",
     ]
+
+
+def test_create_plan_merges_tool_payloads_with_model_draft(monkeypatch):
+    def fake_propose(*, user_message: str, context: dict, tools: list[dict]):
+        return {
+            "steps": ["create_task_for_user"],
+            "payload_draft": {"create_task_for_user": {"data": {"priority": 2}}},
+            "reason": "測試 payload 合併",
+        }
+
+    monkeypatch.setattr(copilot_service, "propose_plan_with_llm", fake_propose)
+    payload = copilot_service.create_copilot_agent_plan(
+        "重新規劃建立任務",
+        user_id=10,
+        context={"user_id": 10},
+        tool_payloads={"create_task_for_user": {"data": {"name": "測試任務"}}},
+        force_model_proposal=True,
+    )
+
+    record = copilot_service.agent_plan_store.get_plan(payload["plan_id"], user_id=10)
+    assert record is not None
+    assert record.approved_tool_payloads["create_task_for_user"]["data"]["name"] == "測試任務"
+    assert record.approved_tool_payloads["create_task_for_user"]["data"]["priority"] == 2
+
+
+def test_create_plan_rejects_steps_exceeding_limit(monkeypatch):
+    def fake_propose(*, user_message: str, context: dict, tools: list[dict]):
+        return {
+            "steps": [
+                "list_tasks_for_user",
+                "create_task_for_user",
+                "list_tasks_for_user",
+                "create_task_for_user",
+                "list_tasks_for_user",
+                "create_task_for_user",
+                "list_tasks_for_user",
+            ],
+            "payload_draft": {},
+            "reason": "超過步數上限測試",
+        }
+
+    monkeypatch.setattr(copilot_service, "propose_plan_with_llm", fake_propose)
+
+    try:
+        copilot_service.create_copilot_agent_plan(
+            "請規劃很多步驟",
+            user_id=11,
+            context={"user_id": 11},
+            force_model_proposal=True,
+        )
+        assert False, "should raise"
+    except copilot_service.CopilotOperationError as err:
+        assert err.status_code == 409
+        assert "不可超過" in err.message

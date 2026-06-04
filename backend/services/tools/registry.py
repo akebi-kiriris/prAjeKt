@@ -276,4 +276,7 @@ def execute_registered_tool(tool_name: str, payload: dict[str, Any]) -> dict[str
         validated_payload = tool.input_model.model_validate(payload) if hasattr(tool.input_model, "model_validate") else payload
     except Exception as exc:
         return make_failure(map_exception_to_tool_error(exc))
-    return tool.handler(validated_payload)
+    try:
+        return tool.handler(validated_payload)
+    except Exception as exc:
+        return make_failure(map_exception_to_tool_error(exc))

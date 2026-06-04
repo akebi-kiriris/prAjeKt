@@ -1,6 +1,7 @@
 ﻿from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 import json
+import logging
 import os
 import re
 import time
@@ -103,6 +104,7 @@ ALLOWED_TASK_FILE_EXTENSIONS = {
     'mov',
 }
 MAX_TASK_FILE_SIZE = 10 * 1024 * 1024
+logger = logging.getLogger(__name__)
 
 
 class TaskOperationError(Exception):
@@ -323,8 +325,8 @@ def create_notification(
             link=link,
         )
         add_entity(notif)
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning('Failed to create notification', exc_info=exc)
 
 
 def get_user_task_role(user_id: int, task_id: int) -> int | None:
@@ -523,13 +525,16 @@ def create_task_for_user(user_id: int, data: dict[str, Any]) -> int:
     return _create_task_with_members_and_notifications(user_id=user_id, data=data, payload=payload)
 
 
-def update_task_for_member(task_id: int, data: dict[str, Any]) -> None:
+def update_task_for_member(task_id: int, operator_user_id: int, data: dict[str, Any]) -> None:
     """由授權成員更新任務欄位（含狀態與相依關係）。
 
     例外:
         TaskOperationError: 驗證衝突、權限不足或更新失敗。
     """
     task = _find_active_task_or_404(task_id)
+    role = get_user_task_role(operator_user_id, task.task_id)
+    if role is None:
+        raise TaskOperationError('你沒有權限操作此任務', 403)
 
     unknown_fields = find_unknown_fields(data, TASK_UPDATE_ALLOWED_FIELDS)
     if unknown_fields:

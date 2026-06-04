@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -15,14 +15,14 @@ class ToolError(BaseModel):
 class ToolSuccess(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    ok: bool = True
+    ok: Literal[True] = True
     data: dict[str, Any] = Field(default_factory=dict)
 
 
 class ToolFailure(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    ok: bool = False
+    ok: Literal[False] = False
     error: ToolError
 
 

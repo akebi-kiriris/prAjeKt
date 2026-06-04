@@ -41,6 +41,11 @@ describe('copilotService', () => {
     const payload = {
       message: '幫我建立專案並拆任務',
       context: { user_id: 1 },
+      tool_payloads: {
+        create_task_for_user: {
+          data: { name: '測試任務' },
+        },
+      },
     };
     copilotService.createAgentPlan(payload);
     expect(mockedApi.post).toHaveBeenCalledWith('/copilot/agent/plan', payload);
@@ -70,6 +75,11 @@ describe('copilotService', () => {
       plan_id: 'plan_abc',
       message: '請改成只建立專案，不建立任務',
       context: { user_id: 1 },
+      tool_payloads: {
+        create_timeline_for_user: {
+          data: { name: 'Alpha' },
+        },
+      },
     };
     copilotService.replanAgent(payload);
     expect(mockedApi.post).toHaveBeenCalledWith('/copilot/agent/replan', payload);

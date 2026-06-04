@@ -270,7 +270,7 @@ def update_task(task_id):
         return error
 
     try:
-        update_task_for_member(task_id, data)
+        update_task_for_member(task_id, int(get_jwt_identity()), data)
         return jsonify({'message': '任務更新成功'}), 200
     except TaskOperationError as err:
         return error_from_exception(err)

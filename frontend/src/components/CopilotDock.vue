@@ -201,6 +201,8 @@ const contextSummary = computed((): string => {
   return `已偵測頁面上下文：${areas.join('、')}。`;
 });
 
+const buildToolPayloads = (): Record<string, Record<string, unknown>> => ({});
+
 const toggleOpen = (): void => {
   isOpen.value = !isOpen.value;
 };
@@ -217,6 +219,7 @@ const submitPlan = async (): Promise<void> => {
     const response = await copilotService.createAgentPlan({
       message: trimmedMessage,
       context: autoContext.value,
+      tool_payloads: buildToolPayloads(),
     });
     planResult.value = response.data;
   } catch (error) {
@@ -259,6 +262,7 @@ const replan = async (): Promise<void> => {
       plan_id: planResult.value.plan_id,
       message: revisedGoal,
       context: autoContext.value,
+      tool_payloads: buildToolPayloads(),
     });
     planResult.value = response.data;
     result.value = null;

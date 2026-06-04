@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 def _to_int_or_none(value: Any) -> int | None:
@@ -21,8 +21,8 @@ class TaskCreateInput(BaseModel):
     start_date: datetime | None = None
     end_date: datetime
     timeline_id: int | None = None
-    assignee_user_ids: list[int] = []
-    depends_on_task_ids: list[int] = []
+    assignee_user_ids: list[int] = Field(default_factory=list)
+    depends_on_task_ids: list[int] = Field(default_factory=list)
 
     @field_validator('status')
     @classmethod

@@ -203,7 +203,7 @@ def update_timeline(timeline_id):
         return error
 
     try:
-        update_timeline_for_member(timeline_id, data)
+        update_timeline_for_member(timeline_id, int(get_jwt_identity()), data)
         return jsonify({'message': '專案更新成功'}), 200
     except TimelineOperationError as err:
         return error_from_exception(err)

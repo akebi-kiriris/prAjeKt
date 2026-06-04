@@ -110,7 +110,7 @@ def handle_update_task_for_member(data: UpdateTaskToolInput) -> dict[str, Any]:
         無；例外會在函式內轉換為錯誤 envelope 回傳。
     """
     try:
-        update_task_for_member(task_id=data.task_id, data=data.data)
+        update_task_for_member(task_id=data.task_id, operator_user_id=data.actor_user_id, data=data.data)
         output = CommonToolOutput(updated=True)
         return make_success(output.model_dump())
     except Exception as exc:

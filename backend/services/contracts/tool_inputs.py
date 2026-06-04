@@ -22,6 +22,7 @@ class CreateTaskToolInput(BaseModel):
 class UpdateTaskToolInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    actor_user_id: int
     task_id: int
     data: dict[str, Any]
 

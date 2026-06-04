@@ -183,11 +183,13 @@ def replan_agent():
 
     context = data.get('context') if isinstance(data.get('context'), dict) else {}
     context['user_id'] = user_id
+    tool_payloads = data.get('tool_payloads') if isinstance(data.get('tool_payloads'), dict) else {}
     try:
         payload = create_copilot_agent_plan(
             user_message=message,
             user_id=user_id,
             context=context,
+            tool_payloads=tool_payloads,
             force_model_proposal=True,
         )
         return jsonify(payload), 200
