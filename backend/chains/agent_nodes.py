@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from chains.agent_state import AgentState
@@ -24,6 +25,83 @@ def _sanitize_user_payload(raw_payload: dict[str, Any]) -> dict[str, Any]:
     return sanitized
 
 
+def _compact_defaults(defaults: dict[str, Any]) -> dict[str, Any]:
+    return {
+        key: value
+        for key, value in defaults.items()
+        if value is not None and value != ""
+    }
+
+
+def _merge_dict_defaults(existing: Any, defaults: dict[str, Any]) -> Any:
+    compact_defaults = _compact_defaults(defaults)
+    if isinstance(existing, dict):
+        return {**compact_defaults, **existing}
+    if existing is None:
+        return compact_defaults
+    return existing
+
+
+def _extract_task_name(user_message: str) -> str | None:
+    text = user_message.strip()
+    if not text:
+        return None
+    marker = "叫做"
+    if marker in text:
+        after = text.split(marker, 1)[1].strip()
+        for stop in ("的任務", "任務", "，", ",", "並且", "並"):
+            if stop in after:
+                name = after.split(stop, 1)[0].strip()
+                if name:
+                    return name
+        if after:
+            return after
+    return None
+
+
+def _build_create_task_defaults(state: AgentState) -> dict[str, Any]:
+    user_message = state.get("user_message", "")
+    defaults = {
+        "name": _extract_task_name(user_message),
+        "task_remark": user_message,
+        "priority": 2,
+        "status": "pending",
+    }
+    return _compact_defaults(defaults)
+
+
+def _build_update_task_defaults(state: AgentState) -> dict[str, Any]:
+    payloads = state.get("tool_payloads", {})
+    raw_conflict_payload = payloads.get("check_timeline_task_conflicts", {})
+    conflict_payload = raw_conflict_payload.get("payload") if isinstance(raw_conflict_payload, dict) else None
+    if not isinstance(conflict_payload, dict):
+        return {}
+    defaults = {
+        "name": conflict_payload.get("name"),
+        "priority": conflict_payload.get("priority"),
+        "start_date": conflict_payload.get("start_date"),
+        "end_date": conflict_payload.get("end_date"),
+    }
+    return _compact_defaults(defaults)
+
+
+def _build_conflict_payload_defaults(state: AgentState) -> dict[str, Any]:
+    context = state.get("context", {})
+    payloads = state.get("tool_payloads", {})
+    raw_update_payload = payloads.get("update_task_for_member", {})
+    update_task_id = raw_update_payload.get("task_id") if isinstance(raw_update_payload, dict) else None
+    update_data = raw_update_payload.get("data") if isinstance(raw_update_payload, dict) else None
+
+    defaults = {
+        "task_id": update_task_id or context.get("task_id"),
+        "name": update_data.get("name") if isinstance(update_data, dict) else None,
+        "priority": update_data.get("priority") if isinstance(update_data, dict) else None,
+        "start_date": update_data.get("start_date") if isinstance(update_data, dict) else None,
+        "end_date": update_data.get("end_date") if isinstance(update_data, dict) else None,
+    }
+    return _compact_defaults(defaults)
+
+
 def _build_payload(tool_name: str, state: AgentState) -> dict[str, Any]:
     context = state.get("context", {})
     payloads = state.get("tool_payloads", {})
@@ -36,31 +114,44 @@ def _build_payload(tool_name: str, state: AgentState) -> dict[str, Any]:
         payload.setdefault("user_id", context.get("user_id"))
     elif tool_name == "create_task_for_user":
         payload.setdefault("user_id", context.get("user_id"))
+        payload["data"] = _merge_dict_defaults(payload.get("data"), _build_create_task_defaults(state))
     elif tool_name == "update_task_for_member":
         payload.setdefault("actor_user_id", context.get("user_id"))
         payload.setdefault("task_id", context.get("task_id"))
+        payload["data"] = _merge_dict_defaults(payload.get("data"), _build_update_task_defaults(state))
     elif tool_name == "check_timeline_task_conflicts":
         payload.setdefault("timeline_id", effective_timeline_id)
         payload.setdefault("actor_user_id", context.get("user_id"))
+        payload["payload"] = _merge_dict_defaults(payload.get("payload"), _build_conflict_payload_defaults(state))
     elif tool_name == "generate_timeline_tasks_with_ai":
         payload.setdefault("timeline_id", effective_timeline_id)
-        payload.setdefault("project_name", context.get("timeline_name", ""))
+        payload.setdefault(
+            "project_name",
+            state.get("created_timeline_name")
+            or context.get("timeline_name")
+            or _extract_project_name(state.get("user_message", "")),
+        )
         payload.setdefault("description", state.get("user_message", ""))
     elif tool_name == "create_timeline_for_user":
         payload.setdefault("user_id", context.get("user_id"))
-        payload.setdefault(
-            "data",
-            {
-                "name": _extract_project_name(state.get("user_message", "")),
-                "remark": state.get("user_message", ""),
-                "start_date": "",
-                "end_date": "",
-            },
-        )
+        payload["data"] = _merge_dict_defaults(payload.get("data"), {
+            "name": _extract_project_name(state.get("user_message", "")),
+            "remark": state.get("user_message", ""),
+            "start_date": "",
+            "end_date": "",
+        })
     elif tool_name == "batch_create_tasks_for_timeline":
         payload.setdefault("timeline_id", effective_timeline_id)
         payload.setdefault("user_id", context.get("user_id"))
-        payload.setdefault("tasks", _extract_generated_tasks_from_state(state))
+        generated_tasks = _extract_generated_tasks_from_state(state)
+        existing_tasks = payload.get("tasks")
+        if existing_tasks is None:
+            payload["tasks"] = generated_tasks
+        elif isinstance(existing_tasks, list):
+            if len(existing_tasks) == 0 and generated_tasks:
+                payload["tasks"] = generated_tasks
+        elif generated_tasks:
+            payload["tasks"] = generated_tasks
     elif tool_name == "generate_group_snapshot":
         payload.setdefault("group_id", context.get("group_id"))
         payload.setdefault("created_by", context.get("user_id"))
@@ -143,6 +234,31 @@ def _extract_project_name(user_message: str) -> str:
                     return name
         if after:
             return after
+
+    normalized = text.lower()
+    if "langgraph" in normalized and any(token in text for token in ("學習", "計畫", "規劃")):
+        return "LangGraph 學習計畫"
+
+    learning_plan_match = re.search(
+        r"學習\s*([A-Za-z0-9_./+#\-一-龥]+)\s*的?(?:計畫|規劃)",
+        text,
+        flags=re.IGNORECASE,
+    )
+    if learning_plan_match:
+        topic = learning_plan_match.group(1).strip()
+        if topic:
+            return f"{topic} 學習計畫"
+
+    topic_match = re.search(
+        r"(?:關於|針對)\s*([A-Za-z0-9_./+#\-一-龥]+)\s*的專案",
+        text,
+        flags=re.IGNORECASE,
+    )
+    if topic_match:
+        topic = topic_match.group(1).strip()
+        if topic:
+            return f"{topic} 專案"
+
     return "新專案"
 
 
@@ -167,6 +283,75 @@ def _extract_generated_tasks_from_state(state: AgentState) -> list[dict[str, Any
             generated.append(item)
         return generated
     return []
+
+
+def _extract_new_tasks_from_step(step: dict[str, Any]) -> list[dict[str, Any]]:
+    output = step.get("output", {})
+    data = output.get("data", {}) if isinstance(output, dict) else {}
+    tasks = data.get("tasks", []) if isinstance(data, dict) else []
+    if not isinstance(tasks, list):
+        return []
+    generated: list[dict[str, Any]] = []
+    for item in tasks:
+        if not isinstance(item, dict):
+            continue
+        if item.get("isExisting"):
+            continue
+        generated.append(item)
+    return generated
+
+
+def _build_success_final_answer(state: AgentState) -> str:
+    steps = state.get("steps", [])
+    timeline_name = ""
+    created_count: int | None = None
+    generated_tasks: list[dict[str, Any]] = []
+
+    for step in steps:
+        if not isinstance(step, dict):
+            continue
+        tool_name = step.get("tool_name")
+        if tool_name == "create_timeline_for_user":
+            input_data = step.get("input", {}).get("data", {}) if isinstance(step.get("input"), dict) else {}
+            if isinstance(input_data, dict):
+                timeline_name = str(input_data.get("name") or "").strip() or timeline_name
+        elif tool_name == "generate_timeline_tasks_with_ai":
+            generated_tasks = _extract_new_tasks_from_step(step)
+        elif tool_name == "batch_create_tasks_for_timeline":
+            output = step.get("output", {})
+            data = output.get("data", {}) if isinstance(output, dict) else {}
+            result = data.get("result", {}) if isinstance(data, dict) else {}
+            if isinstance(result, dict) and isinstance(result.get("created"), int):
+                created_count = result.get("created")
+
+    if created_count is not None:
+        if timeline_name:
+            return f"已建立專案「{timeline_name}」，並批次建立 {created_count} 個任務。"
+        return f"已批次建立 {created_count} 個任務。"
+
+    if generated_tasks:
+        task_names = [
+            str(item.get("name") or "").strip()
+            for item in generated_tasks
+            if str(item.get("name") or "").strip()
+        ]
+        preview = "、".join(task_names[:3])
+        generated_count = len(task_names)
+        if timeline_name and preview:
+            return (
+                f"已建立專案「{timeline_name}」，AI 另外產生了 {generated_count} 個任務建議，"
+                f"例如：{preview}。"
+            )
+        if timeline_name:
+            return f"已建立專案「{timeline_name}」，AI 另外產生了 {generated_count} 個任務建議。"
+        if preview:
+            return f"AI 已產生 {generated_count} 個任務建議，例如：{preview}。"
+        return f"AI 已產生 {generated_count} 個任務建議。"
+
+    if timeline_name:
+        return f"已建立專案「{timeline_name}」。"
+
+    return "任務已完成，已依序執行工具流程。"
 
 
 def intent_parse_node(state: AgentState) -> AgentState:
@@ -248,10 +433,14 @@ def tool_execute_node(state: AgentState) -> AgentState:
 
     if result.get("ok") is True:
         created_timeline_id = state.get("created_timeline_id")
+        created_timeline_name = state.get("created_timeline_name")
         if tool_name == "create_timeline_for_user":
             payload_data = result.get("data", {})
             if isinstance(payload_data, dict):
                 created_timeline_id = payload_data.get("timeline_id")
+            input_data = payload.get("data", {})
+            if isinstance(input_data, dict):
+                created_timeline_name = str(input_data.get("name") or "").strip() or created_timeline_name
         return {
             "pending_tools": pending,
             "executed_tools": executed_tools,
@@ -262,6 +451,7 @@ def tool_execute_node(state: AgentState) -> AgentState:
             "loop_count": state.get("loop_count", 0) + 1,
             "retry_count": 0,
             "created_timeline_id": created_timeline_id,
+            "created_timeline_name": created_timeline_name,
         }
 
     error = result.get("error", {})
@@ -317,6 +507,6 @@ def finalize_node(state: AgentState) -> AgentState:
         if not has_write_tool:
             return {"final_answer": "目前只完成查詢工具，尚未執行任何寫入操作；請補充可建立/更新所需資訊。"}
     if last.get("ok"):
-        return {"final_answer": "任務已完成，已依序執行工具流程。"}
+        return {"final_answer": _build_success_final_answer(state)}
     error = last.get("error", {})
     return {"final_answer": error.get("message", "執行未完成。")}

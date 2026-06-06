@@ -1,3 +1,4 @@
+import logging
 from typing import Any
 
 from services.agent_plan_service import AgentPlanRecord, agent_plan_store
@@ -5,6 +6,8 @@ from services.mcp_bridge_service import MCPBridgeError, execute_mcp_tool, list_m
 from services.tool_plan_service import MAX_PLAN_STEPS, ToolPlanError, propose_plan_with_llm
 from services.tools.registry import get_tool_definition
 from services.tools.registry import list_registered_tools
+
+logger = logging.getLogger(__name__)
 
 
 class CopilotOperationError(Exception):
@@ -19,6 +22,7 @@ def _serialize_plan(record: AgentPlanRecord) -> dict[str, Any]:
         "ok": True,
         "plan_id": record.plan_id,
         "status": record.status,
+        "pending_tools": record.pending_tools,
         "summary": record.summary,
         "steps_preview": record.steps_preview,
         "risk_notes": record.risk_notes,
@@ -110,6 +114,14 @@ def _propose_pending_tools(
         steps = [str(item).strip() for item in proposal.get("steps", []) if str(item).strip()]
         if not steps:
             raise ToolPlanError("模型未產出可執行步驟")
+        planning_mode = str(proposal.get("planning_mode") or "").strip().lower()
+        if (
+            planning_mode == "plan_and_create_tasks"
+            and "generate_timeline_tasks_with_ai" in steps
+            and "batch_create_tasks_for_timeline" not in steps
+        ):
+            generate_index = steps.index("generate_timeline_tasks_with_ai")
+            steps.insert(generate_index + 1, "batch_create_tasks_for_timeline")
         payload_draft = proposal.get("payload_draft", {})
         if not isinstance(payload_draft, dict):
             payload_draft = {}
@@ -490,6 +502,13 @@ def create_copilot_agent_plan(
         proposal_source=proposal_source,
         proposal_reason=proposal_reason,
     )
+    logger.info(
+        "copilot_agent_plan_created user_id=%s proposal_source=%s pending_tools=%s proposal_reason=%s",
+        user_id,
+        proposal_source,
+        pending_tools,
+        proposal_reason,
+    )
     return _serialize_plan(record)
 
 
@@ -570,11 +589,21 @@ def execute_copilot_agent_plan(
     if isinstance(executed_tools, list):
         if executed_tools != record.pending_tools:
             diff_from_plan.append("實際執行順序與計畫預覽不同。")
+    logger.info(
+        "copilot_agent_plan_executed plan_id=%s approved_pending_tools=%s executed_tools=%s status=%s diff_from_plan=%s",
+        record.plan_id,
+        record.pending_tools,
+        executed_tools,
+        "succeeded" if succeeded else "failed",
+        diff_from_plan,
+    )
     return {
         "ok": True,
         "plan_id": record.plan_id,
         "execution_id": record.execution_id,
         "status": "succeeded" if succeeded else "failed",
+        "approved_pending_tools": record.pending_tools,
+        "executed_tools": executed_tools,
         "summary": agent_payload.get("final_answer", ""),
         "diff_from_plan": diff_from_plan,
         "steps_result": agent_payload.get("steps", []),

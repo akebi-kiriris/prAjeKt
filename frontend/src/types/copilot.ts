@@ -46,6 +46,7 @@ export interface CopilotAgentPlanResponse {
   ok: boolean;
   plan_id: string;
   status: 'planned' | 'executing' | 'succeeded' | 'failed' | 'rejected' | 'expired' | string;
+  pending_tools?: string[];
   summary: string;
   steps_preview: string[];
   risk_notes: string[];
@@ -106,6 +107,8 @@ export interface CopilotAgentExecuteByPlanResponse {
   plan_id: string;
   execution_id?: string;
   status: 'succeeded' | 'failed' | string;
+  approved_pending_tools?: string[];
+  executed_tools?: string[];
   summary: string;
   diff_from_plan: string[];
   steps_result: CopilotAgentStep[];

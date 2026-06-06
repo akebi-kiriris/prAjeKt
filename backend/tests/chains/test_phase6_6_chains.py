@@ -12,6 +12,7 @@ from chains import (
     create_tool_selection_chain,
     PromptManager,
 )
+from chains.schemas import Task
 
 
 class TestPromptManager:
@@ -83,6 +84,32 @@ class TestTaskGenerationChain:
 
         # Should not raise error
         assert chain is not None
+
+    def test_task_schema_accepts_integer_priority(self):
+        task = Task.model_validate(
+            {
+                "name": "LangGraph 入門",
+                "priority": 1,
+                "estimated_days": 2,
+                "task_remark": "先理解 graph/state/node",
+                "depends_on_task_refs": [],
+            }
+        )
+
+        assert task.priority == 1
+
+    def test_task_schema_maps_legacy_string_priority(self):
+        task = Task.model_validate(
+            {
+                "name": "LangGraph 入門",
+                "priority": "HIGH",
+                "estimated_days": 2,
+                "task_remark": "先理解 graph/state/node",
+                "depends_on_task_refs": [],
+            }
+        )
+
+        assert task.priority == 1
 
 
 class TestSummaryChains:

@@ -44,6 +44,9 @@ class ToolDefinition:
     user_visible_label: str
     requires_confirmation: bool
     permission_note: str
+    planner_role: str = "direct"
+    workflow_group: str | None = None
+    completes_after: str | None = None
 
 
 def _derive_description(handler: Callable[[dict[str, Any]], dict[str, Any]], override: str | None = None) -> str:
@@ -107,6 +110,7 @@ TOOL_REGISTRY: dict[str, ToolDefinition] = {
         user_visible_label="建立任務",
         requires_confirmation=True,
         permission_note="需可建立任務的使用者身分。",
+        planner_role="direct_write",
     ),
     "update_task_for_member": ToolDefinition(
         name="update_task_for_member",
@@ -118,6 +122,7 @@ TOOL_REGISTRY: dict[str, ToolDefinition] = {
         user_visible_label="更新任務",
         requires_confirmation=True,
         permission_note="需具備任務更新權限。",
+        planner_role="direct_write",
     ),
     "list_tasks_for_user": ToolDefinition(
         name="list_tasks_for_user",
@@ -129,6 +134,7 @@ TOOL_REGISTRY: dict[str, ToolDefinition] = {
         user_visible_label="查詢任務清單",
         requires_confirmation=False,
         permission_note="需為登入使用者本人上下文。",
+        planner_role="read",
     ),
     "generate_timeline_tasks_with_ai": ToolDefinition(
         name="generate_timeline_tasks_with_ai",
@@ -140,6 +146,8 @@ TOOL_REGISTRY: dict[str, ToolDefinition] = {
         user_visible_label="AI 生成任務草案",
         requires_confirmation=True,
         permission_note="需可讀取該專案脈絡。",
+        planner_role="suggestion",
+        workflow_group="timeline_task_planning",
     ),
     "create_timeline_for_user": ToolDefinition(
         name="create_timeline_for_user",
@@ -151,6 +159,8 @@ TOOL_REGISTRY: dict[str, ToolDefinition] = {
         user_visible_label="建立專案",
         requires_confirmation=True,
         permission_note="需登入使用者身份。",
+        planner_role="direct_write",
+        workflow_group="timeline_task_planning",
     ),
     "batch_create_tasks_for_timeline": ToolDefinition(
         name="batch_create_tasks_for_timeline",
@@ -162,6 +172,9 @@ TOOL_REGISTRY: dict[str, ToolDefinition] = {
         user_visible_label="批次建立任務",
         requires_confirmation=True,
         permission_note="需專案成員權限。",
+        planner_role="apply_suggestion",
+        workflow_group="timeline_task_planning",
+        completes_after="generate_timeline_tasks_with_ai",
     ),
     "check_timeline_task_conflicts": ToolDefinition(
         name="check_timeline_task_conflicts",
@@ -173,6 +186,7 @@ TOOL_REGISTRY: dict[str, ToolDefinition] = {
         user_visible_label="檢查任務衝突",
         requires_confirmation=False,
         permission_note="需專案成員身份。",
+        planner_role="analysis",
     ),
     "generate_group_snapshot": ToolDefinition(
         name="generate_group_snapshot",
@@ -184,6 +198,7 @@ TOOL_REGISTRY: dict[str, ToolDefinition] = {
         user_visible_label="產生群組快照",
         requires_confirmation=True,
         permission_note="需具備群組成員權限。",
+        planner_role="direct_write",
     ),
     "upload_and_index_knowledge_document": ToolDefinition(
         name="upload_and_index_knowledge_document",
@@ -195,6 +210,7 @@ TOOL_REGISTRY: dict[str, ToolDefinition] = {
         user_visible_label="上傳並索引知識文件",
         requires_confirmation=True,
         permission_note="需文件擁有者或專案授權。",
+        planner_role="direct_write",
     ),
     "list_knowledge_documents": ToolDefinition(
         name="list_knowledge_documents",
@@ -206,6 +222,7 @@ TOOL_REGISTRY: dict[str, ToolDefinition] = {
         user_visible_label="查詢知識文件",
         requires_confirmation=False,
         permission_note="需文件讀取權限。",
+        planner_role="read",
     ),
     "summarize_task_comments_for_member": ToolDefinition(
         name="summarize_task_comments_for_member",
@@ -217,6 +234,7 @@ TOOL_REGISTRY: dict[str, ToolDefinition] = {
         user_visible_label="摘要任務留言",
         requires_confirmation=False,
         permission_note="需任務可見權限。",
+        planner_role="suggestion",
     ),
 }
 
@@ -245,6 +263,9 @@ def list_registered_tools() -> list[dict[str, Any]]:
             "user_visible_label": tool.user_visible_label,
             "requires_confirmation": tool.requires_confirmation,
             "permission_note": tool.permission_note,
+            "planner_role": tool.planner_role,
+            "workflow_group": tool.workflow_group,
+            "completes_after": tool.completes_after,
             "input_schema": tool.input_model.model_json_schema(),
         }
         for tool in TOOL_REGISTRY.values()

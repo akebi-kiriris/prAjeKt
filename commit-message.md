@@ -1,120 +1,97 @@
-refactor: 收斂 Agent 契約邊界並整理 docs 結構
+refactor: 收斂 Agent planner/execute 體驗並同步 Phase 9 文件
 
-本次提交整合兩條主線：
-
-1. Phase 9.5 後續補強
-2. docs 目錄結構整理與主文件同步
-
-目標不是新增一個全新功能，而是把已經落地的 Agent 主線補到更一致、更安全、更容易維護，同時把文件入口整理成之後能持續使用的樣子。
+本次提交聚焦 Phase 9 agent 主線的第二波收斂，不是新增全新模組，而是把已經能跑的 planner -> execute 流程補到更穩、更可觀測，也讓前端真的能把執行結果展示出來。
 
 ---
 
-一、Agent 契約一致性與安全邊界補強
+一、Planner 與執行路徑收斂
 
 後端：
 
-- `backend/blueprints/copilot.py`
-  - `/agent/replan` 正式接收並傳遞 `tool_payloads`
-- `backend/services/copilot_service.py`
-  - `tool_payloads` 合併改為深層合併，避免模型 draft 蓋掉前端已提供內容
-  - `create_copilot_agent_plan()` 補上 plan steps 上限守門
 - `backend/services/tool_plan_service.py`
-  - planner prompt 明示 protected keys（`user_id`、`timeline_id`、`task_id`、`group_id` 等）不可由模型填入
-  - plan steps 增加長度上限，超過直接拒絕
-- `backend/services/tools/registry.py`
-  - registry 補上 handler exception boundary
-  - 即使 handler 漏包例外，仍會統一映射為標準 failure envelope
-- `backend/chains/agent_nodes.py`
-  - 改為防禦式讀取 `steps` / `output`
-  - 降低 malformed state 造成 `KeyError` / 500 的風險
-- `backend/services/contracts/tool_envelopes.py`
-  - `ToolSuccess.ok` / `ToolFailure.ok` 收斂為 `Literal[True/False]`
-- `backend/services/contracts/task_contracts.py`
-  - `TaskCreateInput` 的 mutable default list 改為 `Field(default_factory=list)`
-- `backend/services/contracts/tool_inputs.py`
-  - `UpdateTaskToolInput` 補入 `actor_user_id`
-- `backend/services/task_service.py`
-  - `create_notification()` 由靜默吞錯改為 warning log
-  - `update_task_for_member()` 改為接受 `operator_user_id`，並在 service 內驗證權限
-- `backend/services/timeline_service.py`
-  - `update_timeline_for_member()` 改為接受 `operator_user_id`，並在 service 內驗證權限
-- `backend/services/tools/handlers.py`
-  - update task handler 改由 context actor 注入 service
-- `backend/blueprints/tasks.py`
-  - task update route 改為傳入 JWT user_id
-- `backend/blueprints/timelines.py`
-  - timeline update route 改為傳入 JWT user_id
+  - 補 LLM content block 正規化，允許模型回傳 list-style content，不再因 `.strip()` 造成 500
+  - planner 輸出新增 `planning_mode`
+  - prompt 補強 `create_project_only / plan_tasks_only / plan_and_create_tasks`
+  - prompt 改為使用 `planner_role / workflow_group / completes_after` 協助模型理解 suggestion / apply 關係
 
-前端：
+- `backend/services/tools/registry.py`
+  - 補 `planner_role`
+  - 補 `workflow_group`
+  - 補 `completes_after`
+  - 讓 planner 不只靠工具名稱判斷，而是能理解 workflow 語意
+
+- `backend/services/copilot_service.py`
+  - plan response 補 `pending_tools`
+  - execute response 補 `approved_pending_tools` / `executed_tools`
+  - 補 plan / execute logging，方便直接從後端 log 判斷實際批准與執行步驟
+
+- `backend/chains/agent_nodes.py`
+  - 補 partial payload merge，降低模型只回半成品 payload 時的失敗率
+  - 補 project name 推導與 `created_timeline_name` 傳遞
+  - `batch_create_tasks_for_timeline` 可回收前一步 AI 生成任務作為 fallback
+  - `finalize_node()` 改為輸出可讀摘要，不再永遠只回固定成功句
+
+- `backend/chains/schemas.py`
+  - `Task.priority` 改為以整數為主，並相容舊字串 priority
+
+---
+
+二、前端結果可見性補強
+
+- `frontend/src/components/CopilotDock.vue`
+  - 執行結果區改為顯示每個工具步驟的輸出摘要
+  - `generate_timeline_tasks_with_ai` 會直接列出生成任務建議
+  - `batch_create_tasks_for_timeline` 會顯示實際建立數量
 
 - `frontend/src/types/copilot.ts`
-  - `CopilotAgentPlanPayload` / `CopilotAgentReplanPayload` 補上 `tool_payloads`
-  - `CopilotAgentExecuteByPlanPayload` 移除 `tool_payloads`
-- `frontend/src/components/CopilotDock.vue`
-  - `plan` / `replan` 路徑統一帶入 `tool_payloads`
+  - 對齊新的 plan / execute 回傳欄位
 
-測試：
-
-- `backend/tests/services/test_copilot_plan_flow.py`
-  - 補 plan payload deep merge 測試
-  - 補 steps 上限拒絕測試
-- `backend/tests/services/test_tool_registry.py`
-  - 補 handler exception 由 registry 映射為 failure envelope 的測試
-- `backend/tests/services/test_task_service.py`
-  - 補 task update 未授權 operator 測試
-- `backend/tests/services/test_timeline_service_access.py`
-  - 補 timeline update 未授權 operator 測試
-- `backend/tests/chains/test_agent_graph.py`
-  - 補 malformed step 不應造成 finalize crash 的測試
-- `frontend/src/components/__tests__/CopilotDock.test.ts`
-  - 對齊 `plan` / `replan` payload shape
-- `frontend/src/services/__tests__/copilotService.test.ts`
-  - 對齊 `plan` / `replan` service payload shape
+這次的重點是：就算 planner 選的是 suggestion 流程，前端也不能讓它看起來像「什麼都沒做」。
 
 ---
 
-二、docs 結構整理與文件同步
+三、文件同步
 
-- 調整 `docs/` 結構，將 phase / reference / guides / runbooks / architecture 等內容移到對應資料夾
-- 清掉舊路徑殘留的 Phase 9.2 與 reference 類文件位置
-- 更新 `README.md`
-  - 開發狀態改為反映「9.5 主線 + 9.5 後續補強已完成」
-  - `Copilot Agent` 說明補上契約與安全邊界補強
-  - `核心工程文件` 段落改成新 docs 路徑
 - 更新 `重構計畫.md` / `docs/重構計畫.md`
-  - 將 2026/06/05 的 9.5 後續補強從「規劃」改為「完成」
-  - 補上實際完成項目與驗證結果
+  - 將 Phase 9.5+ 已完成項目勾選完成
+  - 新增 2026/06/07 的「Agent 規劃與執行體驗收斂」小節
+
 - 更新 `進度追蹤.md` / `docs/進度追蹤.md`
-  - 補上 2026/06/05 里程碑
-  - 將當前焦點更新為「9.5 後續補強完成，下一步 9.6」
+  - 補上 2026/06/07 里程碑
+  - 更新 Phase 9 當前狀態與下階段焦點
+
+- 新增 `docs/future/`
+  - `docs/future/README.md`
+  - `docs/future/Future_AgentPrompt分域與Planner收斂方向_2026-06-07.md`
+  - 作為未來 backlog / prompt 改進草稿入口
 
 ---
 
-三、驗證結果
+四、測試與驗證
 
 後端聚焦回歸：
 
-- `pytest tests/services/test_copilot_plan_flow.py tests/services/test_tool_registry.py tests/services/test_task_service.py tests/services/test_timeline_service_access.py tests/chains/test_agent_graph.py -q`
-- `46 passed`
+- `pytest backend/tests/chains/test_agent_graph.py -q`
+- `17 passed`
 
-前端聚焦回歸：
+- `pytest backend/tests/services/test_copilot_plan_flow.py backend/tests/services/test_tool_plan_service.py -q`
+- `16 passed`
 
-- `npm run test -- copilotService.test.ts CopilotDock.test.ts`
-- `11 passed`
+編譯驗證：
 
-Build：
-
-- `npm run build`
+- `py_compile backend/chains/agent_nodes.py`
 - PASS
+
+補充：
+
+- 前端 `CopilotDock` 測試檔已同步更新
+- 本輪未重新完成 `Vitest` 執行驗證，因為這台環境先前曾出現 `spawn EPERM`
 
 ---
 
-四、備註
+五、這次收斂後的效果
 
-- 本次提交不改 Agent 主線 UX（仍維持 `plan -> confirm -> execute`）
-- 本次重點在於：
-  - 契約對齊
-  - 防禦性補強
-  - service 權限邊界補洞
-  - 文件入口整理
-- Phase 9 下一步銜接 9.6：trace、benchmark、評測報表與工具覆蓋擴充
+- planner 能更清楚區分「只建專案 / 先規劃 / 直接建任務」
+- execute 結果更容易觀測與除錯
+- 使用者在 UI 上能直接看到 AI 生成內容與實際建立結果
+- 文件入口多了 `docs/future/`，後面想到 backlog 可以直接收納，不必先塞進 phase 主線
