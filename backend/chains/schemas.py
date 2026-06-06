@@ -24,7 +24,7 @@ class Task(BaseModel):
     
     屬性:
         name: 任務名稱 (字數限制: 1-100)
-        priority: 優先級 (CRITICAL/HIGH/MEDIUM/LOW)
+        priority: 優先級 (1-3)
         estimated_days: 預估天數 (1-365)
         task_remark: 任務描述 (字數限制: 1-500)
     """
@@ -34,7 +34,7 @@ class Task(BaseModel):
         json_schema_extra={
             "example": {
                 "name": "API 端點實現",
-                "priority": "HIGH",
+                "priority": 1,
                 "estimated_days": 5,
                 "task_remark": "實現 RESTful API 端點用於任務管理",
                 "depends_on_task_refs": ["需求確認", "資料庫 schema 設計"]
@@ -43,19 +43,33 @@ class Task(BaseModel):
     )
     
     name: str = Field(..., min_length=1, max_length=100, description="任務名稱")
-    priority: str = Field(..., description="優先級 (CRITICAL/HIGH/MEDIUM/LOW)")
+    priority: int = Field(..., ge=1, le=3, description="優先級 (1=高, 2=中, 3=低)")
     estimated_days: int = Field(..., ge=1, le=365, description="預估天數")
     task_remark: str = Field(..., min_length=1, max_length=500, description="任務描述")
     depends_on_task_refs: List[str] = Field(default_factory=list, description="前置依賴任務名稱列表")
     
-    @field_validator('priority')
+    @field_validator('priority', mode='before')
     @classmethod
-    def validate_priority(cls, v: str) -> str:
-        """驗證優先級字段只接受預定義值"""
-        valid_priorities = {"CRITICAL", "HIGH", "MEDIUM", "LOW"}
-        if v.upper() not in valid_priorities:
-            raise ValueError(f"優先級必須是 {valid_priorities} 之一，得到: {v}")
-        return v.upper()
+    def validate_priority(cls, v: Any) -> int:
+        """驗證優先級字段，接受數字與舊版字串值。"""
+        if isinstance(v, int):
+            if v in {1, 2, 3}:
+                return v
+            raise ValueError("優先級必須是 1、2、3")
+
+        normalized = str(v or "").strip().upper()
+        priority_map = {
+            "CRITICAL": 1,
+            "HIGH": 1,
+            "MEDIUM": 2,
+            "LOW": 3,
+            "1": 1,
+            "2": 2,
+            "3": 3,
+        }
+        if normalized not in priority_map:
+            raise ValueError(f"優先級格式錯誤: {v}")
+        return priority_map[normalized]
 
     @field_validator('depends_on_task_refs')
     @classmethod

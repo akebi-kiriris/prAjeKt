@@ -122,11 +122,28 @@
           <p class="mt-1.5 mb-3.5 text-[0.89rem] leading-[1.45] text-slate-700">{{ result.final_answer }}</p>
           <h4 class="text-slate-900">工具步驟（{{ result.executed_tools.length }}）</h4>
           <ol class="mt-1.5 grid gap-1.5 pl-4 text-[0.84rem]">
-            <li v-for="(step, index) in result.steps" :key="`${step.tool_name}-${index}`" class="flex items-center justify-between gap-3 text-slate-700">
-              <strong class="truncate">{{ step.tool_name }}</strong>
-              <span :class="step.output.ok ? 'step-ok' : 'step-fail'">
-                {{ step.output.ok ? '成功' : '失敗' }}
-              </span>
+            <li
+              v-for="(step, index) in result.steps"
+              :key="`${step.tool_name}-${index}`"
+              class="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-slate-700"
+            >
+              <div class="flex items-center justify-between gap-3">
+                <strong class="truncate">{{ step.tool_name }}</strong>
+                <span :class="step.output.ok ? 'step-ok' : 'step-fail'">
+                  {{ step.output.ok ? '成功' : '失敗' }}
+                </span>
+              </div>
+              <p v-if="getStepOutputSummary(step)" class="mt-1.5 text-[0.78rem] leading-5 text-slate-600">
+                {{ getStepOutputSummary(step) }}
+              </p>
+              <ul
+                v-if="getStepOutputItems(step).length"
+                class="mt-2 list-disc pl-4 text-[0.78rem] leading-5 text-slate-600"
+              >
+                <li v-for="(item, itemIndex) in getStepOutputItems(step)" :key="`${step.tool_name}-item-${itemIndex}`">
+                  {{ item }}
+                </li>
+              </ul>
             </li>
           </ol>
         </section>
@@ -145,6 +162,7 @@ import { copilotService } from '../services/copilotService';
 import { useAuthStore } from '../stores/auth';
 import { getApiErrorMessage } from '../utils/apiError';
 import type {
+  CopilotAgentStep,
   CopilotAgentExecuteResponse,
   CopilotAgentPlanResponse,
 } from '../types';
@@ -298,6 +316,79 @@ const formatDate = (iso: string): string => {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return '未知';
   return date.toLocaleString('zh-TW');
+};
+
+const getObject = (value: unknown): Record<string, unknown> | null => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
+};
+
+const getStepOutputSummary = (step: CopilotAgentStep): string => {
+  const data = getObject(step.output.data);
+  if (!data) {
+    return step.output.error?.message || '';
+  }
+
+  if (step.tool_name === 'create_timeline_for_user') {
+    const timelineId = data.timeline_id;
+    const inputData = getObject(step.input?.data);
+    const name = typeof inputData?.name === 'string' ? inputData.name : '';
+    if (name && typeof timelineId === 'number') return `已建立專案「${name}」（ID: ${timelineId}）。`;
+    if (typeof timelineId === 'number') return `已建立專案（ID: ${timelineId}）。`;
+  }
+
+  if (step.tool_name === 'generate_timeline_tasks_with_ai') {
+    const generatedCount = typeof data.generatedCount === 'number' ? data.generatedCount : null;
+    const existingCount = typeof data.existingCount === 'number' ? data.existingCount : null;
+    if (generatedCount !== null && existingCount !== null) {
+      return `AI 已產生 ${generatedCount} 個新任務建議，目前專案原有 ${existingCount} 個任務。`;
+    }
+  }
+
+  if (step.tool_name === 'batch_create_tasks_for_timeline') {
+    const resultData = getObject(data.result);
+    const created = typeof resultData?.created === 'number' ? resultData.created : null;
+    const deleted = typeof resultData?.deleted === 'number' ? resultData.deleted : null;
+    if (created !== null) {
+      return deleted !== null
+        ? `已批次建立 ${created} 個任務，並同步調整 ${deleted} 個舊任務。`
+        : `已批次建立 ${created} 個任務。`;
+    }
+  }
+
+  if (typeof data.message === 'string' && data.message.trim()) {
+    return data.message.trim();
+  }
+
+  return '';
+};
+
+const getStepOutputItems = (step: CopilotAgentStep): string[] => {
+  const data = getObject(step.output.data);
+  if (!data) return [];
+
+  if (step.tool_name === 'generate_timeline_tasks_with_ai') {
+    const tasks = Array.isArray(data.tasks) ? data.tasks : [];
+    return tasks
+      .filter((task) => {
+        const taskObj = getObject(task);
+        return taskObj && !taskObj.isExisting;
+      })
+      .slice(0, 5)
+      .map((task) => {
+        const taskObj = getObject(task);
+        if (!taskObj) return '';
+        const name = typeof taskObj.name === 'string' ? taskObj.name.trim() : '未命名任務';
+        const estimatedDays = taskObj.estimated_days;
+        if (typeof estimatedDays === 'number') {
+          return `${name}（預估 ${estimatedDays} 天）`;
+        }
+        return name;
+      })
+      .filter(Boolean);
+  }
+
+  return [];
 };
 </script>
 

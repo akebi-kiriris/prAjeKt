@@ -169,6 +169,54 @@ describe('CopilotDock', () => {
     expect(wrapper.text()).toContain('執行結果');
   });
 
+  it('renders generated task suggestions from execution step output', async () => {
+    mocks.createAgentPlan.mockResolvedValueOnce({ data: basePlan });
+    mocks.executeAgentPlan.mockResolvedValueOnce({
+      data: {
+        agent_result: {
+          final_answer: '任務已完成，已依序執行工具流程。',
+          executed_tools: ['generate_timeline_tasks_with_ai'],
+          steps: [
+            {
+              tool_name: 'generate_timeline_tasks_with_ai',
+              input: {
+                description: '請規劃 LangGraph 學習路徑',
+              },
+              output: {
+                ok: true,
+                data: {
+                  existingCount: 0,
+                  generatedCount: 2,
+                  message: '現有 0 個任務，AI 生成 2 個新任務',
+                  tasks: [
+                    { name: 'LangGraph 基礎概念', estimated_days: 2, isExisting: false },
+                    { name: 'State 與 Node 練習', estimated_days: 3, isExisting: false },
+                  ],
+                },
+              },
+            },
+          ],
+          route: 'finalize',
+        },
+      },
+    });
+
+    const wrapper = mount(CopilotDock, {
+      global: { stubs: { transition: false } },
+    });
+    await wrapper.find('button').trigger('click');
+    await wrapper.find('textarea').setValue('建立專案');
+    await wrapper.find('form').trigger('submit.prevent');
+    await flushPromises();
+
+    await wrapper.findAll('button').find((btn) => btn.text().includes('確認執行'))?.trigger('click');
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('AI 已產生 2 個新任務建議')
+    expect(wrapper.text()).toContain('LangGraph 基礎概念（預估 2 天）')
+    expect(wrapper.text()).toContain('State 與 Node 練習（預估 3 天）')
+  });
+
   it('rejects plan', async () => {
     mocks.createAgentPlan.mockResolvedValueOnce({ data: basePlan });
     mocks.rejectAgentPlan.mockResolvedValueOnce({ data: { ok: true } });

@@ -12,6 +12,7 @@ def test_create_copilot_agent_plan_returns_preview():
     assert payload["ok"] is True
     assert payload["status"] == "planned"
     assert payload["plan_id"].startswith("plan_")
+    assert isinstance(payload["pending_tools"], list)
     assert len(payload["steps_preview"]) >= 1
     assert payload["proposal_source"] in {"llm_proposal", "rule_fallback"}
 
@@ -19,6 +20,7 @@ def test_create_copilot_agent_plan_returns_preview():
 def test_create_plan_uses_llm_proposal_when_available(monkeypatch):
     def fake_propose(*, user_message: str, context: dict, tools: list[dict]):
         return {
+            "planning_mode": "plan_tasks_only",
             "steps": ["list_tasks_for_user", "create_task_for_user"],
             "payload_draft": {"create_task_for_user": {"title": "A"}},
             "reason": "依需求先查詢後建立",
@@ -33,6 +35,108 @@ def test_create_plan_uses_llm_proposal_when_available(monkeypatch):
 
     assert payload["proposal_source"] == "llm_proposal"
     assert payload["proposal_reason"] == "依需求先查詢後建立"
+
+
+def test_create_plan_respects_model_steps_when_llm_omits_batch_create(monkeypatch):
+    def fake_propose(*, user_message: str, context: dict, tools: list[dict]):
+        return {
+            "planning_mode": "plan_tasks_only",
+            "steps": ["create_timeline_for_user", "generate_timeline_tasks_with_ai"],
+            "payload_draft": {},
+            "reason": "先建立專案並生成規劃",
+        }
+
+    monkeypatch.setattr(copilot_service, "propose_plan_with_llm", fake_propose)
+    payload = copilot_service.create_copilot_agent_plan(
+        "幫我建立一個 LangGraph 學習專案，並直接建立任務",
+        user_id=18,
+        context={"user_id": 18},
+        force_model_proposal=True,
+    )
+
+    record = copilot_service.agent_plan_store.get_plan(payload["plan_id"], user_id=18)
+    assert record is not None
+    assert record.pending_tools == [
+        "create_timeline_for_user",
+        "generate_timeline_tasks_with_ai",
+    ]
+
+
+def test_create_plan_respects_model_steps_when_llm_only_creates_timeline(monkeypatch):
+    def fake_propose(*, user_message: str, context: dict, tools: list[dict]):
+        return {
+            "planning_mode": "create_project_only",
+            "steps": ["create_timeline_for_user"],
+            "payload_draft": {},
+            "reason": "建立專案",
+        }
+
+    monkeypatch.setattr(copilot_service, "propose_plan_with_llm", fake_propose)
+    payload = copilot_service.create_copilot_agent_plan(
+        "幫我建立一個 LangGraph 學習專案，安排學習計畫和任務",
+        user_id=19,
+        context={"user_id": 19},
+        force_model_proposal=True,
+    )
+
+    record = copilot_service.agent_plan_store.get_plan(payload["plan_id"], user_id=19)
+    assert record is not None
+    assert record.pending_tools == ["create_timeline_for_user"]
+
+
+def test_create_plan_appends_batch_create_when_model_mode_requires_it(monkeypatch):
+    def fake_propose(*, user_message: str, context: dict, tools: list[dict]):
+        return {
+            "planning_mode": "plan_and_create_tasks",
+            "steps": ["create_timeline_for_user", "generate_timeline_tasks_with_ai"],
+            "payload_draft": {},
+            "reason": "建立專案並直接把任務建立進去",
+        }
+
+    monkeypatch.setattr(copilot_service, "propose_plan_with_llm", fake_propose)
+    payload = copilot_service.create_copilot_agent_plan(
+        "幫我建立 LangGraph 學習專案，並直接安排成任務",
+        user_id=20,
+        context={"user_id": 20},
+        force_model_proposal=True,
+    )
+
+    record = copilot_service.agent_plan_store.get_plan(payload["plan_id"], user_id=20)
+    assert record is not None
+    assert record.pending_tools == [
+        "create_timeline_for_user",
+        "generate_timeline_tasks_with_ai",
+        "batch_create_tasks_for_timeline",
+    ]
+
+
+def test_create_plan_accepts_llm_list_content_blocks(monkeypatch):
+    class _FakeLlm:
+        def invoke(self, _prompt: str):
+            return type(
+                "FakeResponse",
+                (),
+                {
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": '{"supported": true, "planning_mode": "plan_tasks_only", "steps": ["list_tasks_for_user"], "payload_draft": {}, "reason": "list content ok"}',
+                        }
+                    ]
+                },
+            )()
+
+    monkeypatch.setattr("chains.get_default_llm", lambda provider: _FakeLlm())
+    payload = copilot_service.create_copilot_agent_plan(
+        "先查詢任務",
+        user_id=17,
+        context={"user_id": 17},
+        force_model_proposal=True,
+    )
+
+    assert payload["proposal_source"] == "llm_proposal"
+    assert payload["proposal_reason"] == "list content ok"
+    assert payload["steps_preview"] == ["查詢任務清單"]
 
 
 def test_create_plan_fallbacks_to_rule_when_llm_plan_failed(monkeypatch):
@@ -102,6 +206,8 @@ def test_execute_copilot_agent_plan_uses_approved_tools(monkeypatch):
 
     assert result["ok"] is True
     assert result["status"] == "succeeded"
+    assert result["approved_pending_tools"] == captured["approved_pending_tools"]
+    assert result["executed_tools"] == ["create_timeline_for_user"]
     assert isinstance(captured["approved_pending_tools"], list)
 
 
