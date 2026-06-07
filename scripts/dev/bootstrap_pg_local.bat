@@ -2,6 +2,10 @@
 chcp 65001 >nul
 REM 一鍵初始化本地 PostgreSQL + 遷移 SQLite 舊資料 + 啟動前後端
 
+set "SCRIPT_DIR=%~dp0"
+for %%I in ("%SCRIPT_DIR%..\..") do set "ROOT_DIR=%%~fI"
+cd /d "%ROOT_DIR%"
+
 echo [1/4] 啟動 PostgreSQL 容器...
 docker compose up -d postgres
 if errorlevel 1 (
@@ -11,7 +15,7 @@ if errorlevel 1 (
 )
 
 echo [2/4] 套用 schema migration...
-cd /d backend
+cd /d "%ROOT_DIR%\backend"
 call venv\Scripts\python.exe safe_migrate.py
 if errorlevel 1 (
   echo [ERROR] schema migration 失敗。
@@ -26,7 +30,7 @@ if errorlevel 1 (
   pause
   exit /b 1
 )
-cd /d ..
+cd /d "%ROOT_DIR%"
 
 echo [4/4] 啟動前後端...
-call start_all.bat
+call "%SCRIPT_DIR%start_all.bat"

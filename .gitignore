@@ -82,10 +82,16 @@ backend/.pytest_cache/
 # 注意：.env.development 和 .env.production 可提交（非敏感）
 # 若需隱藏，改為 .env.example 模板檔
 
-# Docs / 筆記目錄（不追蹤）
-docs/
-# README 保留追蹤
-!README.md
+# Docs：正式文件可追蹤；部分目錄僅保留 README.md
+/docs/.obsidian/**
+!/docs/.obsidian/**/
+!/docs/.obsidian/**/README.md
+/docs/assets/**
+!/docs/assets/**/
+!/docs/assets/**/README.md
+/docs/learning/**
+!/docs/learning/**/
+!/docs/learning/**/README.md
 
 # Ignore spec directory used by Copilot agent and tooling
 .spec/

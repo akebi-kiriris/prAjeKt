@@ -6,10 +6,11 @@ REM ============================================================================
 REM PrAjeKt MCP Inspector 啟動腳本
 REM ============================================================================
 REM 功能：一鍵啟動 MCP Inspector 來測試 RAG 工具
-REM 前置：確保後端已運行（start_all.bat）
+REM 前置：確保後端已運行（scripts\dev\start_all.bat）
 REM ============================================================================
 
-set "ROOT_DIR=%~dp0"
+set "SCRIPT_DIR=%~dp0"
+for %%I in ("%SCRIPT_DIR%..\..") do set "ROOT_DIR=%%~fI"
 cd /d "%ROOT_DIR%"
 
 echo.
@@ -17,7 +18,7 @@ echo [步驟 1/3] 檢查依賴...
 
 if not exist "backend\venv\Scripts\python.exe" (
     echo [ERROR] 找不到後端 Python 虛擬環境
-    echo 請執行：start_all.bat
+    echo 請執行：scripts\dev\start_all.bat
     pause
     exit /b 1
 )
