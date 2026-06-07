@@ -816,6 +816,7 @@ import type {
   SearchUserResult,
   AiGeneratedTask,
   CreateTaskPayload,
+  TaskPriority,
   TimelineBatchCreateTasksResponse,
   TimelineBatchTaskPayload,
   GenerateTasksResponse,
@@ -955,6 +956,14 @@ type RiskGraphLayout = {
   height: number;
   nodes: RiskGraphLayoutNode[];
   edges: RiskGraphLayoutEdge[];
+};
+
+const toTaskPriority = (value: unknown, fallback: TaskPriority = 2): TaskPriority => {
+  const parsed = Number(value);
+  if (parsed === 1 || parsed === 2 || parsed === 3) {
+    return parsed;
+  }
+  return fallback;
 };
 
 const availableDependencyTasks = computed(() => {
@@ -1178,8 +1187,8 @@ const buildConflictPayloadForAddTask = (
 ): ConflictCheckPayload => {
   const payload: ConflictCheckPayload = {
     name: data.name,
-    start_date: data.start_date ?? null,
-    end_date: data.end_date ?? null,
+    start_date: data.start_date ?? data.end_date,
+    end_date: data.end_date,
     priority: data.priority,
     include_ai_suggestion: includeAiSuggestion,
   };
@@ -1962,7 +1971,7 @@ const batchCreateAiTasks = async () => {
         name: task.name,
         start_date: task.start_date ?? null,
         end_date: task.end_date ?? null,
-        priority: Number(task.priority) || 2,
+        priority: toTaskPriority(task.priority),
         status: task.status || 'pending',
         estimated_days: Number.isFinite(estimatedDays) && estimatedDays > 0 ? estimatedDays : 3,
         tags: task.tags ?? null,

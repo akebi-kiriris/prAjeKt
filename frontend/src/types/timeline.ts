@@ -1,4 +1,5 @@
 import type { TaskStatus } from './task';
+import type { TaskPriority } from './task';
 
 export interface Timeline {
   id: number;
@@ -201,10 +202,10 @@ export interface CriticalPathAnalysisResponse {
 export interface ConflictCheckPayload {
   task_id?: number;
   name?: string;
-  start_date?: string | null;
-  end_date?: string | null;
+  start_date: string;
+  end_date: string;
   assignee_user_id?: number;
-  priority?: number;
+  priority?: TaskPriority;
   include_ai_suggestion?: boolean;
 }
 

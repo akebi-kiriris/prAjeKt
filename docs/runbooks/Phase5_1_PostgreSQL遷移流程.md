@@ -64,9 +64,9 @@ $env:DATABASE_URL="postgresql://postgres:password@db.xxxxx.supabase.co:5432/post
 - 若不存在 → 回到本地 SQLite
 
 #### 2.2 初始化資料庫表格
-執行 `init_db.py` 腳本：
+執行 `scripts/db/init_db.py` 腳本：
 ```bash
-python init_db.py
+python scripts/db/init_db.py
 ```
 
 **執行示例：**
@@ -335,7 +335,9 @@ encoded = urllib.parse.quote(password, safe='')
 backend/
 ├── requirements.txt          # Python 依賴（已更新）
 ├── app.py                    # Flask 應用（無需修改）
-├── init_db.py               # 初始化資料庫（Phase 5.1）
+├── scripts/
+│   └── db/
+│       └── init_db.py       # 初始化資料庫（Phase 5.1）
 ├── test_db.py               # 測試連接（Phase 5.1）
 ├── models/
 │   ├── user.py

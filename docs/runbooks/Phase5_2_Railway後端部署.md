@@ -191,7 +191,7 @@ start.sh 路徑解析錯誤
 2. 添加資料庫初始化冪等性檢查：
    ```bash
    if [ ! -f ".db_init_done" ]; then
-       python create_missing_tables.py
+       python scripts/db/create_missing_tables.py
        touch .db_init_done
    fi
    ```

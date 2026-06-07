@@ -55,7 +55,10 @@ def test_create_task_endpoint_returns_task_id_and_owner_membership(client, auth_
     )
 
     assert response.status_code == 201
-    task_id = response.get_json()["task_id"]
+    payload = response.get_json()
+    assert payload["message"] == "任務新增成功"
+    assert isinstance(payload["task_id"], int)
+    task_id = payload["task_id"]
     assert db.session.get(Task, task_id) is not None
 
     owner_member = TaskUser.query.filter_by(task_id=task_id, user_id=user.id).first()
@@ -138,6 +141,13 @@ def test_create_task_endpoint_maps_validation_errors(client, auth_user_factory):
         },
     )
     assert invalid_end_date.status_code == 400
+
+    missing_end_date = client.post(
+        "/api/tasks",
+        headers=headers,
+        json={"name": "Missing end date"},
+    )
+    assert missing_end_date.status_code == 400
 
 
 def test_get_tasks_endpoint_returns_created_item(client, auth_user_factory):
@@ -236,12 +246,29 @@ def test_task_member_endpoints_map_service_results(client, auth_user_factory):
     )
     assert missing_user_id.status_code == 400
 
+    invalid_user_id_type = client.post(
+        f"/api/tasks/{task_id}/members",
+        headers=headers,
+        json={"user_id": "abc", "role": 1},
+    )
+    assert invalid_user_id_type.status_code == 400
+
     add_member = client.post(
         f"/api/tasks/{task_id}/members",
         headers=headers,
         json={"user_id": target.id, "role": 1},
     )
     assert add_member.status_code == 201
+    add_member_payload = add_member.get_json()
+    assert add_member_payload == {
+        "user_id": target.id,
+        "name": target.name,
+        "role": 1,
+        "email": target.email,
+        "avatar": target.avatar,
+        "assigned_at": add_member_payload["assigned_at"],
+    }
+    assert add_member_payload["assigned_at"] is not None
 
     duplicate_member = client.post(
         f"/api/tasks/{task_id}/members",

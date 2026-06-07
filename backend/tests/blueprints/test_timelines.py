@@ -384,12 +384,33 @@ def test_timeline_members_add_get_remove_and_notification(client, auth_user_fact
     headers = _get_auth_headers(client, "timeline-member-owner@example.com", "Password123!")
     timeline_id = _create_timeline(client, headers, name="Member timeline")
 
+    missing_user_id = client.post(
+        f"/api/timelines/{timeline_id}/members",
+        headers=headers,
+        json={},
+    )
+    assert missing_user_id.status_code == 400
+
+    invalid_user_id_type = client.post(
+        f"/api/timelines/{timeline_id}/members",
+        headers=headers,
+        json={"user_id": "abc", "role": 1},
+    )
+    assert invalid_user_id_type.status_code == 400
+
     add_member = client.post(
         f"/api/timelines/{timeline_id}/members",
         headers=headers,
         json={"user_id": invited.id, "role": 1},
     )
     assert add_member.status_code == 201
+    assert add_member.get_json() == {
+        "user_id": invited.id,
+        "name": invited.name,
+        "username": invited.username,
+        "email": invited.email,
+        "role": 1,
+    }
 
     notif = Notification.query.filter_by(user_id=invited.id, type="timeline_invited").first()
     assert notif is not None
@@ -543,6 +564,13 @@ def test_batch_create_tasks_validation_and_success(client, auth_user_factory):
     )
     assert invalid_payload.status_code == 400
 
+    invalid_type_payload = client.post(
+        f"/api/timelines/{timeline_id}/batch-create-tasks",
+        headers=headers,
+        json={"tasks": {}},
+    )
+    assert invalid_type_payload.status_code == 400
+
     response = client.post(
         f"/api/timelines/{timeline_id}/batch-create-tasks",
         headers=headers,
@@ -564,6 +592,9 @@ def test_batch_create_tasks_validation_and_success(client, auth_user_factory):
     )
     assert response.status_code == 201
     payload = response.get_json()
+    assert "保留 1 個舊任務" in payload["message"]
+    assert "刪除 1 個舊任務" in payload["message"]
+    assert "新增 1 個任務" in payload["message"]
     assert payload["kept"] == 1
     assert payload["deleted"] == 1
     assert payload["created"] == 1
@@ -868,6 +899,17 @@ def test_timeline_conflict_check_api_detects_overlap_and_validates_payload(clien
     )
     assert invalid_response.status_code == 400
 
+    invalid_type_response = client.post(
+        f"/api/timelines/{timeline_id}/conflict-check",
+        headers=headers,
+        json={
+            "name": "日期型別錯誤",
+            "start_date": 123,
+            "end_date": "2026-04-13",
+        },
+    )
+    assert invalid_type_response.status_code == 400
+
     outsider = auth_user_factory(
         email="timeline-conflict-api-outsider@example.com",
         password="Password123!",
@@ -884,6 +926,20 @@ def test_timeline_conflict_check_api_detects_overlap_and_validates_payload(clien
         },
     )
     assert non_member_assignee_response.status_code == 400
+
+    same_task_response = client.post(
+        f"/api/timelines/{timeline_id}/conflict-check",
+        headers=headers,
+        json={
+            "task_id": existing_task.task_id,
+            "name": existing_task.name,
+            "start_date": "2026-04-11",
+            "end_date": "2026-04-13",
+        },
+    )
+    assert same_task_response.status_code == 200
+    same_task_payload = same_task_response.get_json()
+    assert same_task_payload["has_conflict"] is False
 
 
 def test_get_upcoming_timelines_returns_due_and_progress_items(client, auth_user_factory):

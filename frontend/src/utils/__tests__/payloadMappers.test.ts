@@ -32,11 +32,9 @@ describe('payloadMappers', () => {
   });
 
   it('mapToCreateTaskPayload should keep minimal payload when optional keys are absent', () => {
-    const payload = mapToCreateTaskPayload({
+    expect(() => mapToCreateTaskPayload({
       name: 'Task B',
-    } as never);
-
-    expect(payload).toEqual({ name: 'Task B' });
+    } as never)).toThrow('end_date is required');
   });
 
   it('mapToUpdateTaskPayload should only include owned keys and normalize nullables', () => {
@@ -58,7 +56,7 @@ describe('payloadMappers', () => {
     expect(payload).toEqual({
       name: 'New Name',
       timeline_id: 3,
-      priority: 5,
+      priority: undefined,
       status: 'done',
       tags: null,
       estimated_hours: 8,

@@ -1,68 +1,106 @@
-refactor: 整理 README 與 docs 結構並收斂本地啟動腳本
+refactor: 收斂 backend 結構並補強前後端契約驗證
 
-本次提交聚焦專案首頁與文件結構整理，不是功能新增，而是把 repo 入口、docs 落點與本地腳本位置收斂到更一致的狀態，方便後續維護與提交。
-
----
-
-一、README 與專案入口收斂
-
-- 重寫 `README.md` 開頭結構
-  - 改為先介紹專案目的、想解決的問題與核心能力
-  - 將首頁內容收斂成較適合對外閱讀的版本
-  - 保留技術架構、專案結構、快速啟動與文件入口
-
-- 補強 root 檔案定位
-  - README 內明確保留 `docker-compose.yml`、`mcp_server.py`、`requirements.txt` 等 repo-level 入口檔
-  - 將平台設定檔與一般文件的角色分開說明
+這次提交主要做兩件事：一是把 `backend/` 根層的維護型腳本與目錄說明收斂到較清楚的結構；二是補強 task / timeline 相關 API 的前後端契約，讓 request / response shape 與測試覆蓋更一致。
 
 ---
 
-二、docs 結構整理
+一、backend 結構整理
 
-- 將原本散在 root 的正式文件收回 `docs/`
-  - `架構與責任邊界.md` → `docs/architecture/架構與責任邊界.md`
-  - `API_契約與錯誤處理.md` → `docs/reference/API_契約與錯誤處理.md`
-  - `本地開發測試部署_Runbook.md` → `docs/runbooks/本地開發測試部署_Runbook.md`
-  - `commit-message.md` / `commit_message_zh.md` → `docs/guides/`
+- 新增 backend 目錄層 README
+  - `backend/README.md`
+  - `backend/models/README.md`
+  - `backend/prompts/README.md`
+  - `backend/realtime/README.md`
+  - `backend/migrations/README.md`
+  - `backend/tests/README.md`
+  - `backend/scripts/README.md`
+  - `backend/scripts/backfill/README.md`
+  - `backend/scripts/db/README.md`
+  - `backend/scripts/diagnostics/README.md`
 
-- 移除 root 重複文件
-  - `重構計畫.md`
-  - `進度追蹤.md`
-  - 後續以 `docs/重構計畫.md`、`docs/進度追蹤.md` 為正式版本
+- 將維護型 / 一次性腳本移出 `backend/` 根層
+  - `backfill_task_users.py` → `backend/scripts/backfill/`
+  - `backfill_timeline_users.py` → `backend/scripts/backfill/`
+  - `check_tables.py` → `backend/scripts/diagnostics/`
+  - `create_missing_tables.py` → `backend/scripts/db/`
+  - `init_db.py` → `backend/scripts/db/`
 
-- 同步修正文件引用
-  - README 與 runbook 改指向新的 `docs/` 路徑
-  - Firebase / Railway 相關 runbook 內容校正為目前 repo 的實際設定
-
----
-
-三、本地腳本與素材位置整理
-
-- 將 Windows 本地啟動腳本移到 `scripts/dev/`
-  - `bootstrap_pg_local.bat`
-  - `start_all.bat`
-  - `start_mcp_inspector.bat`
-
-- 腳本內容同步調整
-  - 改為從 `scripts/dev/` 正確回到 repo root 執行
-  - README / runbook 內的示例命令同步改為新位置
+- 同步更新相關 runbook 路徑
+  - `docs/runbooks/Phase5_1_PostgreSQL遷移流程.md`
+  - `docs/runbooks/Phase5_2_Railway後端部署.md`
+  - `docs/runbooks/Phase6_0_開發資料庫遷移流程.md`
 
 ---
 
-四、ignore 規則整理
+二、task / timeline API 契約補強
 
-- `.gitignore` 改為：
-  - `docs/` 正式文件可追蹤
-  - 只忽略 `docs/.obsidian/`
-  - 只忽略 `docs/assets/`
-  - 只忽略 `docs/learning/`，但各目錄 `README.md` 仍可追蹤
+- 修正 `POST /timelines/{id}/conflict-check` payload 契約
+  - `TimelineConflictPayload` 補上 `task_id`
+  - 對齊前端既有的 `ConflictCheckPayload`
+  - 讓「編輯 / 指派既有任務時排除自己衝突」可正確運作
 
-- 讓 docs 後續不再因為「整個目錄先 ignore 再局部放行」而難以維護
+- 調整新增成員 API 的成功回傳內容
+  - `POST /tasks/{id}/members`
+  - `POST /timelines/{id}/members`
+  - 原本只回 `{ message }`
+  - 現在改為真的回傳新增後的成員資料，與前端 `TaskMember` 型別對齊
 
 ---
 
-五、補充
+三、前端 payload type 收斂
 
-- 本輪主要是文件與 repo 結構整理，未新增功能邏輯
-- 本輪未重新跑測試；若提交範圍維持文件/腳本整理，通常可接受
-- commit 前請留意目前因 ignore 規則調整而浮出的未追蹤 docs，避免誤把整批歷史文件一起加入
+- `frontend/src/types/task.ts`
+  - 新增 `TaskPriority = 1 | 2 | 3`
+  - `CreateTaskPayload.end_date` 改為必填
+  - `priority` 改為 `TaskPriority`
+
+- `frontend/src/types/timeline.ts`
+  - `ConflictCheckPayload.start_date` / `end_date` 改為必填
+  - `priority` 改為 `TaskPriority`
+
+- `frontend/src/utils/payloadMappers.ts`
+  - `mapToCreateTaskPayload()` 現在缺少 `end_date` 會直接中止
+  - `priority` 只接受 `1 | 2 | 3`
+  - update payload 的 priority 也同步收斂
+
+- `frontend/src/components/timelines/TimelineDetailDialog.vue`
+  - conflict-check payload 若未填 `start_date`，會以 `end_date` 回填
+  - AI 批次建立任務前，會先將 `priority` 正規化為 `1 | 2 | 3`
+
+---
+
+四、契約測試補齊
+
+- 新增 / 強化以下高風險 endpoint 的 blueprint 契約測試：
+  - `POST /tasks`
+  - `POST /tasks/{id}/members`
+  - `POST /timelines/{id}/members`
+  - `POST /timelines/{id}/conflict-check`
+  - `POST /timelines/{id}/batch-create-tasks`
+
+- 每條至少補到：
+  - 缺欄位
+  - 錯型別
+  - 成功 body 結構
+
+---
+
+五、驗證
+
+- `pytest backend/tests/blueprints/test_tasks.py backend/tests/blueprints/test_timelines.py -q`
+  - `38 passed`
+
+- `python -m py_compile backend/blueprints/tasks.py backend/blueprints/timelines.py backend/services/task_service.py backend/services/timeline_service.py`
+  - PASS
+
+- `npm run build`
+  - PASS
+
+- `npm run test -- payloadMappers.test.ts taskService.test.ts timelineService.test.ts`
+  - 本機環境仍受 `spawn EPERM` 影響，未能完成 Vitest 啟動
+
+---
+
+六、補充
+
+- 本次重點是「契約對齊 + 結構整理」，不是新增產品功能
