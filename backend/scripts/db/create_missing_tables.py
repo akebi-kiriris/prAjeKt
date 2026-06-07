@@ -1,7 +1,11 @@
 import sqlite3
+from pathlib import Path
+
+BACKEND_DIR = Path(__file__).resolve().parents[2]
+SQLITE_PATH = BACKEND_DIR / "instance" / "prajekt.db"
 
 # 連接資料庫
-conn = sqlite3.connect('instance/prajekt.db')
+conn = sqlite3.connect(SQLITE_PATH)
 c = conn.cursor()
 
 # 創建 task_users 表 (任務成員表，記錄任務的負責人和協助者)

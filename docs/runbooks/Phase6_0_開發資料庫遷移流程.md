@@ -88,14 +88,14 @@ DATABASE_URL=postgresql+psycopg2://postgres:postgres@localhost:5433/prajekt
 二選一，整個團隊統一使用同一條路徑：
 
 - 路徑 A（推薦）：`flask db upgrade`
-- 路徑 B（現有流程）：`python init_db.py`
+- 路徑 B（現有流程）：`python scripts/db/init_db.py`
 
 驗證：
 
 ```bash
 cd backend
 flask db upgrade
-python check_tables.py
+python scripts/diagnostics/check_tables.py
 ```
 
 ### Step 4. 舊資料遷移

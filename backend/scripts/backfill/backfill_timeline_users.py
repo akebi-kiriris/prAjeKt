@@ -5,11 +5,14 @@ backfill_timeline_users.py
 一律用 timelines.user_id 建立一筆負責人（role=0）。
 
 使用方式（從 backend/ 目錄執行）：
-    python backfill_timeline_users.py
+    python scripts/backfill/backfill_timeline_users.py
 """
 
-import sys, os
-sys.path.insert(0, os.path.dirname(__file__))
+from pathlib import Path
+import sys
+
+BACKEND_DIR = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(BACKEND_DIR))
 
 from app import create_app
 from models import db

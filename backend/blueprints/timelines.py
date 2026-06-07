@@ -92,6 +92,7 @@ class TimelineUpdatePayload(BaseModel):
 
 class TimelineConflictPayload(BaseModel):
     model_config = ConfigDict(extra='forbid')
+    task_id: int | None = None
     name: str | None = None
     assignee_user_id: int | None = None
     start_date: str
@@ -366,13 +367,13 @@ def add_timeline_member(timeline_id):
         return error
 
     try:
-        add_timeline_member_for_owner(
+        member_payload = add_timeline_member_for_owner(
             timeline_id=timeline_id,
             invited_user_id=data.get('user_id'),
             role=data.get('role', 1),
             actor_user_id=int(get_jwt_identity()),
         )
-        return jsonify({'message': '成員新增成功'}), 201
+        return jsonify(member_payload), 201
     except TimelineOperationError as err:
         return error_from_exception(err)
 

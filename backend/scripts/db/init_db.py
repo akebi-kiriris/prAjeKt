@@ -1,12 +1,15 @@
 #!/usr/bin/env python
 """初始化資料庫 - 直接建立所有表格"""
 
-import os
 import sys
+import os
+from pathlib import Path
+
+BACKEND_DIR = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(BACKEND_DIR))
 
 # 本地初始化預設使用 SQLite，若外部已指定 DATABASE_URL 則沿用
-os.environ.setdefault('DATABASE_URL', 'sqlite:///instance/prajekt.db')
-
+os.environ.setdefault("DATABASE_URL", f"sqlite:///{BACKEND_DIR / 'instance' / 'prajekt.db'}")
 from app import create_app
 from models import db
 

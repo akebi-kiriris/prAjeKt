@@ -1522,7 +1522,7 @@ def add_timeline_member_for_owner(
     invited_user_id: int,
     role: int,
     actor_user_id: int,
-) -> None:
+) -> dict[str, Any]:
     """新增專案成員並發送邀請通知。"""
     if not invited_user_id:
         raise TimelineOperationError('請提供使用者 ID', 400)
@@ -1547,6 +1547,11 @@ def add_timeline_member_for_owner(
             link='/timelines',
         )
         add_entity(notif)
+
+    invited_user = get_user_by_id(invited_user_id)
+    if invited_user is None:
+        raise TimelineOperationError('找不到新增後的成員資料', 500)
+    return timeline_member_item_to_dict(member, invited_user)
 
 
 def remove_timeline_member_for_owner(timeline_id: int, member_user_id: int, operator_user_id: int) -> None:

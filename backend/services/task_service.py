@@ -659,7 +659,7 @@ def add_task_member_for_operator(
     operator_user_id: int,
     new_user_id: int,
     role: int = 1,
-) -> None:
+) -> dict[str, Any]:
     """新增任務成員並設定角色，必要時發送通知。
 
     例外:
@@ -694,7 +694,10 @@ def add_task_member_for_operator(
             content=f'{actor_name} 將你加入任務「{task_name}」',
             link='/tasks',
         )
-    return {'message': '成員新增成功'}
+    added_user = get_user_by_id(new_user_id)
+    if added_user is None:
+        raise TaskOperationError('找不到新增後的成員資料', 500)
+    return task_member_to_dict(task_member, added_user, include_contact=True)
 
 
 def remove_task_member_for_owner(task_id: int, member_id: int) -> None:

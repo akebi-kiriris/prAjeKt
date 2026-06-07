@@ -1,6 +1,16 @@
-import type { CreateTaskPayload, CreateTodoPayload, TaskUpdatePayload, TodoForm, UpdateTodoPayload } from '../types';
+import type { CreateTaskPayload, CreateTodoPayload, TaskPriority, TaskUpdatePayload, TodoForm, UpdateTodoPayload } from '../types';
 
-type TaskCreateInput = Partial<CreateTaskPayload> & { name: string };
+type TaskCreateInput = {
+  name: string;
+  start_date?: string | null;
+  end_date?: string | null;
+  task_remark?: string | null;
+  priority?: number | string | null;
+  tags?: string[] | string | null;
+  timeline_id?: number;
+  assignee_user_ids?: Array<number | string>;
+  depends_on_task_ids?: Array<number | string>;
+};
 type TaskUpdateInput = Partial<TaskUpdatePayload>;
 type TodoCreateInput = Partial<CreateTodoPayload> & Pick<TodoForm, 'title'>;
 type TodoUpdateInput = Partial<UpdateTodoPayload>;
@@ -40,6 +50,14 @@ const toNumberOrUndefined = (value: unknown): number | undefined => {
   return undefined;
 };
 
+const toTaskPriorityOrUndefined = (value: unknown): TaskPriority | undefined => {
+  const parsed = toNumberOrUndefined(value);
+  if (parsed === 1 || parsed === 2 || parsed === 3) {
+    return parsed;
+  }
+  return undefined;
+};
+
 const toNumberArrayOrUndefined = (value: unknown): number[] | undefined => {
   if (!Array.isArray(value)) return undefined;
 
@@ -51,8 +69,14 @@ const toNumberArrayOrUndefined = (value: unknown): number[] | undefined => {
 };
 
 export const mapToCreateTaskPayload = (input: TaskCreateInput): CreateTaskPayload => {
+  const endDate = toDateOnlyOrNull(input.end_date);
+  if (!endDate) {
+    throw new Error('end_date is required');
+  }
+
   const payload: CreateTaskPayload = {
     name: input.name.trim(),
+    end_date: endDate,
   };
 
   if (hasKey(input, 'assignee_user_ids') && Array.isArray(input.assignee_user_ids)) {
@@ -68,14 +92,11 @@ export const mapToCreateTaskPayload = (input: TaskCreateInput): CreateTaskPayloa
   if (hasKey(input, 'start_date')) {
     payload.start_date = toDateOnlyOrNull(input.start_date);
   }
-  if (hasKey(input, 'end_date')) {
-    payload.end_date = toDateOnlyOrNull(input.end_date);
-  }
   if (hasKey(input, 'task_remark')) {
     payload.task_remark = input.task_remark ?? null;
   }
 
-  const priority = toNumberOrUndefined(input.priority);
+  const priority = toTaskPriorityOrUndefined(input.priority);
   if (priority !== undefined) payload.priority = priority;
 
   if (hasKey(input, 'tags')) {
@@ -97,7 +118,7 @@ export const mapToUpdateTaskPayload = (input: TaskUpdateInput): TaskUpdatePayloa
   }
   if (hasKey(input, 'timeline_id')) payload.timeline_id = input.timeline_id;
 
-  const priority = toNumberOrUndefined(input.priority);
+  const priority = toTaskPriorityOrUndefined(input.priority);
   if (hasKey(input, 'priority')) payload.priority = priority;
 
   if (hasKey(input, 'status')) payload.status = input.status;

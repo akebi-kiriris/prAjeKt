@@ -1,6 +1,10 @@
 import sqlite3
+from pathlib import Path
 
-conn = sqlite3.connect('instance/prajekt.db')
+BACKEND_DIR = Path(__file__).resolve().parents[2]
+SQLITE_PATH = BACKEND_DIR / "instance" / "prajekt.db"
+
+conn = sqlite3.connect(SQLITE_PATH)
 c = conn.cursor()
 
 # Check timelines columns

@@ -319,13 +319,13 @@ def add_task_member(task_id):
         return error
 
     try:
-        add_task_member_for_operator(
+        member_payload = add_task_member_for_operator(
             task_id=task_id,
             operator_user_id=int(get_jwt_identity()),
             new_user_id=data.get('user_id'),
             role=data.get('role', 1),
         )
-        return jsonify({'message': '成員新增成功'}), 201
+        return jsonify(member_payload), 201
     except TaskOperationError as err:
         return error_from_exception(err)
 

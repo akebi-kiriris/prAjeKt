@@ -1,10 +1,17 @@
 """
-補填 task_users 記錄
+補填 task_users 記錄。
+
 對每個 tasks 記錄，若其 user_id 沒有對應的 task_user(role=0)，則自動插入。
+
+使用方式（從 backend/ 目錄執行）：
+    python scripts/backfill/backfill_task_users.py
 """
+
+from pathlib import Path
 import sys
-import os
-sys.path.insert(0, os.path.dirname(__file__))
+
+BACKEND_DIR = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(BACKEND_DIR))
 
 from app import create_app, db
 from models.task import Task

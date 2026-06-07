@@ -1,4 +1,5 @@
 export type TaskStatus = 'pending' | 'in_progress' | 'review' | 'completed' | 'cancelled';
+export type TaskPriority = 1 | 2 | 3;
 
 export interface TaskMember {
   user_id: number;
@@ -20,7 +21,7 @@ export interface AiGeneratedTask {
   name: string;
   start_date?: string | null;
   end_date?: string | null;
-  priority: number;
+  priority: TaskPriority;
   status?: TaskStatus | string;
   estimated_days?: number;
   tags?: string | null;
@@ -94,7 +95,7 @@ export interface Task {
   completed: boolean;
   completed_at: string | null;
   timeline_id: number | null;
-  priority: number;
+  priority: TaskPriority;
   status: TaskStatus;
   tags: string | null;
   estimated_hours: number | null;
@@ -115,9 +116,9 @@ export interface Task {
 export interface CreateTaskPayload {
   name: string;
   start_date?: string | null;
-  end_date?: string | null;
+  end_date: string;
   task_remark?: string | null;
-  priority?: number;
+  priority?: TaskPriority;
   tags?: string | null;
   timeline_id?: number;
   assignee_user_ids?: number[];
@@ -130,7 +131,7 @@ export interface TimelineBatchTaskPayload {
   name?: string;
   start_date?: string | null;
   end_date?: string | null;
-  priority?: number;
+  priority?: TaskPriority;
   status?: TaskStatus | string;
   estimated_days?: number;
   tags?: string | null;
