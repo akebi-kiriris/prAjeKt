@@ -10,13 +10,13 @@
 ### 1.1 一鍵初始化（首次）
 
 ```bat
-bootstrap_pg_local.bat
+scripts\dev\bootstrap_pg_local.bat
 ```
 
 ### 1.2 日常啟動
 
 ```bat
-start_all.bat
+scripts\dev\start_all.bat
 ```
 
 ---
@@ -101,4 +101,3 @@ npm run test:run
 - 短期：`git stash` 保留工作快照  
 - 穩定點：`git commit`（可 `git revert <sha>`）  
 - 重大修改建議分兩波提交，第一波可用時先封存再做第二波
-
