@@ -1,106 +1,70 @@
-refactor: 收斂 backend 結構並補強前後端契約驗證
+refactor: 拆分 timeline detail dialog 並同步收斂前端入口與文件
 
-這次提交主要做兩件事：一是把 `backend/` 根層的維護型腳本與目錄說明收斂到較清楚的結構；二是補強 task / timeline 相關 API 的前後端契約，讓 request / response shape 與測試覆蓋更一致。
-
----
-
-一、backend 結構整理
-
-- 新增 backend 目錄層 README
-  - `backend/README.md`
-  - `backend/models/README.md`
-  - `backend/prompts/README.md`
-  - `backend/realtime/README.md`
-  - `backend/migrations/README.md`
-  - `backend/tests/README.md`
-  - `backend/scripts/README.md`
-  - `backend/scripts/backfill/README.md`
-  - `backend/scripts/db/README.md`
-  - `backend/scripts/diagnostics/README.md`
-
-- 將維護型 / 一次性腳本移出 `backend/` 根層
-  - `backfill_task_users.py` → `backend/scripts/backfill/`
-  - `backfill_timeline_users.py` → `backend/scripts/backfill/`
-  - `check_tables.py` → `backend/scripts/diagnostics/`
-  - `create_missing_tables.py` → `backend/scripts/db/`
-  - `init_db.py` → `backend/scripts/db/`
-
-- 同步更新相關 runbook 路徑
-  - `docs/runbooks/Phase5_1_PostgreSQL遷移流程.md`
-  - `docs/runbooks/Phase5_2_Railway後端部署.md`
-  - `docs/runbooks/Phase6_0_開發資料庫遷移流程.md`
+這次提交主要收斂第三波前端結構清理，重點是把 `TimelineDetailDialog.vue` 內責任較獨立的區塊持續拆出，讓主元件回到 orchestration 角色，而不是繼續累積為單一巨型元件；同時同步前端入口描述與重構文件，作為銜接 Phase 9.6 前的整理提交。
 
 ---
 
-二、task / timeline API 契約補強
+一、TimelineDetailDialog 再拆分
 
-- 修正 `POST /timelines/{id}/conflict-check` payload 契約
-  - `TimelineConflictPayload` 補上 `task_id`
-  - 對齊前端既有的 `ConflictCheckPayload`
-  - 讓「編輯 / 指派既有任務時排除自己衝突」可正確運作
+- 新增以下子元件：
+  - `frontend/src/components/timelines/TimelineAddTaskModal.vue`
+  - `frontend/src/components/timelines/TimelineSharePanel.vue`
+  - `frontend/src/components/timelines/TimelineTaskMemberPanel.vue`
+  - `frontend/src/components/timelines/TimelineWeeklyReportPanel.vue`
+  - `frontend/src/components/timelines/TimelineRiskAnalysisPanel.vue`
 
-- 調整新增成員 API 的成功回傳內容
-  - `POST /tasks/{id}/members`
-  - `POST /timelines/{id}/members`
-  - 原本只回 `{ message }`
-  - 現在改為真的回傳新增後的成員資料，與前端 `TaskMember` 型別對齊
+- `TimelineDetailDialog.vue` 保留：
+  - service 呼叫
+  - 權限判斷
+  - toast / confirm
+  - refresh 與整體流程編排
 
----
+- 子元件只承接：
+  - UI 呈現
+  - 表單輸入
+  - emit 事件回拋
 
-三、前端 payload type 收斂
-
-- `frontend/src/types/task.ts`
-  - 新增 `TaskPriority = 1 | 2 | 3`
-  - `CreateTaskPayload.end_date` 改為必填
-  - `priority` 改為 `TaskPriority`
-
-- `frontend/src/types/timeline.ts`
-  - `ConflictCheckPayload.start_date` / `end_date` 改為必填
-  - `priority` 改為 `TaskPriority`
-
-- `frontend/src/utils/payloadMappers.ts`
-  - `mapToCreateTaskPayload()` 現在缺少 `end_date` 會直接中止
-  - `priority` 只接受 `1 | 2 | 3`
-  - update payload 的 priority 也同步收斂
-
-- `frontend/src/components/timelines/TimelineDetailDialog.vue`
-  - conflict-check payload 若未填 `start_date`，會以 `end_date` 回填
-  - AI 批次建立任務前，會先將 `priority` 正規化為 `1 | 2 | 3`
+- 量化結果：
+  - `TimelineDetailDialog.vue`
+  - `2152 -> 1637` 行
+  - 累計減少 `515` 行
 
 ---
 
-四、契約測試補齊
+二、前端入口收斂
 
-- 新增 / 強化以下高風險 endpoint 的 blueprint 契約測試：
-  - `POST /tasks`
-  - `POST /tasks/{id}/members`
-  - `POST /timelines/{id}/members`
-  - `POST /timelines/{id}/conflict-check`
-  - `POST /timelines/{id}/batch-create-tasks`
-
-- 每條至少補到：
-  - 缺欄位
-  - 錯型別
-  - 成功 body 結構
+- 正式完成前端入口 TS 化與引用更新：
+  - `frontend/src/main.ts`
+  - `frontend/src/router/index.ts`
+  - `frontend/index.html` 改為引用 `/src/main.ts`
 
 ---
 
-五、驗證
+三、文件同步
 
-- `pytest backend/tests/blueprints/test_tasks.py backend/tests/blueprints/test_timelines.py -q`
-  - `38 passed`
+- 更新 `docs/重構計畫.md`
+  - 補上第三波 Timeline 結構清理結果
+  - 更新 `main.ts` / `router/index.ts` 目標結構描述
+  - 同步目前 Timeline 區的剩餘技術債狀態
 
-- `python -m py_compile backend/blueprints/tasks.py backend/blueprints/timelines.py backend/services/task_service.py backend/services/timeline_service.py`
-  - PASS
+- 更新 `docs/進度追蹤.md`
+  - 補上 `2026/06/10` 第三波 Timeline 結構清理里程碑
+  - 同步目前 Phase 9 / Timeline 區的最新狀態
+
+---
+
+四、驗證
 
 - `npm run build`
   - PASS
 
-- `npm run test -- payloadMappers.test.ts taskService.test.ts timelineService.test.ts`
-  - 本機環境仍受 `spawn EPERM` 影響，未能完成 Vitest 啟動
+- `npm run test -- TimelineDetailDialog.phase7.test.ts TimelineSubcomponents.test.ts TimelineViewModes.test.ts`
+  - `27 passed`
 
 ---
 
-六、補充
+五、補充
 
-- 本次重點是「契約對齊 + 結構整理」，不是新增產品功能
+- 本次重點是前端責任拆分與結構收斂，不新增產品功能
+- `TimelineViewModes.vue` 與 `TimelineDetailDialog.vue` 主體仍偏大，但已先完成第三波的第一段與第二段收斂
+- 這次提交可視為進入 Phase 9.6 前的前端結構整理基線，下一步較適合轉向可觀測性、benchmark 與 Agent/tooling 擴充

@@ -1,6 +1,9 @@
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+from services.contracts.task_contracts import TaskCreateInput, TaskUpdateInput
+from services.contracts.timeline_contracts import ConflictCheckInput
 
 
 def _to_int_or_none(value: Any) -> int | None:
@@ -16,7 +19,7 @@ class CreateTaskToolInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     user_id: int
-    data: dict[str, Any]
+    data: "CreateTaskToolPayload"
 
 
 class UpdateTaskToolInput(BaseModel):
@@ -24,7 +27,7 @@ class UpdateTaskToolInput(BaseModel):
 
     actor_user_id: int
     task_id: int
-    data: dict[str, Any]
+    data: "UpdateTaskToolPayload"
 
 
 class ListTasksToolInput(BaseModel):
@@ -43,6 +46,7 @@ class TimelineGenerateTasksToolInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     timeline_id: int
+    actor_user_id: int
     project_name: str
     description: str = ""
 
@@ -51,7 +55,7 @@ class CreateTimelineToolInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     user_id: int
-    data: dict[str, Any]
+    data: "CreateTimelineToolPayload"
 
 
 class TimelineBatchCreateTasksToolInput(BaseModel):
@@ -59,7 +63,7 @@ class TimelineBatchCreateTasksToolInput(BaseModel):
 
     timeline_id: int
     user_id: int
-    tasks: list[dict[str, Any]]
+    tasks: list["BatchCreateTaskItem"]
 
 
 class TimelineConflictCheckToolInput(BaseModel):
@@ -67,7 +71,7 @@ class TimelineConflictCheckToolInput(BaseModel):
 
     timeline_id: int
     actor_user_id: int
-    payload: dict[str, Any]
+    payload: ConflictCheckInput
 
 
 class GroupSnapshotToolInput(BaseModel):
@@ -130,3 +134,190 @@ class KnowledgeListToolInput(BaseModel):
         if parsed is None or parsed < 0:
             return 0
         return parsed
+
+
+class CreateTaskToolPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str | None = None
+    end_date: str | None = None
+    timeline_id: int | None = None
+    priority: int | None = None
+    status: str | None = None
+    tags: list[str] | None = None
+    estimated_hours: int | float | None = None
+    start_date: str | None = None
+    task_remark: str | None = None
+    isWork: int | bool | None = None
+    assignee_user_ids: list[int] | None = None
+    depends_on_task_ids: list[int] | None = None
+
+    @field_validator("name", mode="before")
+    @classmethod
+    def _normalize_name(cls, value: Any) -> str | None:
+        if value is None:
+            return None
+        text = str(value).strip()
+        if not text:
+            raise ValueError("name 不可為空")
+        return text
+
+    @field_validator("end_date", "start_date", mode="before")
+    @classmethod
+    def _normalize_date_text(cls, value: Any) -> str | None:
+        if value in (None, ""):
+            return None
+        return str(value)
+
+    @field_validator("timeline_id", mode="before")
+    @classmethod
+    def _normalize_timeline_id(cls, value: Any) -> int | None:
+        if value in (None, ""):
+            return None
+        parsed = _to_int_or_none(value)
+        if parsed is None:
+            raise ValueError("timeline_id 必須是整數")
+        return parsed
+
+    @model_validator(mode="after")
+    def _validate_contract_shape(self):
+        payload = self.model_dump(exclude_none=True)
+        TaskCreateInput.model_validate(
+            {
+                "status": payload.get("status", "pending"),
+                "priority": payload.get("priority", 2),
+                "start_date": payload.get("start_date"),
+                "end_date": payload.get("end_date", "1970-01-01T00:00:00"),
+                "timeline_id": payload.get("timeline_id"),
+                "assignee_user_ids": payload.get("assignee_user_ids") or [],
+                "depends_on_task_ids": payload.get("depends_on_task_ids") or [],
+            }
+        )
+        return self
+
+
+class UpdateTaskToolPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str | None = None
+    timeline_id: int | None = None
+    priority: int | None = None
+    status: str | None = None
+    tags: list[str] | None = None
+    estimated_hours: int | float | None = None
+    actual_hours: int | float | None = None
+    start_date: str | None = None
+    end_date: str | None = None
+    task_remark: str | None = None
+    isWork: int | bool | None = None
+    depends_on_task_ids: list[int] | None = None
+
+    @field_validator("timeline_id", mode="before")
+    @classmethod
+    def _normalize_timeline_id(cls, value: Any) -> int | None:
+        if value in (None, ""):
+            return None
+        parsed = _to_int_or_none(value)
+        if parsed is None:
+            raise ValueError("timeline_id 必須是整數")
+        return parsed
+
+    @model_validator(mode="after")
+    def _validate_contract_shape(self):
+        TaskUpdateInput.model_validate(self.model_dump(exclude_none=True))
+        return self
+
+
+class CreateTimelineToolPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str | None = None
+    start_date: str | None = None
+    end_date: str | None = None
+    remark: str | None = None
+
+    @field_validator("name", mode="before")
+    @classmethod
+    def _normalize_name(cls, value: Any) -> str | None:
+        if value is None:
+            return None
+        text = str(value).strip()
+        if not text:
+            raise ValueError("name 不可為空")
+        return text
+
+    @field_validator("start_date", "end_date", mode="before")
+    @classmethod
+    def _normalize_date_text(cls, value: Any) -> str | None:
+        if value in (None, ""):
+            return None
+        return str(value)
+
+
+class BatchCreateTaskItem(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    task_id: int | None = None
+    isExisting: bool = False
+    name: str | None = None
+    priority: int | None = 2
+    status: str | None = "pending"
+    estimated_days: int | None = 3
+    task_remark: str | None = ""
+    depends_on_task_ids: list[int] | None = None
+    depends_on_task_refs: list[str] | None = None
+
+    @field_validator("task_id", mode="before")
+    @classmethod
+    def _normalize_task_id(cls, value: Any) -> int | None:
+        if value in (None, ""):
+            return None
+        parsed = _to_int_or_none(value)
+        if parsed is None or parsed <= 0:
+            raise ValueError("task_id 必須是正整數")
+        return parsed
+
+    @field_validator("name", mode="before")
+    @classmethod
+    def _normalize_name(cls, value: Any) -> str | None:
+        if value is None:
+            return None
+        text = str(value).strip()
+        if not text:
+            raise ValueError("name 不可為空")
+        return text
+
+    @field_validator("estimated_days", mode="before")
+    @classmethod
+    def _normalize_estimated_days(cls, value: Any) -> int | None:
+        if value in (None, ""):
+            return None
+        parsed = _to_int_or_none(value)
+        if parsed is None or parsed <= 0:
+            raise ValueError("estimated_days 必須是正整數")
+        return parsed
+
+    @field_validator("depends_on_task_refs", mode="before")
+    @classmethod
+    def _normalize_dependency_refs(cls, value: Any) -> list[str] | None:
+        if value in (None, ""):
+            return None
+        if not isinstance(value, list):
+            raise ValueError("depends_on_task_refs 必須是陣列")
+        normalized: list[str] = []
+        for item in value:
+            text = str(item).strip()
+            if not text:
+                continue
+            normalized.append(text)
+        return normalized
+
+    @model_validator(mode="after")
+    def _validate_item_shape(self):
+        if self.isExisting:
+            if self.task_id is None:
+                raise ValueError("isExisting=true 時必須提供 task_id")
+            return self
+        if self.name is None:
+            raise ValueError("新任務必須提供 name")
+        return self

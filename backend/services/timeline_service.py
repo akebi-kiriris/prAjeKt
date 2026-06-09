@@ -273,12 +273,19 @@ def generate_timeline_tasks_with_ai(
     timeline_id: int,
     project_name: str,
     description: str = '',
+    actor_user_id: int | None = None,
 ) -> dict[str, Any]:
     """以既有任務脈絡讓 AI 生成專案任務建議。
 
     例外:
         TimelineAIGenerationError: AI payload invalid or provider invocation failure.
     """
+    timeline = get_active_timeline_or_404(timeline_id)
+    if actor_user_id is not None:
+        member = get_timeline_member(timeline_id, actor_user_id)
+        if timeline.user_id != actor_user_id and member is None:
+            raise TimelineOperationError('你沒有權限讀取此專案', 403)
+
     existing_tasks_info = _build_existing_tasks_info(timeline_id)
 
     try:
@@ -1578,6 +1585,9 @@ def batch_create_tasks_for_timeline(
         TimelineOperationError: 驗證失敗、相依檢查失敗或資料寫入失敗。
     """
     timeline = get_active_timeline_or_404(timeline_id)
+    member = get_timeline_member(timeline_id, user_id)
+    if timeline.user_id != user_id and member is None:
+        raise TimelineOperationError('你沒有權限操作此專案', 403)
     task_payloads = _validate_batch_task_payloads(task_payloads)
 
     with transaction(TimelineOperationError, '批次建立任務失敗，請稍後再試'):

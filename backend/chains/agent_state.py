@@ -19,6 +19,7 @@ class AgentState(TypedDict, total=False):
     steps: list[AgentStep]
     last_result: dict[str, Any]
     last_error: dict[str, Any]
+    last_tool_name: str
     route: RouteType
     ask_user_message: str
     final_answer: str

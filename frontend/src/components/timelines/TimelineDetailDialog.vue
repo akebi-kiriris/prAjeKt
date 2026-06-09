@@ -43,316 +43,37 @@
             </div>
           </div>
 
-          <!-- 週報預覽（Phase 7.1） -->
-          <div class="mb-4 p-4 bg-slate-50 border border-slate-200 rounded-xl">
-            <div class="flex items-center justify-between gap-3 mb-3">
-              <div>
-                <p class="text-sm font-semibold text-slate-700">📊 週報預覽</p>
-                <p class="text-xs text-slate-500">完成任務、風險與下一步建議</p>
-              </div>
-              <div class="flex items-center gap-2">
-                <button
-                  @click="toggleWeeklyReportExpanded"
-                  class="px-3 py-1.5 text-xs font-medium rounded-lg bg-white border border-slate-200 text-slate-600 hover:bg-slate-100 transition-colors"
-                >
-                  {{ isWeeklyReportExpanded ? '收合' : '展開' }}
-                </button>
-                <button
-                  @click="fetchWeeklyReport"
-                  :disabled="weeklyReportLoading"
-                  class="px-3 py-1.5 text-xs font-medium rounded-lg bg-white border border-slate-200 text-slate-600 hover:bg-slate-100 transition-colors disabled:opacity-50"
-                >
-                  {{ weeklyReportLoading ? '載入中...' : '重新整理' }}
-                </button>
-              </div>
-            </div>
+          <TimelineWeeklyReportPanel
+            :expanded="isWeeklyReportExpanded"
+            :loading="weeklyReportLoading"
+            :error="weeklyReportError"
+            :weekly-report="weeklyReport"
+            :weekly-report-range="weeklyReportRange"
+            :format-date="formatDate"
+            :get-ai-source-label="getWeeklyReportAiSummarySourceLabel"
+            @toggle-expanded="toggleWeeklyReportExpanded"
+            @refresh="fetchWeeklyReport"
+            @update:weekly-report-range="weeklyReportRange = $event"
+          />
 
-            <div v-show="isWeeklyReportExpanded">
-              <div class="grid grid-cols-2 gap-3 mb-3">
-                <div>
-                  <label class="block text-[11px] text-slate-500 mb-1">起始日</label>
-                  <input
-                    v-model="weeklyReportRange.start_date"
-                    type="date"
-                    class="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
-                  />
-                </div>
-                <div>
-                  <label class="block text-[11px] text-slate-500 mb-1">結束日</label>
-                  <input
-                    v-model="weeklyReportRange.end_date"
-                    type="date"
-                    class="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none"
-                  />
-                </div>
-              </div>
-
-              <div v-if="weeklyReportError" class="mb-3 p-2.5 text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg">
-                {{ weeklyReportError }}
-              </div>
-
-              <div v-if="weeklyReportLoading" class="text-xs text-slate-500 py-2">正在產生週報...</div>
-
-              <div v-else-if="weeklyReport" class="space-y-3">
-                <div v-if="weeklyReport.ai_summary" class="p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                  <p class="text-xs font-medium text-blue-700 mb-1">📌 AI 週報摘要</p>
-                  <p class="text-xs text-blue-600">{{ weeklyReport.ai_summary }}</p>
-                  <p class="mt-1 text-[11px] text-blue-500">來源：{{ getWeeklyReportAiSummarySourceLabel(weeklyReport.ai_summary_source) }}</p>
-                </div>
-
-                <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
-                  <div class="p-2.5 bg-white border border-slate-200 rounded-lg">
-                    <p class="text-[11px] text-slate-500">本期完成</p>
-                    <p class="text-sm font-semibold text-slate-700">{{ weeklyReport.overview.completed_tasks }}</p>
-                  </div>
-                  <div class="p-2.5 bg-white border border-slate-200 rounded-lg">
-                    <p class="text-[11px] text-slate-500">總任務數</p>
-                    <p class="text-sm font-semibold text-slate-700">{{ weeklyReport.overview.total_tasks }}</p>
-                  </div>
-                  <div class="p-2.5 bg-white border border-slate-200 rounded-lg">
-                    <p class="text-[11px] text-slate-500">完成率</p>
-                    <p class="text-sm font-semibold text-slate-700">{{ weeklyReport.overview.completion_rate }}%</p>
-                  </div>
-                  <div class="p-2.5 bg-white border border-slate-200 rounded-lg">
-                    <p class="text-[11px] text-slate-500">風險項目</p>
-                    <p class="text-sm font-semibold text-slate-700">{{ weeklyReport.overview.at_risk_tasks }}</p>
-                  </div>
-                </div>
-
-                <div class="grid md:grid-cols-2 gap-3">
-                  <div class="p-3 bg-white border border-slate-200 rounded-lg">
-                    <p class="text-xs font-medium text-slate-600 mb-2">本期完成任務</p>
-                    <div v-if="weeklyReport.completed_tasks.length === 0" class="text-xs text-slate-400">本期尚無完成任務</div>
-                    <ul v-else class="space-y-1.5">
-                      <li
-                        v-for="item in weeklyReport.completed_tasks.slice(0, 5)"
-                        :key="`weekly-done-${item.task_id}`"
-                        class="text-xs text-slate-600"
-                      >
-                        ✓ {{ item.name }}
-                        <span class="text-slate-400">（{{ formatDate(item.completed_at || item.due_date) || '未標記' }}）</span>
-                      </li>
-                    </ul>
-                  </div>
-
-                  <div class="p-3 bg-white border border-slate-200 rounded-lg flex flex-col">
-                    <p class="text-xs font-medium text-slate-600 mb-2">風險清單</p>
-                    <div v-if="weeklyReport.risk_items.length === 0" class="text-xs text-slate-400">本期無風險項目</div>
-                    <ul v-else class="space-y-1.5 overflow-y-auto max-h-48 pr-2">
-                      <li
-                        v-for="item in weeklyReport.risk_items"
-                        :key="`weekly-risk-${item.task_id}`"
-                        class="text-xs text-amber-700"
-                      >
-                        ⚠ {{ item.name }}
-                        <span class="text-amber-600">（{{ item.reason }}，截止 {{ formatDate(item.due_date) || item.due_date }}）</span>
-                      </li>
-                    </ul>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- 風險分析（Phase 7.2） -->
-          <div class="mb-4 p-4 bg-rose-50 border border-rose-200 rounded-xl">
-            <div class="flex items-center justify-between gap-3 mb-3">
-              <div>
-                <p class="text-sm font-semibold text-rose-700">⚠️ 風險分析（Critical Path）</p>
-                <p class="text-xs text-rose-500">關鍵路徑、延期衝擊與資料品質警示</p>
-              </div>
-              <div class="flex items-center gap-2">
-                <button
-                  @click="toggleRiskAnalysisExpanded"
-                  class="px-3 py-1.5 text-xs font-medium rounded-lg bg-white border border-rose-200 text-rose-600 hover:bg-rose-100 transition-colors"
-                >
-                  {{ isRiskAnalysisExpanded ? '收合' : '展開' }}
-                </button>
-                <button
-                  @click="toggleRiskGraph"
-                  :disabled="riskAnalysisLoading"
-                  class="px-3 py-1.5 text-xs font-medium rounded-lg bg-white border border-rose-200 text-rose-600 hover:bg-rose-100 transition-colors disabled:opacity-50"
-                >
-                  {{ isRiskGraphVisible ? '隱藏依賴圖' : '產生依賴圖' }}
-                </button>
-                <button
-                  @click="fetchRiskAnalysis"
-                  :disabled="riskAnalysisLoading"
-                  class="px-3 py-1.5 text-xs font-medium rounded-lg bg-white border border-rose-200 text-rose-600 hover:bg-rose-100 transition-colors disabled:opacity-50"
-                >
-                  {{ riskAnalysisLoading ? '載入中...' : '重新整理' }}
-                </button>
-              </div>
-            </div>
-
-            <div v-show="isRiskAnalysisExpanded">
-              <div v-if="riskAnalysisError" class="mb-3 p-2.5 text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg">
-                {{ riskAnalysisError }}
-              </div>
-
-              <div v-if="riskAnalysisLoading" class="text-xs text-rose-500 py-2">正在分析關鍵路徑...</div>
-
-              <div v-else-if="riskAnalysis" class="space-y-3">
-                <div v-if="isRiskGraphVisible" class="p-3 bg-white border border-rose-200 rounded-lg">
-                  <div class="flex items-center justify-between mb-2">
-                    <p class="text-xs font-medium text-rose-700">依賴圖（自動佈局）</p>
-                    <button
-                      type="button"
-                      @click="rebuildRiskGraph"
-                      class="px-2.5 py-1 text-[11px] rounded-md border border-rose-200 text-rose-600 hover:bg-rose-100 transition-colors"
-                    >
-                      重新產生
-                    </button>
-                  </div>
-
-                  <div v-if="!riskGraphLayout" class="text-xs text-rose-400">
-                    目前沒有可視化的依賴資料（請先建立任務依賴）。
-                  </div>
-
-                  <div v-else class="overflow-x-auto border border-rose-100 rounded-lg bg-rose-50/30">
-                    <svg
-                      :key="riskGraphVersion"
-                      :width="riskGraphLayout.width"
-                      :height="riskGraphLayout.height"
-                      role="img"
-                      aria-label="risk dependency graph"
-                    >
-                      <defs>
-                        <marker
-                          id="risk-graph-arrow"
-                          markerWidth="8"
-                          markerHeight="8"
-                          refX="7"
-                          refY="4"
-                          orient="auto"
-                        >
-                          <path d="M0,0 L8,4 L0,8 z" fill="#94a3b8" />
-                        </marker>
-                      </defs>
-
-                      <line
-                        v-for="edge in riskGraphLayout.edges"
-                        :key="`risk-graph-edge-${edge.source_task_id}-${edge.target_task_id}`"
-                        :x1="edge.x1"
-                        :y1="edge.y1"
-                        :x2="edge.x2"
-                        :y2="edge.y2"
-                        :stroke="edge.is_critical ? '#e11d48' : '#94a3b8'"
-                        :stroke-width="edge.is_critical ? 2.2 : 1.4"
-                        marker-end="url(#risk-graph-arrow)"
-                      />
-
-                      <g
-                        v-for="node in riskGraphLayout.nodes"
-                        :key="`risk-graph-node-${node.task_id}`"
-                      >
-                        <rect
-                          :x="node.x"
-                          :y="node.y"
-                          :width="RISK_GRAPH_NODE_WIDTH"
-                          :height="RISK_GRAPH_NODE_HEIGHT"
-                          :rx="10"
-                          :fill="getRiskGraphNodeFill(node)"
-                          :stroke="getRiskGraphNodeStroke(node)"
-                          :stroke-width="node.is_critical ? 2.2 : 1.4"
-                        />
-                        <text
-                          :x="node.x + 10"
-                          :y="node.y + 20"
-                          font-size="11"
-                          fill="#334155"
-                        >
-                          {{ truncateRiskGraphNodeName(node.name) }}
-                        </text>
-                        <text
-                          :x="node.x + 10"
-                          :y="node.y + 36"
-                          font-size="10"
-                          fill="#64748b"
-                        >
-                          #{{ node.task_id }} · {{ node.is_critical ? 'Critical' : 'Normal' }}
-                        </text>
-                      </g>
-                    </svg>
-                  </div>
-
-                  <div class="mt-2 flex flex-wrap gap-2 text-[11px]">
-                    <span class="px-2 py-0.5 rounded-full bg-rose-100 text-rose-700 border border-rose-200">關鍵路徑</span>
-                    <span class="px-2 py-0.5 rounded-full bg-red-100 text-red-700 border border-red-200">高風險</span>
-                    <span class="px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-200">中風險</span>
-                    <span class="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200">一般任務</span>
-                  </div>
-                </div>
-
-                <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
-                  <div class="p-2.5 bg-white border border-rose-200 rounded-lg">
-                    <p class="text-[11px] text-rose-500">預估總工期</p>
-                    <p class="text-sm font-semibold text-rose-700">{{ riskAnalysis.summary.projected_duration_days }} 天</p>
-                  </div>
-                  <div class="p-2.5 bg-white border border-rose-200 rounded-lg">
-                    <p class="text-[11px] text-rose-500">關鍵路徑任務</p>
-                    <p class="text-sm font-semibold text-rose-700">{{ riskAnalysis.summary.critical_path_task_count }} 項</p>
-                  </div>
-                  <div class="p-2.5 bg-white border border-rose-200 rounded-lg">
-                    <p class="text-[11px] text-rose-500">高風險任務</p>
-                    <p class="text-sm font-semibold text-rose-700">{{ riskAnalysis.summary.high_risk_count }} 項</p>
-                  </div>
-                  <div class="p-2.5 bg-white border border-rose-200 rounded-lg">
-                    <p class="text-[11px] text-rose-500">警示數</p>
-                    <p class="text-sm font-semibold text-rose-700">{{ riskAnalysis.summary.warning_count }} 筆</p>
-                  </div>
-                </div>
-
-                <div class="grid md:grid-cols-2 gap-3">
-                  <div class="p-3 bg-white border border-rose-200 rounded-lg">
-                    <p class="text-xs font-medium text-rose-700 mb-2">關鍵路徑</p>
-                    <div v-if="riskAnalysis.critical_path.length === 0" class="text-xs text-rose-400">目前沒有可計算的路徑</div>
-                    <ol v-else class="space-y-1.5">
-                      <li
-                        v-for="(item, idx) in riskAnalysis.critical_path"
-                        :key="`critical-path-${item.task_id}`"
-                        class="text-xs text-rose-700"
-                      >
-                        {{ idx + 1 }}. {{ item.name }}
-                        <span class="text-rose-500">（工期 {{ item.duration_days }} 天，float {{ item.float_days }}）</span>
-                      </li>
-                    </ol>
-                  </div>
-
-                  <div class="p-3 bg-white border border-rose-200 rounded-lg">
-                    <p class="text-xs font-medium text-rose-700 mb-2">風險任務</p>
-                    <div v-if="riskAnalysis.risk_items.length === 0" class="text-xs text-rose-400">目前無風險任務</div>
-                    <ul v-else class="space-y-1.5 overflow-y-auto max-h-48 pr-2">
-                      <li
-                        v-for="item in riskAnalysis.risk_items.slice(0, 8)"
-                        :key="`risk-item-${item.task_id}`"
-                        class="text-xs"
-                      >
-                        <p class="font-medium text-rose-700">
-                          {{ item.name }}
-                          <span class="text-rose-500">（{{ item.severity.toUpperCase() }}，impact {{ item.impact_days }} 天）</span>
-                        </p>
-                        <p class="text-rose-600 mt-0.5">{{ item.reasons.join('；') }}</p>
-                      </li>
-                    </ul>
-                  </div>
-                </div>
-
-                <div v-if="riskAnalysis.warnings.length > 0" class="p-3 bg-white border border-rose-200 rounded-lg">
-                  <p class="text-xs font-medium text-rose-700 mb-2">資料警示</p>
-                  <ul class="space-y-1.5 max-h-32 overflow-y-auto pr-2">
-                    <li
-                      v-for="(warning, index) in riskAnalysis.warnings"
-                      :key="`risk-warning-${warning.code}-${index}`"
-                      class="text-xs text-rose-600"
-                    >
-                      • {{ warning.message }}
-                    </li>
-                  </ul>
-                </div>
-              </div>
-            </div>
-          </div>
+          <TimelineRiskAnalysisPanel
+            :expanded="isRiskAnalysisExpanded"
+            :loading="riskAnalysisLoading"
+            :error="riskAnalysisError"
+            :risk-analysis="riskAnalysis"
+            :is-risk-graph-visible="isRiskGraphVisible"
+            :risk-graph-version="riskGraphVersion"
+            :risk-graph-layout="riskGraphLayout"
+            :node-width="RISK_GRAPH_NODE_WIDTH"
+            :node-height="RISK_GRAPH_NODE_HEIGHT"
+            :truncate-node-name="truncateRiskGraphNodeName"
+            :get-node-fill="getRiskGraphNodeFill"
+            :get-node-stroke="getRiskGraphNodeStroke"
+            @toggle-expanded="toggleRiskAnalysisExpanded"
+            @toggle-graph="toggleRiskGraph"
+            @refresh="fetchRiskAnalysis"
+            @rebuild-graph="rebuildRiskGraph"
+          />
 
           <ProjectKnowledgePanel
             :documents="projectKnowledgeDocuments"
@@ -401,292 +122,51 @@
       </div>
     </div>
 
-    <!-- 新增任務 Modal -->
-    <div v-if="showAddTaskModal" class="fixed inset-0 z-60 flex items-center justify-center bg-black/50 p-4" @click.self="showAddTaskModal = false; resetTaskForm()">
-      <div class="w-full max-w-lg rounded-2xl border border-slate-200 bg-white shadow-[0_20px_40px_rgba(15,23,42,0.14)]">
-        <div class="p-5 border-b border-slate-200 flex justify-between items-center">
-          <h3 class="text-lg font-semibold text-slate-800">新增任務</h3>
-          <button @click="showAddTaskModal = false; resetTaskForm()" class="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">&times;</button>
-        </div>
-        <form @submit.prevent="handleAddTask" class="p-5 space-y-4">
-          <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1.5">任務名稱 <span class="text-red-500">*</span></label>
-            <input v-model="taskForm.name" type="text" required placeholder="輸入任務名稱" class="w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none" />
-          </div>
-          <div class="grid grid-cols-2 gap-4">
-            <div>
-              <label class="block text-sm font-medium text-slate-700 mb-1.5">開始日期</label>
-              <input v-model="taskForm.start_date" type="date" class="w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none" />
-            </div>
-            <div>
-              <label class="block text-sm font-medium text-slate-700 mb-1.5">截止日期</label>
-              <input v-model="taskForm.end_date" type="date" class="w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none" />
-            </div>
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1.5">優先級</label>
-            <select v-model="taskForm.priority" class="w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none bg-white">
-              <option :value="1">🔴 高優先</option>
-              <option :value="2">🟡 中優先</option>
-              <option :value="3">🟢 低優先</option>
-            </select>
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1.5">指派成員（可多選）</label>
-            <select
-              v-model="addTaskAssigneeIds"
-              multiple
-              class="w-full min-h-30 px-3 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none bg-white text-sm"
-            >
-              <option
-                v-for="member in timelineMembers"
-                :key="`add-assignee-${member.user_id}`"
-                :value="member.user_id"
-              >
-                {{ member.username || member.name }}
-              </option>
-            </select>
-            <p class="text-[11px] text-slate-500 mt-1.5">
-              未選擇時預設分派給自己。若分派給他人，衝突明細會只顯示件數。
-            </p>
-            <div v-if="addTaskAssigneeIds.length > 0" class="mt-2 flex flex-wrap gap-1.5">
-              <span
-                v-for="memberId in addTaskAssigneeIds"
-                :key="`add-assignee-chip-${memberId}`"
-                class="px-2.5 py-1 text-xs rounded-full bg-indigo-50 text-indigo-700 border border-indigo-100"
-              >
-                {{ getTimelineMemberName(memberId) }}
-              </span>
-            </div>
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1.5">前置依賴任務（可多選）</label>
-            <select
-              v-model="addTaskDependencyIds"
-              multiple
-              class="w-full min-h-30 px-3 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none bg-white text-sm"
-            >
-              <option
-                v-for="taskOption in availableDependencyTasks"
-                :key="`add-dependency-${taskOption.task_id}`"
-                :value="taskOption.task_id"
-              >
-                {{ taskOption.name }}
-              </option>
-            </select>
-            <p class="text-[11px] text-slate-500 mt-1.5">僅可依賴本專案任務；會自動去重與驗證。</p>
-            <div v-if="addTaskDependencyIds.length > 0" class="mt-2 flex flex-wrap gap-1.5">
-              <span
-                v-for="dependencyId in addTaskDependencyIds"
-                :key="`add-dependency-chip-${dependencyId}`"
-                class="px-2.5 py-1 text-xs rounded-full bg-slate-100 text-slate-700 border border-slate-200"
-              >
-                {{ getTaskNameById(dependencyId) }}
-              </span>
-            </div>
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1.5">標籤（逗號分隔）</label>
-            <input v-model="taskForm.tags" type="text" placeholder="例如：前端, 重要, Bug" class="w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none" />
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-slate-700 mb-1.5">備註</label>
-            <textarea v-model="taskForm.task_remark" rows="3" placeholder="任務備註（可選）" class="w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none resize-none"></textarea>
-          </div>
-          <div v-if="addTaskConflictSummary.hasConflict" class="p-3 bg-amber-50 border border-amber-200 rounded-xl">
-            <p class="text-sm font-semibold text-amber-700 mb-1">⚠️ 偵測到 {{ addTaskConflictSummary.totalSignals }} 個排程衝突訊號</p>
-            <p class="text-[11px] text-amber-700/90 mb-2">依被分派者逐一檢測，分派給他人時僅顯示件數。</p>
+    <TimelineAddTaskModal
+      :open="showAddTaskModal"
+      :task-form="taskForm"
+      :timeline-members="timelineMembers"
+      :add-task-assignee-ids="addTaskAssigneeIds"
+      :add-task-dependency-ids="addTaskDependencyIds"
+      :available-dependency-tasks="availableDependencyTasks"
+      :add-task-conflict-summary="addTaskConflictSummary"
+      :add-task-conflict-previews="addTaskConflictPreviews"
+      :conflict-ai-suggestion-loading-key="conflictAiSuggestionLoadingKey"
+      :get-timeline-member-name="getTimelineMemberName"
+      :get-task-name-by-id="getTaskNameById"
+      :format-date="formatDate"
+      @close="showAddTaskModal = false; resetTaskForm()"
+      @submit="handleAddTask"
+      @request-ai-suggestion="requestAddTaskConflictAiSuggestion"
+      @update:task-form="taskForm = $event"
+      @update:add-task-assignee-ids="addTaskAssigneeIds = $event"
+      @update:add-task-dependency-ids="addTaskDependencyIds = $event"
+    />
 
-            <div class="space-y-2.5">
-              <div
-                v-for="item in addTaskConflictPreviews.filter((entry) => entry.preview.has_conflict)"
-                :key="`add-conflict-assignee-${item.assignee_user_id ?? 'self'}`"
-                class="p-2.5 bg-white/70 border border-amber-200 rounded-lg"
-              >
-                <p class="text-xs font-semibold text-amber-700 mb-1.5">
-                  👤 {{ item.assignee_label }}：{{ item.preview.conflict_count }} 個訊號
-                </p>
-                <div class="text-[11px] text-amber-700/90 space-y-1 mb-2">
-                  <p v-if="(item.preview.cross_project_conflict_count ?? 0) > 0">
-                    跨專案衝突：{{ item.preview.cross_project_conflict_count }} 個
-                  </p>
-                  <p v-if="(item.preview.workload_overload_count ?? 0) > 0">
-                    過載日：{{ item.preview.workload_overload_count }} 天
-                  </p>
-                </div>
+    <TimelineSharePanel
+      :open="isSharePanelOpen"
+      :timeline-name="selectedTimeline?.name || ''"
+      :timeline-members="timelineMembers"
+      :input-email="inputEmail"
+      :search-result="searchResult"
+      :search-error="searchError"
+      @close="isSharePanelOpen = false"
+      @search-user="searchUser"
+      @confirm-share="confirmShare"
+      @kick-member="kickMember"
+      @update:input-email="inputEmail = $event"
+    />
 
-                <ul class="list-disc list-inside text-xs text-amber-700 space-y-1">
-                  <li v-for="conflict in item.preview.conflicts.slice(0, 3)" :key="`add-conflict-${item.assignee_user_id ?? 'self'}-${conflict.task_id}`">
-                    {{ conflict.name }}（{{ conflict.reason }}，{{ conflict.start_date }} ~ {{ conflict.end_date }}）
-                  </li>
-                </ul>
-
-                <div
-                  v-if="(item.preview.workload_overload_days ?? []).length > 0"
-                  class="mt-2.5 p-2.5 bg-white/80 border border-amber-200 rounded-lg"
-                >
-                  <p class="text-xs font-semibold text-amber-700 mb-1.5">📅 過載日列表</p>
-                  <ul class="space-y-1.5 max-h-32 overflow-y-auto pr-1">
-                    <li
-                      v-for="day in item.preview.workload_overload_days"
-                      :key="`overload-${item.assignee_user_id ?? 'self'}-${day.date}`"
-                      class="text-xs text-amber-700"
-                    >
-                      <span class="font-medium">{{ formatDate(day.date) || day.date }}</span>
-                      <span class="text-amber-600">：{{ day.projected_task_count }} 件（門檻 {{ day.threshold }}）</span>
-                      <p v-if="day.sample_tasks.length" class="text-[11px] text-amber-600 mt-0.5 line-clamp-1">
-                        既有任務：{{ day.sample_tasks.join('、') }}
-                      </p>
-                      <p v-else class="text-[11px] text-amber-600 mt-0.5">
-                        既有任務：{{ day.existing_task_count }} 件（僅顯示件數）
-                      </p>
-                    </li>
-                  </ul>
-                </div>
-
-                <p v-if="item.preview.suggestion" class="text-xs text-amber-600 mt-2">
-                  建議改期為 {{ item.preview.suggestion.start_date }} ~ {{ item.preview.suggestion.end_date }}
-                </p>
-                <button
-                  type="button"
-                  @click="requestAddTaskConflictAiSuggestion(item.assignee_user_id)"
-                  :disabled="conflictAiSuggestionLoadingKey === getConflictPreviewKey(item.assignee_user_id)"
-                  class="mt-2 inline-flex items-center px-2.5 py-1 text-[11px] rounded-md border border-amber-300 text-amber-700 bg-white hover:bg-amber-50 transition-colors disabled:opacity-50"
-                >
-                  {{ conflictAiSuggestionLoadingKey === getConflictPreviewKey(item.assignee_user_id) ? 'AI 產生中...' : '✨ 產生 AI 衝突建議' }}
-                </button>
-                <p v-if="item.preview.ai_suggestion" class="text-xs text-amber-700 italic mt-2">
-                  💡 {{ item.preview.ai_suggestion }}
-                </p>
-              </div>
-            </div>
-          </div>
-          <div class="flex gap-3 pt-2">
-            <button type="button" @click="showAddTaskModal = false; resetTaskForm()" class="flex-1 py-2.5 border border-slate-200 text-slate-600 font-medium rounded-xl hover:bg-slate-50 transition-colors">取消</button>
-            <button type="submit" class="flex-1 py-2.5 bg-primary text-white font-semibold rounded-xl hover:brightness-110 transition-all shadow-md shadow-primary/25">新增</button>
-          </div>
-        </form>
-      </div>
-    </div>
-
-    <!-- 成員管理 Panel -->
-    <div v-if="isSharePanelOpen" class="fixed inset-0 z-60 flex items-center justify-center bg-black/50 p-4" @click.self="isSharePanelOpen = false">
-      <div class="w-full max-w-md rounded-2xl border border-slate-200 bg-white shadow-[0_20px_40px_rgba(15,23,42,0.14)]">
-        <div class="p-5 border-b border-slate-200 flex justify-between items-center">
-          <h3 class="text-lg font-semibold text-slate-800">👥 成員管理</h3>
-          <button @click="isSharePanelOpen = false" class="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">&times;</button>
-        </div>
-        <div class="p-5 space-y-4">
-          <!-- 現有成員列表 -->
-          <div v-if="timelineMembers.length > 0">
-            <p class="text-xs font-medium text-slate-500 uppercase tracking-wide mb-2">目前成員</p>
-            <div class="space-y-2">
-              <div v-for="member in timelineMembers" :key="member.user_id" class="flex items-center justify-between p-2.5 bg-slate-50 rounded-xl">
-                <div class="flex items-center gap-2.5">
-                  <div class="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center text-sm font-bold text-primary shrink-0">
-                    {{ (member.username || member.name || '?')[0].toUpperCase() }}
-                  </div>
-                  <div>
-                    <p class="text-sm font-medium text-slate-800">{{ member.username || member.name }}</p>
-                    <p class="text-xs text-slate-500">{{ member.email }}</p>
-                  </div>
-                </div>
-                <div class="flex items-center gap-1.5">
-                  <span :class="['px-2 py-0.5 text-xs font-medium rounded-full', member.role === 0 ? 'bg-primary/10 text-primary' : 'bg-slate-100 text-slate-500']">
-                    {{ member.role === 0 ? '負責人' : '協作者' }}
-                  </span>
-                  <button v-if="member.role !== 0" @click="kickMember(member)" class="w-7 h-7 flex items-center justify-center text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors text-sm font-bold">✕</button>
-                </div>
-              </div>
-            </div>
-          </div>
-          <!-- 邀請新成員 -->
-          <div :class="timelineMembers.length > 0 ? 'border-t border-slate-200 pt-4' : ''">
-            <p class="text-sm text-slate-500 mb-3">邀請成員加入「{{ selectedTimeline?.name }}」</p>
-            <div class="flex gap-2">
-              <input v-model="inputEmail" type="email" placeholder="輸入用戶 Email" class="flex-1 px-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none" @keyup.enter="searchUser" />
-              <button @click="searchUser" class="px-4 py-2.5 bg-primary text-white font-medium rounded-xl hover:brightness-110 transition-all">搜尋</button>
-            </div>
-            <div v-if="searchError" class="mt-2 p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-600">{{ searchError }}</div>
-            <div v-if="searchResult" class="mt-2 p-4 bg-green-50 border border-green-200 rounded-xl">
-              <div class="flex items-center justify-between">
-                <div>
-                  <p class="font-medium text-slate-800">{{ searchResult.name }}</p>
-                </div>
-                <button @click="confirmShare" class="px-4 py-2 bg-primary text-white text-sm font-medium rounded-xl hover:brightness-110 transition-all">邀請</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- 任務成員指派 Panel -->
-    <div v-if="isTaskMemberPanelOpen" class="fixed inset-0 z-60 flex items-center justify-center bg-black/50 p-4" @click.self="isTaskMemberPanelOpen = false">
-      <div class="w-full max-w-md rounded-2xl border border-slate-200 bg-white shadow-[0_20px_40px_rgba(15,23,42,0.14)]">
-        <div class="p-5 border-b border-slate-200 flex justify-between items-center">
-          <h3 class="text-lg font-semibold text-slate-800">👥 任務成員 — {{ assignTask?.name }}</h3>
-          <button @click="isTaskMemberPanelOpen = false" class="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">&times;</button>
-        </div>
-        <div class="p-5 space-y-4">
-          <!-- 現有任務成員 -->
-          <div>
-            <p class="text-xs font-medium text-slate-500 uppercase tracking-wide mb-2">目前成員</p>
-            <div v-if="taskMembersForAssign.length === 0" class="text-center py-3 text-slate-400 text-sm">尚無指派成員</div>
-            <div v-else class="space-y-2">
-              <div v-for="member in taskMembersForAssign" :key="member.user_id" class="flex items-center justify-between p-2.5 bg-slate-50 rounded-xl">
-                <div class="flex items-center gap-2.5">
-                  <div class="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center text-sm font-bold text-primary shrink-0">
-                    {{ (member.name || '?')[0].toUpperCase() }}
-                  </div>
-                  <div>
-                    <p class="text-sm font-medium text-slate-800">{{ member.name }}</p>
-                    <p class="text-xs text-slate-500">{{ member.email }}</p>
-                  </div>
-                </div>
-                <div class="flex items-center gap-1.5">
-                  <span :class="['px-2 py-0.5 text-xs font-medium rounded-full', member.role === 0 ? 'bg-primary/10 text-primary' : 'bg-slate-100 text-slate-500']">
-                    {{ member.role === 0 ? '負責人' : '協作者' }}
-                  </span>
-                  <button
-                    v-if="member.role !== 0"
-                    @click="setAssignedTaskOwner(member)"
-                    class="px-2 py-1 text-[11px] font-medium rounded-lg bg-amber-100 text-amber-700 hover:bg-amber-200 transition-colors"
-                  >設為主責</button>
-                  <button v-if="member.role !== 0" @click="kickAssignedMember(member)" class="w-7 h-7 flex items-center justify-center text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors text-sm font-bold">✕</button>
-                </div>
-              </div>
-            </div>
-          </div>
-          <!-- 快速指派：專案成員 -->
-          <div class="border-t border-slate-200 pt-4">
-            <p class="text-xs font-medium text-slate-500 uppercase tracking-wide mb-2">專案成員快速指派</p>
-            <div v-if="timelineMembers.length === 0" class="text-center py-3 text-slate-400 text-sm">載入中...</div>
-            <template v-else>
-              <div v-if="timelineMembers.filter(m => !taskMembersForAssign.some(tm => tm.user_id === m.user_id)).length === 0" class="text-center py-3 text-slate-400 text-sm">所有專案成員皆已加入此任務</div>
-              <div v-else class="space-y-2">
-                <div
-                  v-for="m in timelineMembers.filter(m => !taskMembersForAssign.some(tm => tm.user_id === m.user_id))"
-                  :key="m.user_id"
-                  class="flex items-center justify-between p-2.5 bg-indigo-50 rounded-xl"
-                >
-                  <div class="flex items-center gap-2.5">
-                    <div class="w-8 h-8 bg-indigo-100 rounded-full flex items-center justify-center text-sm font-bold text-indigo-600 shrink-0">
-                      {{ (m.username || m.name || '?')[0].toUpperCase() }}
-                    </div>
-                    <div>
-                      <p class="text-sm font-medium text-slate-800">{{ m.username || m.name }}</p>
-                      <p class="text-xs text-slate-500">{{ m.email }}</p>
-                    </div>
-                  </div>
-                  <button @click="quickAssignTaskMember(m)" class="px-3 py-1 bg-primary text-white text-xs font-medium rounded-lg hover:brightness-110 transition-all">指派</button>
-                </div>
-              </div>
-            </template>
-          </div>
-        </div>
-      </div>
-    </div>
+    <TimelineTaskMemberPanel
+      :open="isTaskMemberPanelOpen"
+      :task-name="assignTask?.name || ''"
+      :task-members-for-assign="taskMembersForAssign"
+      :timeline-members="timelineMembers"
+      @close="isTaskMemberPanelOpen = false"
+      @quick-assign="quickAssignTaskMember"
+      @kick-member="kickAssignedMember"
+      @set-owner="setAssignedTaskOwner"
+    />
 
     <!-- 任務詳情 Dialog -->
     <div v-if="showTaskDetail && selectedTask" class="fixed inset-0 z-60 flex items-center justify-center bg-black/50 p-4" @click.self="showTaskDetail = false">
@@ -793,6 +273,11 @@ import { mapToCreateTaskPayload } from '../../utils/payloadMappers';
 import ProjectKnowledgePanel from './ProjectKnowledgePanel.vue';
 import AiTaskGeneratePanel from './AiTaskGeneratePanel.vue';
 import TaskDetailPanel from './TaskDetailPanel.vue';
+import TimelineAddTaskModal from './TimelineAddTaskModal.vue';
+import TimelineWeeklyReportPanel from './TimelineWeeklyReportPanel.vue';
+import TimelineRiskAnalysisPanel from './TimelineRiskAnalysisPanel.vue';
+import TimelineSharePanel from './TimelineSharePanel.vue';
+import TimelineTaskMemberPanel from './TimelineTaskMemberPanel.vue';
 import {
   collectTasksWithPotentiallyDroppedDependencies,
   getDefaultWeeklyReportRange,

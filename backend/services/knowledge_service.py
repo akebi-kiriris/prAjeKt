@@ -22,6 +22,7 @@ from repositories.knowledge_repository import (
     update_knowledge_document_status,
     update_knowledge_document_status_by_id,
 )
+from repositories.timeline_repository import get_active_timeline_by_id, get_timeline_member
 from services.embedding_service import EmbeddingOperationError, GeminiEmbeddingService
 from services.text_splitter_service import TextSplitterOperationError, TextSplitterService
 from services.transactions import transaction
@@ -32,6 +33,19 @@ class KnowledgeOperationError(Exception):
         super().__init__(message)
         self.message = message
         self.status_code = status_code
+
+
+def _validate_project_knowledge_membership(user_id: int, project_id: int | None) -> None:
+    if project_id is None:
+        return
+
+    timeline = get_active_timeline_by_id(project_id)
+    if timeline is None:
+        raise KnowledgeOperationError("找不到該專案", 404)
+
+    member = get_timeline_member(project_id, user_id)
+    if timeline.user_id != user_id and member is None:
+        raise KnowledgeOperationError("你沒有權限存取此專案知識", 403)
 
 
 def _max_upload_bytes() -> int:
@@ -329,6 +343,7 @@ def upload_and_index_knowledge_document(
     例外:
         KnowledgeOperationError: 驗證失敗、解析失敗、向量化失敗或資料寫入失敗。
     """
+    _validate_project_knowledge_membership(user_id=user_id, project_id=project_id)
     content_bytes = _read_uploaded_file(file_storage)
     filename = str(file_storage.filename).strip()
     mime_type = getattr(file_storage, "mimetype", None)
@@ -423,6 +438,7 @@ def list_knowledge_documents(
     status: str | None = None,
 ) -> dict[str, Any]:
     """列出知識文件，支援查詢與排序選項。"""
+    _validate_project_knowledge_membership(user_id=user_id, project_id=project_id)
     docs = list_knowledge_documents_for_user(
         user_id=user_id,
         limit=limit,
@@ -469,6 +485,7 @@ def delete_knowledge_document(user_id: int, document_id: int, project_id: int | 
     例外:
         KnowledgeOperationError: 文件不存在或刪除失敗。
     """
+    _validate_project_knowledge_membership(user_id=user_id, project_id=project_id)
     document = _resolve_document_for_operation(user_id=user_id, document_id=document_id, project_id=project_id)
     if document is None:
         raise KnowledgeOperationError("找不到知識文件", 404)
@@ -496,6 +513,7 @@ def reindex_knowledge_document(user_id: int, document_id: int, project_id: int |
     例外:
         KnowledgeOperationError: 來源文字無效或重建索引失敗。
     """
+    _validate_project_knowledge_membership(user_id=user_id, project_id=project_id)
     document = _resolve_document_for_operation(user_id=user_id, document_id=document_id, project_id=project_id)
     if document is None:
         raise KnowledgeOperationError("找不到知識文件", 404)
@@ -613,6 +631,7 @@ def get_project_knowledge_document_file(
     event_type: str = "download",
 ) -> Any:
     """解析專案知識檔案供下載/開啟流程使用。"""
+    _validate_project_knowledge_membership(user_id=user_id, project_id=project_id)
     document = _resolve_document_for_operation(user_id=user_id, document_id=document_id, project_id=project_id)
     if document is None or document.deleted_at is not None:
         raise KnowledgeOperationError("找不到知識文件", 404)

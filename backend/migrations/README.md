@@ -24,5 +24,5 @@
 ## 修改判斷
 
 - model 欄位、索引、關聯改動後，通常要回來看這層
-- 若是 migration 執行失敗或 revision mismatch，優先檢查這裡與 `safe_migrate.py`
+- 若是 migration 執行失敗或 revision mismatch，優先檢查這裡與 `scripts/db/safe_migrate.py`
 - 大量資料回填或一次性修補，不一定要寫進 migration；先評估是否應獨立成腳本

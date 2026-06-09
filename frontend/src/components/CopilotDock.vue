@@ -351,8 +351,8 @@ const getStepOutputSummary = (step: CopilotAgentStep): string => {
     const deleted = typeof resultData?.deleted === 'number' ? resultData.deleted : null;
     if (created !== null) {
       return deleted !== null
-        ? `已批次建立 ${created} 個任務，並同步調整 ${deleted} 個舊任務。`
-        : `已批次建立 ${created} 個任務。`;
+        ? `已套用任務規劃，新增 ${created} 個任務，並同步調整 ${deleted} 個舊任務。`
+        : `已套用任務規劃，新增 ${created} 個任務。`;
     }
   }
 

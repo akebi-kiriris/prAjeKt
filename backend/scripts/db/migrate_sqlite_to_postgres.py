@@ -2,8 +2,8 @@
 """Migrate local data from SQLite to PostgreSQL.
 
 Usage:
-  python migrate_sqlite_to_postgres.py
-  python migrate_sqlite_to_postgres.py --sqlite-path instance/prajekt.db --force
+  python scripts/db/migrate_sqlite_to_postgres.py
+  python scripts/db/migrate_sqlite_to_postgres.py --sqlite-path instance/prajekt.db --force
 """
 
 from __future__ import annotations

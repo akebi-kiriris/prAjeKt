@@ -384,3 +384,32 @@ def test_create_plan_rejects_steps_exceeding_limit(monkeypatch):
     except copilot_service.CopilotOperationError as err:
         assert err.status_code == 409
         assert err.message == "模型提案步驟不可超過 6 步。"
+
+
+def test_create_plan_sanitizes_nested_protected_tool_payloads():
+    payload = copilot_service.create_copilot_agent_plan(
+        "幫我建立任務",
+        user_id=21,
+        context={"user_id": 21},
+        tool_payloads={
+            "create_task_for_user": {
+                "user_id": 999,
+                "data": {
+                    "name": "測試任務",
+                    "timeline_id": 88,
+                    "task_remark": "keep",
+                    "nested": {"actor_user_id": 123, "safe": "ok"},
+                    "items": [{"task_id": 77, "name": "x"}],
+                },
+            }
+        },
+    )
+
+    record = copilot_service.agent_plan_store.get_plan(payload["plan_id"], user_id=21)
+    assert record is not None
+    stored_payload = record.approved_tool_payloads["create_task_for_user"]
+    assert "user_id" not in stored_payload
+    assert "timeline_id" not in stored_payload["data"]
+    assert "actor_user_id" not in stored_payload["data"]["nested"]
+    assert stored_payload["data"]["nested"]["safe"] == "ok"
+    assert "task_id" not in stored_payload["data"]["items"][0]

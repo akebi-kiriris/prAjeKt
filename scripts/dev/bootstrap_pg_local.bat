@@ -16,7 +16,7 @@ if errorlevel 1 (
 
 echo [2/4] 套用 schema migration...
 cd /d "%ROOT_DIR%\backend"
-call venv\Scripts\python.exe safe_migrate.py
+call venv\Scripts\python.exe scripts\db\safe_migrate.py
 if errorlevel 1 (
   echo [ERROR] schema migration 失敗。
   pause
@@ -24,7 +24,7 @@ if errorlevel 1 (
 )
 
 echo [3/4] 遷移 SQLite 舊資料（目標若已有資料將自動略過）...
-call venv\Scripts\python.exe migrate_sqlite_to_postgres.py --sqlite-path instance/prajekt.db --pg-dsn postgresql://postgres:postgres@localhost:5433/prajekt --skip-if-not-empty
+call venv\Scripts\python.exe scripts\db\migrate_sqlite_to_postgres.py --sqlite-path instance/prajekt.db --pg-dsn postgresql://postgres:postgres@localhost:5433/prajekt --skip-if-not-empty
 if errorlevel 1 (
   echo [ERROR] SQLite -> PostgreSQL 資料遷移失敗。
   pause

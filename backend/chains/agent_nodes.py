@@ -5,7 +5,7 @@ from typing import Any
 
 from chains.agent_state import AgentState
 from services.tools.error_mapper import route_from_tool_error
-from services.tools.registry import execute_registered_tool
+from services.tools.registry import execute_registered_tool, get_tool_definition
 
 PROTECTED_CONTEXT_KEYS = {
     "user_id",
@@ -17,12 +17,22 @@ PROTECTED_CONTEXT_KEYS = {
 }
 
 
+def _sanitize_nested_payload(value: Any) -> Any:
+    if isinstance(value, dict):
+        sanitized: dict[str, Any] = {}
+        for key, item in value.items():
+            if key in PROTECTED_CONTEXT_KEYS:
+                continue
+            sanitized[key] = _sanitize_nested_payload(item)
+        return sanitized
+    if isinstance(value, list):
+        return [_sanitize_nested_payload(item) for item in value]
+    return value
+
+
 def _sanitize_user_payload(raw_payload: dict[str, Any]) -> dict[str, Any]:
-    """移除不可由外部覆蓋的敏感欄位。"""
-    sanitized = dict(raw_payload)
-    for key in PROTECTED_CONTEXT_KEYS:
-        sanitized.pop(key, None)
-    return sanitized
+    """移除不可由外部覆蓋的敏感欄位（含 nested payload）。"""
+    return _sanitize_nested_payload(dict(raw_payload))
 
 
 def _compact_defaults(defaults: dict[str, Any]) -> dict[str, Any]:
@@ -125,6 +135,7 @@ def _build_payload(tool_name: str, state: AgentState) -> dict[str, Any]:
         payload["payload"] = _merge_dict_defaults(payload.get("payload"), _build_conflict_payload_defaults(state))
     elif tool_name == "generate_timeline_tasks_with_ai":
         payload.setdefault("timeline_id", effective_timeline_id)
+        payload.setdefault("actor_user_id", context.get("user_id"))
         payload.setdefault(
             "project_name",
             state.get("created_timeline_name")
@@ -326,8 +337,8 @@ def _build_success_final_answer(state: AgentState) -> str:
 
     if created_count is not None:
         if timeline_name:
-            return f"已建立專案「{timeline_name}」，並批次建立 {created_count} 個任務。"
-        return f"已批次建立 {created_count} 個任務。"
+            return f"已建立專案「{timeline_name}」，並套用任務規劃，新增 {created_count} 個任務。"
+        return f"已套用任務規劃，新增 {created_count} 個任務。"
 
     if generated_tasks:
         task_names = [
@@ -460,6 +471,7 @@ def tool_execute_node(state: AgentState) -> AgentState:
         "executed_tools": executed_tools,
         "steps": steps,
         "last_error": error,
+        "last_tool_name": tool_name,
         "route": "continue",
         "loop_count": state.get("loop_count", 0) + 1,
     }
@@ -472,6 +484,17 @@ def route_by_error_node(state: AgentState) -> AgentState:
 
     retry_count = state.get("retry_count", 0)
     route = route_from_tool_error(error=last_error, retry_count=retry_count, retry_limit=2)
+    last_tool_name = str(state.get("last_tool_name") or "").strip()
+    tool = get_tool_definition(last_tool_name) if last_tool_name else None
+    if route == "retry" and tool is not None and tool.side_effect_level == "high":
+        label = tool.user_visible_label or last_tool_name
+        return {
+            "route": "ask_user",
+            "ask_user_message": (
+                f"{label} 可能已部分寫入，為避免重複執行，系統已停止自動重試；"
+                "請先確認目前結果，再決定是否再次執行。"
+            ),
+        }
     if route == "retry":
         return {"route": "continue", "retry_count": retry_count + 1}
     if route == "ask_user":

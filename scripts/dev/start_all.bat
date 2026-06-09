@@ -16,7 +16,7 @@ if errorlevel 1 (
 
 echo [2/5] 套用資料庫 migration...
 cd /d "%ROOT_DIR%\backend"
-call venv\Scripts\python.exe safe_migrate.py
+call venv\Scripts\python.exe scripts\db\safe_migrate.py
 if errorlevel 1 (
     echo [ERROR] 資料庫 migration 失敗。
     pause

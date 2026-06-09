@@ -103,7 +103,7 @@ python scripts/diagnostics/check_tables.py
 若要帶入本地 SQLite 歷史資料，建議流程：
 
 - 先做全新 schema 初始化。
-- 寫一次性遷移腳本（目前已提供：`backend/migrate_sqlite_to_postgres.py`）：
+- 寫一次性遷移腳本（目前已提供：`backend/scripts/db/migrate_sqlite_to_postgres.py`）：
   - 先搬主表：`users`, `timelines`, `tasks`, `groups`
   - 再搬關聯表：`timeline_users`, `task_users`, `subtasks`, `task_comments`, `task_files`, `messages`, `notifications`
 - 以主鍵或唯一鍵做去重，避免重跑重複插入。
@@ -117,7 +117,7 @@ python scripts/diagnostics/check_tables.py
 
 ```bash
 cd backend
-venv\Scripts\python.exe migrate_sqlite_to_postgres.py --sqlite-path instance/prajekt.db --pg-dsn postgresql://postgres:postgres@localhost:5433/prajekt
+venv\Scripts\python.exe scripts\db\migrate_sqlite_to_postgres.py --sqlite-path instance/prajekt.db --pg-dsn postgresql://postgres:postgres@localhost:5433/prajekt
 ```
 
 ### Step 5. 啟動與健康檢查
