@@ -262,6 +262,15 @@ def _validate_task_create_membership(timeline_id: int | None, assignee_user_ids:
         raise TaskOperationError('指派名單包含非專案成員', 400)
 
 
+def _validate_task_creator_membership(timeline_id: int | None, user_id: int) -> None:
+    if not timeline_id:
+        return
+
+    member = get_timeline_member(timeline_id, user_id)
+    if member is None:
+        raise TaskOperationError('你沒有權限在此專案建立任務', 403)
+
+
 def _create_task_with_members_and_notifications(
     user_id: int,
     data: dict[str, Any],
@@ -517,6 +526,10 @@ def create_task_for_user(user_id: int, data: dict[str, Any]) -> int:
         raise TaskOperationError('請提供標題和截止日期', 400)
 
     payload = _build_task_create_payload(data)
+    _validate_task_creator_membership(
+        timeline_id=payload['timeline_id'],
+        user_id=user_id,
+    )
     _validate_task_create_membership(
         timeline_id=payload['timeline_id'],
         assignee_user_ids=payload['assignee_user_ids'],

@@ -21,14 +21,12 @@
 
 - `app.py`: Flask 應用入口
 - `requirements.txt`: 後端開發 / 測試依賴
-- `safe_migrate.py`: 本地與部署 migration 入口
-- `migrate_sqlite_to_postgres.py`: 舊 SQLite 資料遷移工具
 - `.env.example`: 後端環境變數範本
 
 ## 額外工具腳本
 
 - `scripts/backfill/`: 舊資料補填腳本
-- `scripts/db/`: 舊 SQLite 初始化 / 補表腳本
+- `scripts/db/`: DB 初始化 / migration 輔助 / SQLite 資料遷移腳本
 - `scripts/diagnostics/`: 本地資料庫診斷腳本
 
 ## 這層應該負責什麼
@@ -48,4 +46,4 @@
 - API 行為、驗證與權限邊界：先看 `blueprints/` 與 `services/`
 - 資料怎麼查、怎麼存：先看 `repositories/` 與 `models/`
 - Agent / tool / LLM 流程：先看 `chains/`、`services/contracts/`、`services/tools/`
-- migration、部署初始化與本地 DB 切換：先看 `migrations/`、`safe_migrate.py`、`scripts/`
+- migration、部署初始化與本地 DB 切換：先看 `migrations/`、`scripts/db/`、`scripts/`

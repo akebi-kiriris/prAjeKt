@@ -80,7 +80,7 @@ venv\Scripts\pip install -r requirements.txt
 cd ..
 docker compose up -d postgres
 cd backend
-venv\Scripts\python.exe safe_migrate.py
+venv\Scripts\python.exe scripts\db\safe_migrate.py
 venv\Scripts\python.exe app.py
 ```
 

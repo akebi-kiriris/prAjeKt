@@ -57,6 +57,40 @@ def test_agent_graph_fills_partial_create_task_payload(monkeypatch):
     assert captured_payloads[0]["payload"]["data"]["task_remark"] == "幫我建立叫做 修登入 bug 的任務"
 
 
+def test_agent_graph_sanitizes_nested_protected_fields(monkeypatch):
+    captured_payloads: list[dict] = []
+
+    def fake_execute(tool_name: str, payload: dict):
+        captured_payloads.append({"tool_name": tool_name, "payload": payload})
+        return {"ok": True, "data": {"task_id": 88}}
+
+    monkeypatch.setattr("chains.agent_nodes.execute_registered_tool", fake_execute)
+
+    result = run_react_agent(
+        user_message="幫我建立任務",
+        context={"user_id": 1},
+        tool_payloads={
+            "create_task_for_user": {
+                "user_id": 999,
+                "data": {
+                    "name": "巢狀清理測試",
+                    "end_date": "2026-06-20T00:00:00",
+                    "nested": {"timeline_id": 77, "safe": "ok"},
+                    "items": [{"task_id": 55, "name": "item"}],
+                },
+            }
+        },
+        pending_tools=["create_task_for_user"],
+    )
+
+    assert result["final_answer"] == "任務已完成，已依序執行工具流程。"
+    payload = captured_payloads[0]["payload"]
+    assert payload["user_id"] == 1
+    assert "timeline_id" not in payload["data"]["nested"]
+    assert payload["data"]["nested"]["safe"] == "ok"
+    assert "task_id" not in payload["data"]["items"][0]
+
+
 def test_agent_graph_routes_to_ask_user_on_validation_error(monkeypatch):
     calls: list[str] = []
 
@@ -176,7 +210,7 @@ def test_agent_graph_can_create_project_and_batch_create_dependency_tasks(monkey
         tool_payloads={},
     )
 
-    assert result["final_answer"] == "已建立專案「新專案」，並批次建立 2 個任務。"
+    assert result["final_answer"] == "已建立專案「新專案」，並套用任務規劃，新增 2 個任務。"
     assert calls == [
         "create_timeline_for_user",
         "generate_timeline_tasks_with_ai",
@@ -459,7 +493,7 @@ def test_agent_graph_falls_back_to_generated_tasks_when_batch_payload_empty(monk
         max_loops=3,
     )
 
-    assert result["final_answer"] == "已批次建立 2 個任務。"
+    assert result["final_answer"] == "已套用任務規劃，新增 2 個任務。"
     assert captured_payloads[1]["payload"]["tasks"] == [
         {"name": "Task A", "isExisting": False},
         {"name": "Task B", "isExisting": False, "estimated_days": 5},
@@ -509,3 +543,63 @@ def test_finalize_node_handles_malformed_steps_without_crashing():
     )
 
     assert result["final_answer"] == "目前只完成查詢工具，尚未執行任何寫入操作；請補充可建立/更新所需資訊。"
+
+
+def test_agent_graph_stops_retry_for_high_side_effect_tool(monkeypatch):
+    calls: list[str] = []
+
+    def fake_execute(tool_name: str, payload: dict):
+        calls.append(tool_name)
+        return {
+            "ok": False,
+            "error": {
+                "error_code": "INTERNAL_ERROR",
+                "message": "資料庫逾時",
+                "retryable": True,
+                "hint": "稍後再試",
+            },
+        }
+
+    monkeypatch.setattr("chains.agent_nodes.execute_registered_tool", fake_execute)
+
+    result = run_react_agent(
+        user_message="幫我批次套用任務規劃",
+        context={"user_id": 1, "timeline_id": 9},
+        tool_payloads={"batch_create_tasks_for_timeline": {"tasks": []}},
+        pending_tools=["batch_create_tasks_for_timeline"],
+        max_loops=3,
+    )
+
+    assert calls == ["batch_create_tasks_for_timeline"]
+    assert "可能已部分寫入" in result["final_answer"]
+
+
+def test_agent_graph_retries_low_side_effect_tool(monkeypatch):
+    calls: list[str] = []
+
+    def fake_execute(tool_name: str, payload: dict):
+        calls.append(tool_name)
+        if len(calls) < 3:
+            return {
+                "ok": False,
+                "error": {
+                    "error_code": "INTERNAL_ERROR",
+                    "message": "暫時失敗",
+                    "retryable": True,
+                    "hint": "稍後再試",
+                },
+            }
+        return {"ok": True, "data": {"tasks": []}}
+
+    monkeypatch.setattr("chains.agent_nodes.execute_registered_tool", fake_execute)
+
+    result = run_react_agent(
+        user_message="查詢任務",
+        context={"user_id": 1},
+        tool_payloads={"list_tasks_for_user": {"user_id": 1}},
+        pending_tools=["list_tasks_for_user"],
+        max_loops=5,
+    )
+
+    assert calls == ["list_tasks_for_user", "list_tasks_for_user", "list_tasks_for_user"]
+    assert result["final_answer"] == "任務已完成，已依序執行工具流程。"

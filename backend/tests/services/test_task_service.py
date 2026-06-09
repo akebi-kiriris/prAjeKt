@@ -288,6 +288,24 @@ def test_create_task_for_user_accepts_timeline_owner_membership(app, user_factor
     assert owner_member.role == 0
 
 
+def test_create_task_for_user_rejects_non_member_timeline_creator(app, user_factory):
+    owner = user_factory("task-timeline-sec-owner@example.com", "task_timeline_sec_owner")
+    outsider = user_factory("task-timeline-sec-outsider@example.com", "task_timeline_sec_outsider")
+    timeline = _create_timeline(owner.id, "Secured Timeline")
+
+    with pytest.raises(TaskOperationError) as excinfo:
+        create_task_for_user(
+            outsider.id,
+            {
+                "name": "不該建立成功",
+                "timeline_id": timeline.id,
+                "end_date": "2026-04-20T18:00:00",
+            },
+        )
+
+    assert excinfo.value.status_code == 403
+
+
 def test_task_service_find_unknown_fields_sorted(user_factory):
     unknown = task_find_unknown_fields(
         {"name": "Task", "priority": 2, "x": 1, "a": 2},

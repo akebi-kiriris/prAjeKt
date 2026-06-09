@@ -5,9 +5,9 @@ import pytest
 from models import db
 from models.task import Task
 from models.timeline import Timeline
-from models.user import User
 from services.timeline_service import (
     TimelineAIGenerationError,
+    TimelineOperationError,
     batch_create_tasks_for_timeline,
     find_unknown_fields as timeline_find_unknown_fields,
     generate_timeline_tasks_with_ai,
@@ -134,6 +134,26 @@ def test_generate_timeline_tasks_with_ai_auto_fallback_dependency_chain(app, mon
     assert generated_tasks[2]["depends_on_task_refs"] == ["API 開發"]
 
 
+def test_generate_timeline_tasks_with_ai_rejects_non_member_actor(app, monkeypatch, user_factory):
+    owner = user_factory("timeline-ai-service-auth-owner@example.com", "timeline_ai_service_auth_owner")
+    outsider = user_factory("timeline-ai-service-auth-outsider@example.com", "timeline_ai_service_auth_outsider")
+    timeline = Timeline(user_id=owner.id, name="AI Auth Timeline")
+    db.session.add(timeline)
+    db.session.commit()
+
+    monkeypatch.setattr("services.timeline_service.get_default_llm", lambda provider: None)
+
+    with pytest.raises(TimelineOperationError) as excinfo:
+        generate_timeline_tasks_with_ai(
+            timeline_id=timeline.id,
+            project_name="AI Service Auth Project",
+            description="service layer prompt",
+            actor_user_id=outsider.id,
+        )
+
+    assert excinfo.value.status_code == 403
+
+
 def test_batch_create_tasks_for_timeline_partial_selection_dependency_fallback(app, user_factory):
     owner = user_factory("timeline-service-batch-partial@example.com", "timeline_service_batch_partial")
 
@@ -242,3 +262,29 @@ def test_batch_create_tasks_for_timeline_ignores_unresolvable_dependency_ids(app
     assert created.depends_on_task_ids == [keep_task.task_id]
     assert payload["ignored_dependency_refs"] == 0
     assert payload["ignored_dependency_ids"] == 1
+
+
+def test_batch_create_tasks_for_timeline_rejects_non_member_user(app, user_factory):
+    owner = user_factory("timeline-service-batch-auth-owner@example.com", "timeline_service_batch_auth_owner")
+    outsider = user_factory("timeline-service-batch-auth-outsider@example.com", "timeline_service_batch_auth_outsider")
+
+    timeline = Timeline(user_id=owner.id, name="Service batch auth timeline")
+    db.session.add(timeline)
+    db.session.commit()
+
+    with pytest.raises(TimelineOperationError) as excinfo:
+        batch_create_tasks_for_timeline(
+            timeline_id=timeline.id,
+            user_id=outsider.id,
+            task_payloads=[
+                {
+                    "isExisting": False,
+                    "name": "任務1",
+                    "priority": 2,
+                    "status": "pending",
+                    "estimated_days": 1,
+                }
+            ],
+        )
+
+    assert excinfo.value.status_code == 403

@@ -59,14 +59,23 @@ def _sanitize_tool_payloads(tool_payloads: dict[str, dict[str, Any]] | None) -> 
     if not isinstance(tool_payloads, dict):
         return {}
     protected = {"user_id", "actor_user_id", "created_by", "timeline_id", "task_id", "group_id"}
+
+    def _sanitize_value(value: Any) -> Any:
+        if isinstance(value, dict):
+            return {
+                key: _sanitize_value(item)
+                for key, item in value.items()
+                if key not in protected
+            }
+        if isinstance(value, list):
+            return [_sanitize_value(item) for item in value]
+        return value
+
     sanitized: dict[str, dict[str, Any]] = {}
     for tool_name, payload in tool_payloads.items():
         if not isinstance(payload, dict):
             continue
-        item = dict(payload)
-        for key in protected:
-            item.pop(key, None)
-        sanitized[tool_name] = item
+        sanitized[tool_name] = _sanitize_value(dict(payload))
     return sanitized
 
 

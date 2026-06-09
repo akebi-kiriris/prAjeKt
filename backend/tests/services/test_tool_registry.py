@@ -83,3 +83,20 @@ def test_execute_registered_tool_maps_handler_exception(monkeypatch):
     assert result["ok"] is False
     assert result["error"]["error_code"] == "INTERNAL_ERROR"
     assert result["error"]["message"] == "系統發生未預期錯誤，請稍後再試。"
+
+
+def test_execute_registered_tool_rejects_nested_extra_fields():
+    result = registry.execute_registered_tool(
+        "create_task_for_user",
+        {
+            "user_id": 1,
+            "data": {
+                "name": "Test task",
+                "end_date": "2026-06-01T00:00:00",
+                "unexpected_field": True,
+            },
+        },
+    )
+
+    assert result["ok"] is False
+    assert result["error"]["error_code"] == "VALIDATION_ERROR"

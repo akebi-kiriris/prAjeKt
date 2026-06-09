@@ -19,8 +19,8 @@ cd backend
 python -m venv venv
 venv\Scripts\pip install -r requirements.txt
 docker compose up -d postgres
-venv\Scripts\python.exe safe_migrate.py
-venv\Scripts\python.exe migrate_sqlite_to_postgres.py --sqlite-path instance/prajekt.db --pg-dsn postgresql://postgres:postgres@localhost:5433/prajekt --skip-if-not-empty
+venv\Scripts\python.exe scripts\db\safe_migrate.py
+venv\Scripts\python.exe scripts\db\migrate_sqlite_to_postgres.py --sqlite-path instance/prajekt.db --pg-dsn postgresql://postgres:postgres@localhost:5433/prajekt --skip-if-not-empty
 venv\Scripts\python.exe app.py
 
 cd ..\frontend
@@ -36,8 +36,8 @@ python -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 docker compose up -d postgres
-python safe_migrate.py
-python migrate_sqlite_to_postgres.py --sqlite-path instance/prajekt.db --pg-dsn postgresql://postgres:postgres@localhost:5433/prajekt --skip-if-not-empty
+python scripts/db/safe_migrate.py
+python scripts/db/migrate_sqlite_to_postgres.py --sqlite-path instance/prajekt.db --pg-dsn postgresql://postgres:postgres@localhost:5433/prajekt --skip-if-not-empty
 python app.py
 
 cd ../frontend

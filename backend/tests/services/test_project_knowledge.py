@@ -1,12 +1,15 @@
 from io import BytesIO
+from io import BytesIO
 from types import SimpleNamespace
 
 import pytest
 from werkzeug.datastructures import FileStorage
 
-from models import db
-from models.user import User
-from services.knowledge_service import upload_and_index_knowledge_document, list_knowledge_documents
+from services.knowledge_service import (
+    KnowledgeOperationError,
+    list_knowledge_documents,
+    upload_and_index_knowledge_document,
+)
 from services.timeline_service import create_timeline_for_user, add_timeline_member_for_owner
 from services.rag_planning_service import suggest_plan_with_rag
 
@@ -93,3 +96,35 @@ def test_suggest_plan_with_project_knowledge_passes_project_id(app, monkeypatch,
     payload = suggest_plan_with_rag(member.id, {"request": "請做規劃", "use_project_knowledge": True, "project_id": timeline_id})
     assert payload["message"].startswith("AI 規劃建議完成")
     assert captured["project_id"] == timeline_id
+
+
+def test_project_knowledge_service_rejects_non_member_access(app, monkeypatch, user_factory):
+    monkeypatch.setattr("services.knowledge_service.GeminiEmbeddingService", lambda: _FakeEmbedder())
+    monkeypatch.setattr("services.knowledge_service.TextSplitterService", lambda: _FakeSplitter())
+
+    owner = user_factory("proj-guard-owner@example.com", "proj_guard_owner")
+    outsider = user_factory("proj-guard-outsider@example.com", "proj_guard_outsider")
+
+    timeline_id = create_timeline_for_user(owner.id, {"name": "Guarded Project"})
+    file_obj = FileStorage(
+        stream=BytesIO("專案共用文件內容".encode("utf-8")),
+        filename="project_notes.md",
+        content_type="text/markdown",
+    )
+    upload_and_index_knowledge_document(owner.id, file_obj, project_id=timeline_id)
+
+    with pytest.raises(KnowledgeOperationError) as list_exc:
+        list_knowledge_documents(outsider.id, project_id=timeline_id)
+    assert list_exc.value.status_code == 403
+
+    with pytest.raises(KnowledgeOperationError) as upload_exc:
+        upload_and_index_knowledge_document(
+            outsider.id,
+            FileStorage(
+                stream=BytesIO("不該成功".encode("utf-8")),
+                filename="forbidden.md",
+                content_type="text/markdown",
+            ),
+            project_id=timeline_id,
+        )
+    assert upload_exc.value.status_code == 403

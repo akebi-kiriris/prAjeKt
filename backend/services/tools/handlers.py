@@ -83,7 +83,10 @@ def handle_create_task_for_user(data: CreateTaskToolInput) -> dict[str, Any]:
         無；例外會在函式內轉換為錯誤 envelope 回傳。
     """
     try:
-        task_id = create_task_for_user(user_id=data.user_id, data=data.data)
+        task_id = create_task_for_user(
+            user_id=data.user_id,
+            data=data.data.model_dump(exclude_none=True),
+        )
         output = TaskCreateToolOutput(task_id=task_id)
         return make_success(output.model_dump())
     except Exception as exc:
@@ -110,7 +113,11 @@ def handle_update_task_for_member(data: UpdateTaskToolInput) -> dict[str, Any]:
         無；例外會在函式內轉換為錯誤 envelope 回傳。
     """
     try:
-        update_task_for_member(task_id=data.task_id, operator_user_id=data.actor_user_id, data=data.data)
+        update_task_for_member(
+            task_id=data.task_id,
+            operator_user_id=data.actor_user_id,
+            data=data.data.model_dump(exclude_none=True),
+        )
         output = CommonToolOutput(updated=True)
         return make_success(output.model_dump())
     except Exception as exc:
@@ -168,6 +175,7 @@ def handle_generate_timeline_tasks_with_ai(data: TimelineGenerateTasksToolInput)
             timeline_id=data.timeline_id,
             project_name=data.project_name,
             description=data.description,
+            actor_user_id=data.actor_user_id,
         )
         output = TimelineGenerateTasksToolOutput.model_validate(result)
         return make_success(output.model_dump())
@@ -195,7 +203,10 @@ def handle_create_timeline_for_user(data: CreateTimelineToolInput) -> dict[str, 
         無；例外會在函式內轉換為錯誤 envelope 回傳。
     """
     try:
-        timeline_id = create_timeline_for_user(user_id=data.user_id, data=data.data)
+        timeline_id = create_timeline_for_user(
+            user_id=data.user_id,
+            data=data.data.model_dump(exclude_none=True),
+        )
         output = CreateTimelineToolOutput(timeline_id=timeline_id)
         return make_success(output.model_dump())
     except Exception as exc:
@@ -225,7 +236,7 @@ def handle_batch_create_tasks_for_timeline(data: TimelineBatchCreateTasksToolInp
         result = batch_create_tasks_for_timeline(
             timeline_id=data.timeline_id,
             user_id=data.user_id,
-            task_payloads=data.tasks,
+            task_payloads=[item.model_dump(exclude_none=True) for item in data.tasks],
         )
         output = TimelineBatchCreateTasksToolOutput(result=result)
         return make_success(output.model_dump())
@@ -255,7 +266,7 @@ def handle_check_timeline_task_conflicts(data: TimelineConflictCheckToolInput) -
     try:
         result = check_timeline_task_conflicts(
             timeline_id=data.timeline_id,
-            payload=data.payload,
+            payload=data.payload.model_dump(exclude_none=True),
             actor_user_id=data.actor_user_id,
         )
         output = TimelineConflictCheckToolOutput(result=result)
