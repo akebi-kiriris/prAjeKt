@@ -1,70 +1,75 @@
-refactor: 拆分 timeline detail dialog 並同步收斂前端入口與文件
+refactor: 抽離 tool planner prompt 並補齊前後端分層 README
 
-這次提交主要收斂第三波前端結構清理，重點是把 `TimelineDetailDialog.vue` 內責任較獨立的區塊持續拆出，讓主元件回到 orchestration 角色，而不是繼續累積為單一巨型元件；同時同步前端入口描述與重構文件，作為銜接 Phase 9.6 前的整理提交。
-
----
-
-一、TimelineDetailDialog 再拆分
-
-- 新增以下子元件：
-  - `frontend/src/components/timelines/TimelineAddTaskModal.vue`
-  - `frontend/src/components/timelines/TimelineSharePanel.vue`
-  - `frontend/src/components/timelines/TimelineTaskMemberPanel.vue`
-  - `frontend/src/components/timelines/TimelineWeeklyReportPanel.vue`
-  - `frontend/src/components/timelines/TimelineRiskAnalysisPanel.vue`
-
-- `TimelineDetailDialog.vue` 保留：
-  - service 呼叫
-  - 權限判斷
-  - toast / confirm
-  - refresh 與整體流程編排
-
-- 子元件只承接：
-  - UI 呈現
-  - 表單輸入
-  - emit 事件回拋
-
-- 量化結果：
-  - `TimelineDetailDialog.vue`
-  - `2152 -> 1637` 行
-  - 累計減少 `515` 行
+這次提交的重點不是新增功能，而是把 Phase 10 前置整理真正落到 repo 裡：一方面把 `tool_plan_service.py` 內嵌的 planner prompt 抽回 `backend/prompts/`，讓 prompt 集中管理；另一方面補齊前後端多個關鍵目錄的 README，讓 prompt、contracts、tools、types、utils、services、tests 的責任邊界更清楚。
 
 ---
 
-二、前端入口收斂
+一、tool planner prompt 抽離
 
-- 正式完成前端入口 TS 化與引用更新：
-  - `frontend/src/main.ts`
-  - `frontend/src/router/index.ts`
-  - `frontend/index.html` 改為引用 `/src/main.ts`
+- 新增：
+  - `backend/prompts/tool_planner.py`
+
+- 調整：
+  - `backend/services/tool_plan_service.py`
+  - `backend/prompts/__init__.py`
+
+- 本輪收斂方式：
+  - 將固定 planner 規則抽成 `TOOL_PLANNER_SYSTEM_PROMPT`
+  - 以 `build_tool_planner_prompt(...)` 組裝 `user_message`、`context`、`tool_lines`、`protected_payload_keys`
+  - 讓 `tool_plan_service.py` 回到 orchestration / proposal parsing 角色，不再自己維護大段 prompt 字串
+
+---
+
+二、README / 分層規範補齊
+
+- backend 補強：
+  - `backend/prompts/README.md`
+  - `backend/services/contracts/README.md`
+  - `backend/services/tools/README.md`
+
+- frontend / repo 補齊：
+  - `frontend/src/README.md`
+  - `frontend/src/components/README.md`
+  - `frontend/src/components/timelines/README.md`
+  - `frontend/src/components/__tests__/README.md`
+  - `frontend/src/composables/README.md`
+  - `frontend/src/router/README.md`
+  - `frontend/src/services/README.md`
+  - `frontend/src/stores/README.md`
+  - `frontend/src/styles/README.md`
+  - `frontend/src/types/README.md`
+  - `frontend/src/utils/README.md`
+  - `frontend/src/views/README.md`
+  - `scripts/README.md`
+
+- 本輪補強重點：
+  - prompt 的 `PromptTemplate` / builder helper 分界
+  - agent `contracts -> tools -> services` 的責任切法
+  - frontend `types -> utils -> services -> components/__tests__` 的契約與測試分界
 
 ---
 
 三、文件同步
 
-- 更新 `docs/重構計畫.md`
-  - 補上第三波 Timeline 結構清理結果
-  - 更新 `main.ts` / `router/index.ts` 目標結構描述
-  - 同步目前 Timeline 區的剩餘技術債狀態
+- 更新：
+  - `docs/重構計畫.md`
+  - `docs/進度追蹤.md`
 
-- 更新 `docs/進度追蹤.md`
-  - 補上 `2026/06/10` 第三波 Timeline 結構清理里程碑
-  - 同步目前 Phase 9 / Timeline 區的最新狀態
+- 同步內容：
+  - 補上 `2026/06/11` 這波 Phase 10 前置收斂紀錄
+  - 將進度追蹤的當前 Phase 切到 Phase 10 視角
+  - 把「prompt 抽離 + README 規範補齊」記錄為 9.6 前的理解與邊界整理基線
 
 ---
 
 四、驗證
 
-- `npm run build`
+- `python -m py_compile backend\prompts\tool_planner.py backend\prompts\__init__.py backend\services\tool_plan_service.py`
   - PASS
-
-- `npm run test -- TimelineDetailDialog.phase7.test.ts TimelineSubcomponents.test.ts TimelineViewModes.test.ts`
-  - `27 passed`
 
 ---
 
 五、補充
 
-- 本次重點是前端責任拆分與結構收斂，不新增產品功能
-- `TimelineViewModes.vue` 與 `TimelineDetailDialog.vue` 主體仍偏大，但已先完成第三波的第一段與第二段收斂
-- 這次提交可視為進入 Phase 9.6 前的前端結構整理基線，下一步較適合轉向可觀測性、benchmark 與 Agent/tooling 擴充
+- 本次重點是結構理解、責任邊界與 prompt 管理收斂，不新增產品功能
+- 這次提交可視為 Phase 10 的第一輪 repo 釐清，幫後續 9.6、11~13 的實作先把規範面補齊

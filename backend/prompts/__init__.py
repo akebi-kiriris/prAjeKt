@@ -20,6 +20,10 @@ from prompts.timeline_insights import (
     CONFLICT_SUGGESTION_PROMPT,
 )
 from prompts.rag_planning import RAG_PLAN_SUGGESTION_PROMPT
+from prompts.tool_planner import (
+    TOOL_PLANNER_SYSTEM_PROMPT,
+    build_tool_planner_prompt,
+)
 
 __all__ = [
     "TOOL_SELECTOR_PROMPT",
@@ -31,4 +35,6 @@ __all__ = [
     "WEEKLY_REPORT_SUMMARY_PROMPT",
     "CONFLICT_SUGGESTION_PROMPT",
     "RAG_PLAN_SUGGESTION_PROMPT",
+    "TOOL_PLANNER_SYSTEM_PROMPT",
+    "build_tool_planner_prompt",
 ]
