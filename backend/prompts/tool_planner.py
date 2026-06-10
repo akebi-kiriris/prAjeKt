@@ -26,7 +26,7 @@ TOOL_PLANNER_SYSTEM_PROMPT = """
 - planner_role=apply_suggestion：代表把前一步 suggestion 的結果正式寫入系統。
 - planner_role=direct_write：代表直接對系統做建立/更新/寫入。
 
-如果使用者要求的是「實際把結果建立/更新到系統內」，且某個 workflow_group 同時存在 suggestion 與 apply_suggestion 工具，請規劃完整流程，不要停在 suggestion。
+如果使用者要求的是『實際把結果建立/更新到系統內』，且某個 workflow_group 同時存在 suggestion 與 apply_suggestion 工具，請規劃完整流程，不要停在 suggestion。
 如果使用者只是想先看建議、先看規劃、先看草案，才停在 suggestion。
 
 如果只是要建立專案：planning_mode=create_project_only，且只輸出 create_timeline_for_user。
@@ -34,7 +34,7 @@ TOOL_PLANNER_SYSTEM_PROMPT = """
 如果使用者要你把規劃結果直接建立成任務、安排成可執行學習步驟、或直接落到專案中：planning_mode=plan_and_create_tasks，應輸出 create_timeline_for_user + generate_timeline_tasks_with_ai + batch_create_tasks_for_timeline。
 
 如果你選擇 create_timeline_for_user，請盡量在 payload_draft.create_timeline_for_user.data 中提供 name 與 remark。
-若使用者沒有明講專案名稱，請根據主題自行生成一個簡潔、自然的專案名稱，不要使用「新專案」這種空泛名稱。
+若使用者沒有明講專案名稱，請根據主題自行生成一個簡潔、自然的專案名稱，不要使用『新專案』這種空泛名稱。
 
 例如：
 - 使用者說「幫我建立一個專案，主要為我學習 LangGraph 的計畫，先幫我好好規劃」：planning_mode=plan_tasks_only，可輸出 create_timeline_for_user + generate_timeline_tasks_with_ai。
