@@ -1,8 +1,10 @@
 from services import copilot_service
+from services.agent_trace_service import agent_trace_service
 from services.tool_plan_service import ToolPlanError
 
 
 def test_create_copilot_agent_plan_returns_preview():
+    agent_trace_service.clear()
     payload = copilot_service.create_copilot_agent_plan(
         "幫我建立專案並產生任務",
         user_id=1,
@@ -12,9 +14,11 @@ def test_create_copilot_agent_plan_returns_preview():
     assert payload["ok"] is True
     assert payload["status"] == "planned"
     assert payload["plan_id"].startswith("plan_")
+    assert payload["request_id"].startswith("req_")
     assert isinstance(payload["pending_tools"], list)
     assert len(payload["steps_preview"]) >= 1
     assert payload["proposal_source"] in {"llm_proposal", "rule_fallback"}
+    assert payload["trace"]["status"] == "planned"
 
 
 def test_create_plan_uses_llm_proposal_when_available(monkeypatch):
@@ -187,8 +191,12 @@ def test_execute_copilot_agent_plan_uses_approved_tools(monkeypatch):
         tool_payloads: dict | None = None,
         max_loops: int = 6,
         approved_pending_tools: list[str] | None = None,
+        request_id: str | None = None,
+        plan_id: str | None = None,
     ):
         captured["approved_pending_tools"] = approved_pending_tools
+        captured["request_id"] = request_id
+        captured["plan_id"] = plan_id
         return {
             "message": "Agent 流程完成",
             "final_answer": "任務已完成",
@@ -206,9 +214,12 @@ def test_execute_copilot_agent_plan_uses_approved_tools(monkeypatch):
 
     assert result["ok"] is True
     assert result["status"] == "succeeded"
+    assert result["request_id"] == captured["request_id"]
+    assert result["plan_id"] == captured["plan_id"]
     assert result["approved_pending_tools"] == captured["approved_pending_tools"]
     assert result["executed_tools"] == ["create_timeline_for_user"]
     assert isinstance(captured["approved_pending_tools"], list)
+    assert result["trace"]["status"] == "succeeded"
 
 
 def test_reject_plan_blocks_execution(monkeypatch):
@@ -261,6 +272,8 @@ def test_execute_plan_cannot_run_twice(monkeypatch):
         tool_payloads: dict | None = None,
         max_loops: int = 6,
         approved_pending_tools: list[str] | None = None,
+        request_id: str | None = None,
+        plan_id: str | None = None,
     ):
         return {
             "message": "Agent 流程完成",
@@ -307,6 +320,8 @@ def test_plan_confirm_flow_keeps_update_conflict_tool_order(monkeypatch):
         tool_payloads: dict | None = None,
         max_loops: int = 6,
         approved_pending_tools: list[str] | None = None,
+        request_id: str | None = None,
+        plan_id: str | None = None,
     ):
         captured["approved_pending_tools"] = approved_pending_tools
         return {

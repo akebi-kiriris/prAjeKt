@@ -1,5 +1,6 @@
 from chains.agent_graph import run_react_agent
 from chains.agent_nodes import finalize_node
+from services.agent_trace_service import agent_trace_service
 
 
 def test_agent_graph_runs_two_step_flow(monkeypatch):
@@ -603,3 +604,31 @@ def test_agent_graph_retries_low_side_effect_tool(monkeypatch):
 
     assert calls == ["list_tasks_for_user", "list_tasks_for_user", "list_tasks_for_user"]
     assert result["final_answer"] == "任務已完成，已依序執行工具流程。"
+
+
+def test_agent_graph_records_trace_events_for_tool_execution(monkeypatch):
+    agent_trace_service.clear()
+
+    def fake_execute(tool_name: str, payload: dict):
+        return {"ok": True, "data": {"tool_name": tool_name, "payload": payload}}
+
+    monkeypatch.setattr("chains.agent_nodes.execute_registered_tool", fake_execute)
+
+    result = run_react_agent(
+        user_message="查詢任務",
+        context={"user_id": 1},
+        tool_payloads={"list_tasks_for_user": {"user_id": 1}},
+        pending_tools=["list_tasks_for_user"],
+        request_id="req_trace_test",
+        plan_id="plan_trace_test",
+    )
+
+    trace = agent_trace_service.get_trace("req_trace_test")
+
+    assert result["request_id"] == "req_trace_test"
+    assert result["plan_id"] == "plan_trace_test"
+    assert trace is not None
+    tool_events = [event for event in trace["events"] if event["event_type"] == "tool_execution"]
+    assert len(tool_events) == 1
+    assert tool_events[0]["step_name"] == "list_tasks_for_user"
+    assert tool_events[0]["status"] == "succeeded"

@@ -1,49 +1,50 @@
-# backend
+# Backend 目錄說明
 
-這裡是 Learnlink / PrAjeKt 的 Flask 後端主體，包含 HTTP API、業務邏輯、資料存取、AI / agent 流程與測試。
+`backend/` 是 Learnlink 的 Flask 後端主體，負責 API、業務流程、資料存取、AI/agent 流程、即時通訊與後端測試。
 
 ## 目錄分工
 
-- `blueprints/`: HTTP route 與 request / response 邊界
-- `services/`: 業務流程、交易邊界、跨 repository 協調
-- `repositories/`: 資料查詢、寫入與 session helper
-- `models/`: SQLAlchemy ORM model 與資料結構
-- `chains/`: LangChain / LangGraph / agent 流程
-- `prompts/`: Prompt template 與 AI 文字模板
-- `realtime/`: Socket.IO 即時事件
-- `migrations/`: Alembic / Flask-Migrate migration
-- `scripts/`: 一次性 backfill、DB 初始化與診斷腳本
-- `tests/`: pytest 測試與共用測試設定
-- `uploads/`: 本地執行時的附件與知識檔案
-- `instance/`: 本地 SQLite 與 instance data
+1. `blueprints/`
+   - HTTP route、request/response 邊界與 API 層驗證。
+2. `services/`
+   - 業務流程、交易協調與跨 repository orchestration。
+3. `repositories/`
+   - 資料查詢、寫入與 session 存取封裝。
+4. `models/`
+   - SQLAlchemy ORM model 與資料結構定義。
+5. `chains/`
+   - LangGraph、LLM chain 與 agent 流程控制。
+6. `prompts/`
+   - AI prompt template 與 prompt 組裝 helper。
+7. `realtime/`
+   - Socket.IO 即時事件與連線邏輯。
+8. `migrations/`
+   - Alembic / Flask-Migrate schema 版本管理。
+9. `scripts/`
+   - 維護型腳本、初始化工具與診斷腳本。
+10. `tests/`
+   - pytest 測試與共用測試設定。
 
-## 根層常見檔案
+## 根層文件與入口
 
-- `app.py`: Flask 應用入口
-- `requirements.txt`: 後端開發 / 測試依賴
-- `.env.example`: 後端環境變數範本
+`backend/` 根層保留後端啟動與環境相關檔案，例如應用入口、依賴清單與環境範本。與單一子模組明確相關的文件或腳本，應優先放入對應子目錄。
 
-## 額外工具腳本
+## 責任邊界
 
-- `scripts/backfill/`: 舊資料補填腳本
-- `scripts/db/`: DB 初始化 / migration 輔助 / SQLite 資料遷移腳本
-- `scripts/diagnostics/`: 本地資料庫診斷腳本
+`backend/` 應負責以下事項：
 
-## 這層應該負責什麼
+1. 對外提供 HTTP API 與即時通訊能力
+2. 承接任務、專案、知識庫與 Copilot/agent 等後端主流程
+3. 維持 API、service、repository、AI 流程之間的責任分層
 
-- 對外提供 API 與即時通訊能力
-- 承接專案、任務、知識庫、Copilot / agent 等後端主流程
-- 維持服務層、資料層與 AI 流程層的責任邊界
+以下內容不應長期堆放在本層：
 
-## 不應該放什麼
+1. 前端展示邏輯
+2. 純文件或分析筆記
+3. 與專案主流程無關的一次性程式碼
 
-- 前端展示邏輯
-- 臨時筆記或分析文件
-- 與專案無關的單次腳本長期留在根層
+## 維護原則
 
-## 修改判斷
-
-- API 行為、驗證與權限邊界：先看 `blueprints/` 與 `services/`
-- 資料怎麼查、怎麼存：先看 `repositories/` 與 `models/`
-- Agent / tool / LLM 流程：先看 `chains/`、`services/contracts/`、`services/tools/`
-- migration、部署初始化與本地 DB 切換：先看 `migrations/`、`scripts/db/`、`scripts/`
+1. 涉及目錄責任變動時，應同步更新對應子目錄 README。
+2. 後端結構調整應優先維持 API、service、repository 與 chain 的清楚分界。
+3. 若某類維護工具已穩定成日常流程，應重新評估其放置位置與命名方式。

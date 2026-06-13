@@ -1,158 +1,42 @@
-# backend/services/tools
+# Backend Service Tools 目錄說明
 
-這層是 agent tool 的執行入口，負責把既有後端能力包裝成 agent 可安全呼叫的工具，但不應直接承擔核心商業邏輯。
+`backend/services/tools/` 是 agent tool 的執行入口，負責把既有後端能力包裝成可安全呼叫的工具介面。這層的重點是工具註冊、schema 對接、handler 執行與錯誤語意收斂，而不是重新承擔核心商業邏輯。
 
-可以把它理解成：
+## 內容範圍
 
-- `contracts/` 定義輸入輸出長什麼樣
-- `tools/` 負責把這些契約接起來並執行
-- `services/` 才是實際做事的地方
+本目錄主要包含以下角色：
 
-## 主要檔案
+1. `registry`
+   - 工具定義、查找、schema 掛接與統一執行入口。
+2. `handlers`
+   - 接收已驗證 input，呼叫對應 service，並回傳標準 envelope。
+3. `error_mapper`
+   - 將 validation、service 或 domain 例外收斂成穩定錯誤碼與訊息。
 
-- `registry.py`
-  - 工具定義、查找、輸入驗證與統一執行入口
-- `handlers.py`
-  - 接收已驗證 input，呼叫 service，回傳標準 envelope
-- `error_mapper.py`
-  - 將 validation / service / domain 例外收斂成標準 tool error
+## 責任邊界
 
-## 執行關係
+本目錄應負責：
 
-`registry -> handler -> service`
+1. agent 可呼叫能力的封裝
+2. input/output 契約與 handler 的銜接
+3. 工具 metadata 與執行入口統一
+4. 錯誤語意與回傳格式收斂
 
-## 最重要的責任分界
+以下內容不應直接放在本目錄：
 
-### registry 負責
+1. 大量商業邏輯
+2. 資料庫查詢細節
+3. HTTP request parsing
+4. 前端專用的展示格式轉換
 
-- 工具是否有註冊
-- payload 該用哪個 input schema 驗證
-- 執行時要呼叫哪個 handler
-- 最外層執行入口是否一致
+## 相鄰目錄邊界
 
-### handler 負責
+1. `contracts/` 定義工具可接受與可回傳的資料外型。
+2. `services/` 負責真正的 domain 流程與資料操作。
+3. `chains/` 負責 agent 節點順序、流程分支與 graph 控制。
 
-- 接收已驗證的 input model
-- 呼叫對應 service
-- 把 service 回傳包成標準 success envelope
-- 捕捉並交給 error mapper 處理錯誤
+## 維護原則
 
-### error mapper 負責
-
-- 把例外分類成穩定錯誤碼
-- 產出 agent 與前端可判讀的錯誤訊息
-
-### service 負責
-
-- 真正的商業邏輯
-- 資料查詢 / 寫入
-- domain 狀態轉換
-
-一句話版本：
-
-- `tools/` 是 agent 與既有後端能力之間的安全轉接層
-
-## 這層應該負責什麼
-
-- agent 可呼叫能力的封裝
-- schema 驗證與 handler 對接
-- 工具 metadata 與執行入口統一
-- 錯誤語意收斂
-
-## 這層不應該放什麼
-
-- 大量商業邏輯
-- 重新實作一份 service 流程
-- HTTP request parsing
-- 前端專用格式轉換
-- 資料庫查詢細節
-
-## registry / handler / service 怎麼切
-
-### 該留在 registry 的內容
-
-- 工具名稱
-- 描述與 metadata
-- input / output schema 掛接
-- 執行入口分派
-
-### 該留在 handler 的內容
-
-- 把 schema model 轉進 service 呼叫
-- 少量 orchestration
-- 包 success / failure envelope
-
-### 不該塞進 handler 的內容
-
-- 長篇商業規則
-- 與 agent 無關的 domain 狀態轉移
-- 重複實作 service 已經有的邏輯
-
-如果 handler 越寫越像「另一份 service」，通常就是開始失焦了。
-
-## 新增一個 tool 時的最小檢查表
-
-通常至少會碰到：
-
-- `contracts/tool_inputs.py`
-- `contracts/tool_outputs.py`
-- `tools/handlers.py`
-- `tools/registry.py`
-- 必要時 `error_mapper.py`
-
-建議流程：
-
-1. 先定義 input / output 契約
-2. 再補 registry metadata
-3. 再寫 handler 接既有 service
-4. 最後確認錯誤碼是否有對齊
-
-## 常見錯誤訊號
-
-### 代表 registry 可能有問題
-
-- 工具名稱找不到
-- schema 沒掛上
-- 執行入口分派錯誤
-
-### 代表 handler 可能有問題
-
-- schema 明明過了，但 service 收到錯的欄位
-- success envelope shape 不穩定
-- 同一種錯誤被包成不同格式
-
-### 代表 error mapper 可能有問題
-
-- 同一種 domain error 有時是 `VALIDATION_ERROR`，有時是 `INTERNAL_ERROR`
-- 前端或 agent 無法根據錯誤碼做穩定處理
-
-## 變更時要一起檢查什麼
-
-### 改 registry metadata 時
-
-同步檢查：
-
-- planner / selector 是否依賴這些 metadata
-- tool name 是否被 prompt 或測試寫死
-
-### 改 handler 回傳格式時
-
-同步檢查：
-
-- `contracts/tool_outputs.py`
-- `contracts/tool_envelopes.py`
-- agent node / 前端 consumer
-
-### 改錯誤映射時
-
-同步檢查：
-
-- `error_mapper.py`
-- agent fallback 邏輯
-- 前端錯誤顯示
-
-## 修改判斷速查
-
-- 新增 agent 可呼叫能力：先看 `registry.py` + `handlers.py` + `contracts/`
-- 只是修正工具錯誤如何映射成 `VALIDATION_ERROR` / `CONFLICT` 等：改 `error_mapper.py`
-- 如果你正在寫很多 domain 規則，先停一下，通常應該回到 `backend/services/`
+1. handler 應保持輕量，不重複實作 service 已有邏輯。
+2. 工具回傳格式若有變動，應同步檢查契約、consumer 與測試。
+3. 若問題屬於商業規則而非工具入口，應優先回到 `backend/services/`。

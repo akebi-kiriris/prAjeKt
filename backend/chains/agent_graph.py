@@ -10,6 +10,7 @@ from chains.agent_nodes import (
     tool_select_node,
 )
 from chains.agent_state import AgentState
+from services.agent_trace_service import agent_trace_service
 
 
 def _after_select(state: AgentState) -> str:
@@ -51,12 +52,26 @@ def run_react_agent(
     tool_payloads: dict[str, dict[str, Any]] | None = None,
     max_loops: int = 6,
     pending_tools: list[str] | None = None,
+    request_id: str | None = None,
+    plan_id: str | None = None,
 ) -> dict[str, Any]:
     app = create_agent_graph()
+    effective_request_id = request_id or ""
+    effective_plan_id = plan_id or ""
+    if effective_request_id:
+        agent_trace_service.start_trace(
+            effective_request_id,
+            route="agent_graph",
+            user_id=context.get("user_id") if isinstance(context, dict) else None,
+            plan_id=effective_plan_id or None,
+            metadata={"max_loops": max_loops},
+        )
     init_state: AgentState = {
         "user_message": user_message,
         "context": context or {},
         "tool_payloads": tool_payloads or {},
+        "request_id": effective_request_id,
+        "plan_id": effective_plan_id,
         "pending_tools": pending_tools or [],
         "executed_tools": [],
         "steps": [],
@@ -67,6 +82,8 @@ def run_react_agent(
     result = app.invoke(init_state)
     return {
         "message": "Agent 流程完成",
+        "request_id": result.get("request_id", effective_request_id),
+        "plan_id": result.get("plan_id", effective_plan_id),
         "final_answer": result.get("final_answer", ""),
         "steps": result.get("steps", []),
         "executed_tools": result.get("executed_tools", []),

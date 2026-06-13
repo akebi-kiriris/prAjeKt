@@ -742,7 +742,7 @@ const addSubtask = async () => {
   if (!newSubtaskName.value.trim() || !selectedKanbanTask.value) return;
   try {
     const res = await taskService.createSubtask(selectedKanbanTask.value.task_id, { name: newSubtaskName.value.trim() });
-    selectedKanbanTask.value.subtasks.push(res.data);
+    selectedKanbanTask.value.subtasks.push(res.data.subtask);
     newSubtaskName.value = '';
     emit('refresh-all');
   } catch { toast.error('新增子任務失敗'); }

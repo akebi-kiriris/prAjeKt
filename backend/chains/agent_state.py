@@ -14,6 +14,8 @@ class AgentState(TypedDict, total=False):
     user_message: str
     context: dict[str, Any]
     tool_payloads: dict[str, dict[str, Any]]
+    request_id: str
+    plan_id: str
     pending_tools: list[str]
     executed_tools: list[str]
     steps: list[AgentStep]

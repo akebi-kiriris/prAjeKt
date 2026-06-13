@@ -69,7 +69,7 @@ describe('group store', () => {
   });
 
   it('create/join/leave group should call service then refetch', async () => {
-    mockedGroupService.create.mockResolvedValueOnce({ data: { group_id: 5, name: 'New Group' } });
+    mockedGroupService.create.mockResolvedValueOnce({ data: { message: '任務小組已創建', group_id: 5, invite_code: 'INV123' } });
     mockedGroupService.join.mockResolvedValueOnce({});
     mockedGroupService.leave.mockResolvedValueOnce({});
     mockedGroupService.getAll
@@ -82,7 +82,7 @@ describe('group store', () => {
     await store.joinGroup('INV123');
     await store.leaveGroup(5);
 
-    expect(created).toEqual({ group_id: 5, name: 'New Group' });
+    expect(created).toEqual({ message: '任務小組已創建', group_id: 5, invite_code: 'INV123' });
     expect(mockedGroupService.create).toHaveBeenCalledWith('New Group');
     expect(mockedGroupService.join).toHaveBeenCalledWith('INV123');
     expect(mockedGroupService.leave).toHaveBeenCalledWith(5);

@@ -1,30 +1,38 @@
-# frontend/src
+# Frontend Src 目錄說明
 
-這裡是 Vue 前端主體，負責畫面、互動流程、前端狀態、API 對接與型別整理。
+`frontend/src/` 是 Vue 前端主體，負責畫面呈現、互動流程、前端狀態、API 對接與型別整理。
 
 ## 目錄分工
 
-- `views/`: 頁面層，通常對應 route
-- `components/`: 可重用 UI 區塊與 domain component
-- `services/`: 前端 API / socket 呼叫封裝
-- `stores/`: Pinia 狀態管理
-- `composables/`: 可重用互動邏輯
-- `types/`: TypeScript 型別與 domain interface
-- `utils/`: 純函式工具與資料轉接 helper
-- `router/`: 路由入口與頁面掛載規則
-- `styles/`: 第三方樣式或全域樣式資產
+1. `views/`
+   - 頁面層，通常對應 route。
+2. `components/`
+   - 可重用 UI 區塊與 domain component。
+3. `services/`
+   - 前端 API 與 socket 呼叫封裝。
+4. `stores/`
+   - Pinia 狀態管理。
+5. `composables/`
+   - 可重用的 reactive 邏輯。
+6. `types/`
+   - TypeScript 型別與資料結構定義。
+7. `utils/`
+   - 純函式工具與資料轉接 helper。
+8. `router/`
+   - 路由入口與頁面掛載規則。
+9. `styles/`
+   - 全域或第三方樣式資產。
 
-## 分層原則
+## 責任邊界
 
-- 頁面進入點放 `views/`
-- 可重複使用的畫面區塊放 `components/`
-- 對後端怎麼打 API 放 `services/`
-- 多頁共用的狀態放 `stores/`
-- 不依賴畫面的純工具函式放 `utils/`
+1. 頁面入口與頁面層資料協調，應放 `views/`
+2. 可重用畫面區塊，應放 `components/`
+3. 後端呼叫與 request/response 封裝，應放 `services/`
+4. 跨頁共享狀態，應放 `stores/`
+5. 不依賴畫面的純工具函式，應放 `utils/`
 
-## 修改判斷
+## 維護原則
 
-- 畫面區塊太大、可以獨立測試或重用：先看 `components/`
-- 某個頁面的流程與資料組合：先看 `views/`
-- API response 要先轉型或映射：先看 `services/` 與 `utils/`
-- 欄位型別不清楚或跨檔案重複定義：先看 `types/`
+1. 前端結構應優先維持 view、component、service、store、type 的分層清楚。
+2. 若某段邏輯已能獨立命名、重用或測試，應適時從頁面中拆出。
+3. 與後端契約直接相關的型別與 mapping，應避免散落在 component 內。

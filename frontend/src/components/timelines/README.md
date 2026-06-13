@@ -1,24 +1,23 @@
-# frontend/src/components/timelines
+# Frontend Timeline Components 目錄說明
 
-這裡是 timeline domain 的主要 UI 區塊，包含專案檢視模式、詳情對話框，以及週報、風險分析、知識面板等子區塊。
+`frontend/src/components/timelines/` 存放 timeline domain 的主要 UI 元件，包含不同檢視模式、詳情對話框，以及週報、風險分析、知識面板等子區塊。
 
-## 常見元件角色
+## 責任範圍
 
-- `TimelineDetailDialog.vue`: timeline 詳情的主要容器，負責整合多個 panel
-- `TimelineWeeklyReportPanel.vue`: 週報區塊
-- `TimelineRiskAnalysisPanel.vue`: 風險分析與圖表區塊
-- `ProjectKnowledgePanel.vue`: 專案知識相關區塊
-- `TimelineListView.vue` / `TimelineCardView.vue` / `TimelineCalendarView.vue` / `TimelineGanttView.vue` / `TimelineKanbanBoard.vue`: 各種 timeline 檢視模式
-- `TimelineAddTaskModal.vue` / `TimelineKanbanTaskModal.vue`: 任務建立或編輯互動
+本目錄應負責以下內容：
 
-## 拆分原則
+1. timeline domain 的可重用視覺與互動區塊
+2. 容器元件與子面板之間的畫面拆分
+3. 屬於 timeline 畫面的局部互動與展示邏輯
 
-- 容器元件保留資料整合、狀態協調、事件串接
-- 子面板元件負責單一區塊的展示與局部互動
-- 若某段邏輯與畫面只服務一個 panel，優先留在該 panel，不必急著抽成全域 composable
+## 子元件分工原則
 
-## 避免長回史山的做法
+1. 容器元件保留資料整合、狀態協調與事件串接。
+2. 子面板元件負責單一區塊的展示與局部互動。
+3. 只服務單一 panel 的局部邏輯，可先留在該 panel 內維護。
 
-- 不把每個 panel 的 loading / error / empty state 全塞回主 dialog
-- 不把 risk / weekly report / knowledge 的細節 formatter 都混在同一支檔案
-- 拆出來的元件要有清楚名稱與責任，不要只是為了切行數而硬拆
+## 維護原則
+
+1. 不應將所有 panel 的 loading、error、empty state 全部塞回單一主容器。
+2. 與特定區塊強耦合的 formatter 或 helper，應保持在相近的責任範圍內。
+3. 元件拆分應以責任清楚與可維護性為前提，而非單純壓縮檔案長度。

@@ -26,6 +26,31 @@ export interface CopilotAutoCreateResult {
   created?: number;
 }
 
+export interface CopilotAgentTraceEvent {
+  event_type: string;
+  step_name: string;
+  status?: string | null;
+  duration_ms?: number | null;
+  error_code?: string | null;
+  detail: Record<string, unknown>;
+  timestamp: string;
+}
+
+export interface CopilotAgentTrace {
+  request_id: string;
+  user_id?: number | null;
+  plan_id?: string | null;
+  routes: string[];
+  status: string;
+  started_at: string;
+  updated_at: string;
+  finished_at?: string | null;
+  duration_ms?: number | null;
+  error_code?: string;
+  metadata: Record<string, unknown>;
+  events: CopilotAgentTraceEvent[];
+}
+
 export interface CopilotMcpExecuteResponse {
   message: string;
   selected_tool: string;
@@ -34,6 +59,8 @@ export interface CopilotMcpExecuteResponse {
   result: unknown;
   generated_tasks?: AiGeneratedTask[];
   auto_create_result?: CopilotAutoCreateResult;
+  request_id?: string;
+  trace?: CopilotAgentTrace;
 }
 
 export interface CopilotAgentPlanPayload {
@@ -53,6 +80,8 @@ export interface CopilotAgentPlanResponse {
   expires_at: string;
   proposal_source?: 'llm_proposal' | 'rule_fallback' | string;
   proposal_reason?: string | null;
+  request_id?: string;
+  trace?: CopilotAgentTrace;
 }
 
 export interface CopilotAgentRejectPayload {
@@ -64,6 +93,8 @@ export interface CopilotAgentRejectResponse {
   ok: boolean;
   plan_id: string;
   status: 'rejected' | string;
+  request_id?: string;
+  trace?: CopilotAgentTrace;
 }
 
 export interface CopilotAgentExecuteByPlanPayload {
@@ -113,4 +144,6 @@ export interface CopilotAgentExecuteByPlanResponse {
   diff_from_plan: string[];
   steps_result: CopilotAgentStep[];
   agent_result: CopilotAgentExecuteResponse;
+  request_id?: string;
+  trace?: CopilotAgentTrace;
 }

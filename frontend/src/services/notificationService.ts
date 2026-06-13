@@ -1,6 +1,6 @@
 import api from './api';
 import type { AxiosResponse } from 'axios';
-import type { Notification } from '../types';
+import type { ApiMutationResponse, Notification } from '../types';
 
 interface UnreadCountResponse {
   count: number;
@@ -18,7 +18,7 @@ export const notificationService = {
       throw err;
     });
   },
-  markAsRead:     (id: number): Promise<AxiosResponse<Notification>>  => api.patch(`/notifications/${id}/read`),
-  markAllAsRead:  (): Promise<AxiosResponse<void>>                    => api.patch('/notifications/read-all'),
-  delete:         (id: number): Promise<AxiosResponse<void>>          => api.delete(`/notifications/${id}`),
+  markAsRead:     (id: number): Promise<AxiosResponse<ApiMutationResponse>>  => api.patch(`/notifications/${id}/read`),
+  markAllAsRead:  (): Promise<AxiosResponse<ApiMutationResponse>>            => api.patch('/notifications/read-all'),
+  delete:         (id: number): Promise<AxiosResponse<ApiMutationResponse>>  => api.delete(`/notifications/${id}`),
 };
