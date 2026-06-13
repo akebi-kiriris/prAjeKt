@@ -1,31 +1,30 @@
-# backend/models
+# Backend Models 目錄說明
 
-這層定義 SQLAlchemy ORM model，是資料表結構與關聯在程式中的對應。
+`backend/models/` 定義 SQLAlchemy ORM model，是資料表結構、欄位與關聯在程式中的對應層。
 
-## 常見檔案
+## 責任範圍
 
-- `task.py`, `subtask.py`, `task_comment.py`, `task_user.py`
-- `timeline.py`, `timeline_user.py`
-- `group.py`, `message.py`, `group_ai_snapshot.py`
-- `knowledge.py`
-- `notification.py`, `activity_log.py`
-- `user.py`, `todo.py`
+本目錄應負責以下內容：
 
-## 這層應該負責什麼
+1. 資料表欄位定義
+2. model 關聯設定
+3. 與資料結構直接相關的輕量 helper
 
-- 表欄位定義
-- model 關聯
-- 與資料結構直接相關的 helper
+以下內容不應放在本目錄：
 
-## 不應該放什麼
+1. 商業流程判斷
+2. HTTP response 組裝
+3. agent tool 流程邏輯
+4. 大量跨 model 協調
 
-- 業務流程判斷
-- HTTP response 組裝
-- Agent tool 流程邏輯
-- 大量跨 model 協調
+## 相鄰目錄邊界
 
-## 修改判斷
+1. 若問題是欄位、關聯或資料結構本身，優先看本目錄。
+2. 若問題是何時建立、更新或拒絕資料，通常應回到 `backend/services/`。
+3. 欄位或關聯異動時，應同步檢查 `backend/migrations/`、`backend/repositories/` 與相關契約。
 
-- 如果需求是在問「資料表有哪些欄位、關聯怎麼接」，先看這層
-- 如果需求是在問「什麼時候要建立 / 更新這些資料」，通常先回到 `services/`
-- 欄位改動通常要同步檢查 `migrations/`、`repositories/`、`services/contracts/`
+## 維護原則
+
+1. model 應聚焦在資料結構，不承擔複雜流程控制。
+2. 結構變更需搭配 migration 與存取層一起檢查。
+3. 若 helper 已需要依賴大量外部狀態，通常應往 service 層移動。

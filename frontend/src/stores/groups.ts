@@ -2,6 +2,7 @@ import { defineStore } from 'pinia';
 import { ref, nextTick } from 'vue';
 import type {
   Group,
+  GroupCreateResponse,
   Message,
   SocketGroupErrorPayload,
   SocketGroupMessagePayload,
@@ -122,7 +123,7 @@ export const useGroupStore = defineStore('groups', () => {
     }
   }
 
-  async function createGroup(name: string): Promise<Group> {
+  async function createGroup(name: string): Promise<GroupCreateResponse> {
     const response = await groupService.create(name);
     await fetchGroups();
     return response.data;

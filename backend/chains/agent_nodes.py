@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import re
+from time import perf_counter
 from typing import Any
 
 from chains.agent_state import AgentState
+from services.agent_trace_service import agent_trace_service, duration_ms_since
 from services.tools.error_mapper import route_from_tool_error
 from services.tools.registry import execute_registered_tool, get_tool_definition
 
@@ -15,6 +17,30 @@ PROTECTED_CONTEXT_KEYS = {
     "task_id",
     "group_id",
 }
+
+
+def _trace_event(
+    state: AgentState,
+    *,
+    event_type: str,
+    step_name: str,
+    status: str | None = None,
+    duration_ms: int | None = None,
+    error_code: str | None = None,
+    detail: dict[str, Any] | None = None,
+) -> None:
+    request_id = str(state.get("request_id") or "").strip()
+    if not request_id:
+        return
+    agent_trace_service.append_event(
+        request_id,
+        event_type=event_type,
+        step_name=step_name,
+        status=status,
+        duration_ms=duration_ms,
+        error_code=error_code,
+        detail=detail,
+    )
 
 
 def _sanitize_nested_payload(value: Any) -> Any:
@@ -369,7 +395,17 @@ def intent_parse_node(state: AgentState) -> AgentState:
     user_message = state.get("user_message", "")
     unsupported_goal = _is_unsupported_goal(user_message)
     if unsupported_goal:
+        _trace_event(
+            state,
+            event_type="route_decision",
+            step_name="intent_parse",
+            status="unsupported",
+            error_code="UNSUPPORTED_GOAL",
+            detail={"route": "stop"},
+        )
         return {
+            "request_id": state.get("request_id", ""),
+            "plan_id": state.get("plan_id", ""),
             "pending_tools": [],
             "executed_tools": state.get("executed_tools", []),
             "steps": state.get("steps", []),
@@ -384,7 +420,17 @@ def intent_parse_node(state: AgentState) -> AgentState:
 
     pending = state.get("pending_tools") or build_pending_tools(user_message)
     if not pending:
+        _trace_event(
+            state,
+            event_type="route_decision",
+            step_name="intent_parse",
+            status="no_pending_tools",
+            error_code="NO_AVAILABLE_TOOL",
+            detail={"route": "stop"},
+        )
         return {
+            "request_id": state.get("request_id", ""),
+            "plan_id": state.get("plan_id", ""),
             "pending_tools": [],
             "executed_tools": state.get("executed_tools", []),
             "steps": state.get("steps", []),
@@ -396,7 +442,16 @@ def intent_parse_node(state: AgentState) -> AgentState:
             "route": "stop",
             "ask_user_message": "目前白名單尚未提供這個操作，請改述為可用工具範圍或擴充工具。",
         }
+    _trace_event(
+        state,
+        event_type="route_decision",
+        step_name="intent_parse",
+        status="continue",
+        detail={"route": "continue", "pending_tools": pending},
+    )
     return {
+        "request_id": state.get("request_id", ""),
+        "plan_id": state.get("plan_id", ""),
         "pending_tools": pending,
         "executed_tools": state.get("executed_tools", []),
         "steps": state.get("steps", []),
@@ -430,12 +485,15 @@ def tool_execute_node(state: AgentState) -> AgentState:
 
     tool_name = pending.pop(0)
     payload = _build_payload(tool_name, state)
+    started_at = perf_counter()
     result = execute_registered_tool(tool_name, payload)
+    tool_duration_ms = duration_ms_since(started_at)
 
     step = {
         "tool_name": tool_name,
         "input": payload,
         "output": result,
+        "duration_ms": tool_duration_ms,
     }
     steps = list(state.get("steps", []))
     steps.append(step)
@@ -443,6 +501,14 @@ def tool_execute_node(state: AgentState) -> AgentState:
     executed_tools.append(tool_name)
 
     if result.get("ok") is True:
+        _trace_event(
+            state,
+            event_type="tool_execution",
+            step_name=tool_name,
+            status="succeeded",
+            duration_ms=tool_duration_ms,
+            detail={"route": "continue"},
+        )
         created_timeline_id = state.get("created_timeline_id")
         created_timeline_name = state.get("created_timeline_name")
         if tool_name == "create_timeline_for_user":
@@ -453,6 +519,8 @@ def tool_execute_node(state: AgentState) -> AgentState:
             if isinstance(input_data, dict):
                 created_timeline_name = str(input_data.get("name") or "").strip() or created_timeline_name
         return {
+            "request_id": state.get("request_id", ""),
+            "plan_id": state.get("plan_id", ""),
             "pending_tools": pending,
             "executed_tools": executed_tools,
             "steps": steps,
@@ -466,7 +534,18 @@ def tool_execute_node(state: AgentState) -> AgentState:
         }
 
     error = result.get("error", {})
+    _trace_event(
+        state,
+        event_type="tool_execution",
+        step_name=tool_name,
+        status="failed",
+        duration_ms=tool_duration_ms,
+        error_code=str(error.get("error_code") or "INTERNAL_ERROR"),
+        detail={"route": "continue"},
+    )
     return {
+        "request_id": state.get("request_id", ""),
+        "plan_id": state.get("plan_id", ""),
         "pending_tools": [tool_name] + pending,
         "executed_tools": executed_tools,
         "steps": steps,
@@ -488,6 +567,14 @@ def route_by_error_node(state: AgentState) -> AgentState:
     tool = get_tool_definition(last_tool_name) if last_tool_name else None
     if route == "retry" and tool is not None and tool.side_effect_level == "high":
         label = tool.user_visible_label or last_tool_name
+        _trace_event(
+            state,
+            event_type="route_decision",
+            step_name="route_by_error",
+            status="ask_user",
+            error_code=str(last_error.get("error_code") or "INTERNAL_ERROR"),
+            detail={"route": "ask_user", "tool_name": last_tool_name, "reason": "high_side_effect_no_retry"},
+        )
         return {
             "route": "ask_user",
             "ask_user_message": (
@@ -496,9 +583,33 @@ def route_by_error_node(state: AgentState) -> AgentState:
             ),
         }
     if route == "retry":
+        _trace_event(
+            state,
+            event_type="route_decision",
+            step_name="route_by_error",
+            status="retry",
+            error_code=str(last_error.get("error_code") or "INTERNAL_ERROR"),
+            detail={"route": "continue", "tool_name": last_tool_name, "retry_count": retry_count + 1},
+        )
         return {"route": "continue", "retry_count": retry_count + 1}
     if route == "ask_user":
+        _trace_event(
+            state,
+            event_type="route_decision",
+            step_name="route_by_error",
+            status="ask_user",
+            error_code=str(last_error.get("error_code") or "INTERNAL_ERROR"),
+            detail={"route": "ask_user", "tool_name": last_tool_name},
+        )
         return {"route": "ask_user", "ask_user_message": last_error.get("hint", "請補充必要資訊。")}
+    _trace_event(
+        state,
+        event_type="route_decision",
+        step_name="route_by_error",
+        status="stop",
+        error_code=str(last_error.get("error_code") or "INTERNAL_ERROR"),
+        detail={"route": "stop", "tool_name": last_tool_name},
+    )
     return {"route": "stop", "ask_user_message": last_error.get("message", "系統暫停執行。")}
 
 

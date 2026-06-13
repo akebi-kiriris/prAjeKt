@@ -1,35 +1,31 @@
-# backend/chains
+# Backend Chains 目錄說明
 
-這層負責 AI / agent 的流程控制，包含 LangGraph state、nodes、graph 接線，以及部分 LLM chain 組裝。
+`backend/chains/` 負責 AI 與 agent 的流程控制，包含 LangGraph state、節點執行、graph 接線，以及部分 LLM chain 的流程編排。
 
-## Phase 9 最重要的檔案
+## 責任範圍
 
-- `agent_state.py`: Agent 共用狀態模型
-- `agent_nodes.py`: intent parse、tool select、tool execute、error route、finalize 等核心節點
-- `agent_graph.py`: LangGraph 接線與執行入口
+本目錄應負責以下內容：
 
-## 其他常見檔案
+1. agent 狀態如何在節點間流動
+2. 工具執行順序與錯誤路由
+3. LLM / chain 的流程編排
+4. graph 的 entry point 與 conditional edge
 
-- `tool_selection_chain.py`: 工具選擇相關 chain
-- `rag_planning_chain.py`: RAG 規劃相關 chain
-- `summary_chain.py`: 摘要生成
-- `llm_factory.py`: LLM 建立與設定
+以下內容不應放在本目錄：
 
-## 這層應該負責什麼
+1. 具體資料庫讀寫
+2. 大量核心商業邏輯
+3. 前端互動細節
 
-- Agent 狀態如何在節點間流動
-- 工具執行順序與錯誤路由
-- LLM / chain 的流程編排
-- Graph 的 entry point 與 conditional edge
+## 相鄰目錄邊界
 
-## 不應該放什麼
+1. 若問題是流程分支、tool 選擇或錯誤後續處理，優先看本目錄。
+2. 若問題是某個能力真正如何建立資料或更新狀態，應回到 `backend/services/`。
+3. 若問題是工具 schema 或 envelope 邊界，應先檢查 `backend/services/contracts/`。
+4. 若問題是 prompt 內容與模型規則，應檢查 `backend/prompts/`。
 
-- 具體資料庫讀寫
-- 直接寫大量核心業務邏輯
-- 前端互動細節
+## 維護原則
 
-## 修改判斷
-
-- 如果是在問「下一步該跑哪個 tool」或「錯誤後要 retry / stop / ask_user」，先看這層
-- 如果是在問「某個能力真正怎麼建立任務 / 更新資料」，先看 `backend/services/`
-- 若只是調整工具 schema，不要直接改 chain，先檢查 `backend/services/contracts/`
+1. chain 應聚焦在流程控制，不重複實作 service 已有邏輯。
+2. 節點間狀態欄位與轉移規則應保持清楚、可追蹤。
+3. 當流程依賴契約或 prompt 改動時，應同步檢查相鄰目錄。

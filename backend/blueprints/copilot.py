@@ -2,6 +2,7 @@ from flask import Blueprint, jsonify, request
 from flask_jwt_extended import get_jwt_identity, jwt_required
 
 from blueprints.validation import error_from_exception, error_response
+from services.agent_trace_service import build_agent_request_id
 from services.copilot_service import (
     CopilotOperationError,
     create_copilot_agent_plan,
@@ -27,6 +28,17 @@ def _extract_bearer_token() -> str:
     if not auth_header.lower().startswith('bearer '):
         return ''
     return auth_header.split(' ', 1)[1].strip()
+
+
+def _resolve_request_id(data: dict | None = None) -> str:
+    header_request_id = str(request.headers.get('X-Request-Id') or '').strip()
+    if header_request_id:
+        return header_request_id
+    if isinstance(data, dict):
+        body_request_id = data.get('request_id')
+        if isinstance(body_request_id, str) and body_request_id.strip():
+            return body_request_id.strip()
+    return build_agent_request_id()
 
 
 @copilot_bp.route('/mcp/execute', methods=['POST'])
@@ -92,6 +104,7 @@ def execute_copilot_agent():
     confirm = data.get('confirm')
     if not isinstance(confirm, bool):
         return error_response("BAD_REQUEST", "confirm 必須為布林值 true/false。", 400)
+    request_id = _resolve_request_id(data)
 
     try:
         payload = execute_copilot_agent_plan(
@@ -100,6 +113,7 @@ def execute_copilot_agent():
             confirm=confirm,
             tool_payloads=tool_payloads,
             max_loops=max_loops,
+            request_id=request_id,
         )
         return jsonify(payload), 200
     except CopilotOperationError as err:
@@ -121,12 +135,14 @@ def create_agent_plan():
     context = data.get('context') if isinstance(data.get('context'), dict) else {}
     context['user_id'] = int(get_jwt_identity())
     tool_payloads = data.get('tool_payloads') if isinstance(data.get('tool_payloads'), dict) else {}
+    request_id = _resolve_request_id(data)
     try:
         payload = create_copilot_agent_plan(
             user_message=message,
             user_id=int(get_jwt_identity()),
             context=context,
             tool_payloads=tool_payloads,
+            request_id=request_id,
         )
         return jsonify(payload), 200
     except CopilotOperationError as err:
@@ -146,11 +162,13 @@ def reject_agent_plan():
         return error_response("BAD_REQUEST", "請提供 plan_id", 400)
 
     reason = data.get('reason') if isinstance(data.get('reason'), str) else None
+    request_id = _resolve_request_id(data)
     try:
         payload = reject_copilot_agent_plan(
             plan_id=plan_id,
             user_id=int(get_jwt_identity()),
             reason=reason,
+            request_id=request_id,
         )
         return jsonify(payload), 200
     except CopilotOperationError as err:
@@ -171,12 +189,14 @@ def replan_agent():
 
     old_plan_id = data.get('plan_id')
     user_id = int(get_jwt_identity())
+    request_id = _resolve_request_id(data)
     if isinstance(old_plan_id, str) and old_plan_id.strip():
         try:
             reject_copilot_agent_plan(
                 plan_id=old_plan_id,
                 user_id=user_id,
                 reason='replan',
+                request_id=request_id,
             )
         except CopilotOperationError:
             pass
@@ -191,6 +211,7 @@ def replan_agent():
             context=context,
             tool_payloads=tool_payloads,
             force_model_proposal=True,
+            request_id=request_id,
         )
         return jsonify(payload), 200
     except CopilotOperationError as err:

@@ -350,7 +350,7 @@ const handleCreateGroup = async () => {
     return;
   }
   try {
-    const data = await groupStore.createGroup(newGroupName.value) as unknown as GroupCreateResponse;
+    const data = await groupStore.createGroup(newGroupName.value);
     toast.success(`群組建立成功！邀請碼: ${data.invite_code}`);
     showCreateGroup.value = false;
     newGroupName.value = '';

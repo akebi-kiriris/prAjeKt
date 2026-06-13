@@ -1,34 +1,42 @@
-# backend/services
+# Backend Services 目錄說明
 
-這層是後端的業務核心。主要責任是處理商業邏輯、協調 repository、呼叫外部服務，並維持既有 service 契約。
+`backend/services/` 是後端業務流程的核心層，負責協調 repository、執行 domain 規則、串接外部能力，並維持服務層的穩定行為邊界。
 
-## 目錄分工
+## 內容分工
 
-- `contracts/`: 輸入輸出 schema 與驗證規則
-- `tools/`: 給 agent 使用的工具包裝層
-- 其餘 `*_service.py`: 實際業務邏輯
-- `transactions.py`: 交易與 session 邊界協調
+1. `contracts/`
+   - 輸入輸出 schema、欄位驗證與契約定義。
+2. `tools/`
+   - 給 agent 使用的工具包裝層與執行入口。
+3. `*_service.py`
+   - 各 domain 的實際業務流程。
+4. `transactions.py`
+   - 交易與 session 協調輔助。
 
-## 這層應該放什麼
+## 責任範圍
 
-- 任務、專案、群組、知識庫等業務流程
-- 多個 repository / 外部服務的協調
-- 明確屬於後端 domain 的驗證與狀態轉換
+本目錄應負責以下內容：
 
-## 不應該放什麼
+1. 任務、專案、群組、知識庫等 domain 流程
+2. 多個 repository 或外部服務之間的協調
+3. 屬於業務語意的驗證、狀態轉換與流程控制
 
-- HTTP request / response 處理：放到 `backend/blueprints/`
-- 純資料存取細節：放到 `backend/repositories/`
-- LangGraph 節點流程：放到 `backend/chains/`
-- 前端展示或 UI 狀態處理
+以下內容不應直接放在此層：
 
-## Phase 9 相關提醒
+1. HTTP request/response 處理
+2. 純資料查詢或持久化細節
+3. LangGraph 節點與 graph 編排
+4. 前端顯示邏輯或 UI 狀態
 
-- service 不是為 agent 而生；Phase 9 是把既有 service 包成 agent 可安全呼叫的工具。
-- 若是 agent tool 的 I/O 邊界問題，優先看 `contracts/` 與 `tools/`，不要把 envelope / payload 組裝直接塞回 service。
+## 相鄰目錄邊界
 
-## 新增功能時的放置原則
+1. API 層參數來源、權限與 HTTP 回應，應放 `backend/blueprints/`
+2. 純資料存取與查詢封裝，應放 `backend/repositories/`
+3. agent 流程節點與圖結構，應放 `backend/chains/`
+4. agent 工具 I/O 邊界問題，優先檢查 `contracts/` 與 `tools/`
 
-- 如果是「真正做事」的業務流程，先考慮新增或調整 `*_service.py`
-- 如果是給 agent 的工具輸入輸出格式，改 `contracts/`
-- 如果是 agent 執行工具時的包裝、錯誤映射、註冊，改 `tools/`
+## 維護原則
+
+1. service 應以業務流程為中心，不重複包裝 route 或 repository 的責任。
+2. 若某段邏輯主要是資料契約，應抽至 `contracts/`。
+3. 若某段邏輯主要是 agent 工具入口與錯誤映射，應抽至 `tools/`。

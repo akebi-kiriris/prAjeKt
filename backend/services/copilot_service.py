@@ -1,7 +1,13 @@
 import logging
+from time import perf_counter
 from typing import Any
 
 from services.agent_plan_service import AgentPlanRecord, agent_plan_store
+from services.agent_trace_service import (
+    agent_trace_service,
+    build_agent_request_id,
+    duration_ms_since,
+)
 from services.mcp_bridge_service import MCPBridgeError, execute_mcp_tool, list_mcp_tools
 from services.tool_plan_service import MAX_PLAN_STEPS, ToolPlanError, propose_plan_with_llm
 from services.tools.registry import get_tool_definition
@@ -30,6 +36,15 @@ def _serialize_plan(record: AgentPlanRecord) -> dict[str, Any]:
         "proposal_source": record.proposal_source,
         "proposal_reason": record.proposal_reason,
     }
+
+
+def _with_trace(payload: dict[str, Any], request_id: str) -> dict[str, Any]:
+    enriched = dict(payload)
+    enriched["request_id"] = request_id
+    trace = agent_trace_service.get_trace(request_id)
+    if trace is not None:
+        enriched["trace"] = trace
+    return enriched
 
 
 def _build_plan_preview(pending_tools: list[str]) -> tuple[list[str], list[str]]:
@@ -482,43 +497,113 @@ def create_copilot_agent_plan(
     context: dict[str, Any] | None = None,
     tool_payloads: dict[str, dict[str, Any]] | None = None,
     force_model_proposal: bool = False,
+    request_id: str | None = None,
 ) -> dict[str, Any]:
     """建立 agent 執行計畫（不執行工具）。"""
+    effective_request_id = (request_id or "").strip() or build_agent_request_id()
+    started_at = perf_counter()
     message = (user_message or "").strip()
-    if not message:
-        raise CopilotOperationError("message 不可為空。", 400)
-
-    normalized_context = _normalize_context(context)
-    pending_tools, payload_draft, proposal_source, proposal_reason = _propose_pending_tools(
-        user_message=message,
-        context=normalized_context,
-        force_model_proposal=force_model_proposal,
-    )
-    if len(pending_tools) > MAX_PLAN_STEPS:
-        raise CopilotOperationError(f"模型提案步驟不可超過 {MAX_PLAN_STEPS} 步。", 409)
-    steps_preview, risk_notes = _build_plan_preview(pending_tools)
-    summary = _build_plan_summary(message, steps_preview)
-
-    record = agent_plan_store.create_plan(
+    agent_trace_service.start_trace(
+        effective_request_id,
+        route="plan",
         user_id=user_id,
-        goal=message,
-        context=normalized_context,
-        approved_tool_payloads=_merge_tool_payloads(incoming=tool_payloads, draft=payload_draft),
-        pending_tools=pending_tools,
-        summary=summary,
-        steps_preview=steps_preview,
-        risk_notes=risk_notes,
-        proposal_source=proposal_source,
-        proposal_reason=proposal_reason,
+        metadata={"goal": message, "force_model_proposal": force_model_proposal},
     )
-    logger.info(
-        "copilot_agent_plan_created user_id=%s proposal_source=%s pending_tools=%s proposal_reason=%s",
-        user_id,
-        proposal_source,
-        pending_tools,
-        proposal_reason,
-    )
-    return _serialize_plan(record)
+    if not message:
+        duration_ms = duration_ms_since(started_at)
+        agent_trace_service.append_event(
+            effective_request_id,
+            event_type="plan",
+            step_name="create_plan",
+            status="failed",
+            duration_ms=duration_ms,
+            error_code="BAD_REQUEST",
+            detail={"reason": "empty_message"},
+        )
+        agent_trace_service.finish_trace(
+            effective_request_id,
+            status="failed",
+            duration_ms=duration_ms,
+            error_code="BAD_REQUEST",
+        )
+        raise CopilotOperationError("message 不可為空。", 400)
+    try:
+        normalized_context = _normalize_context(context)
+        pending_tools, payload_draft, proposal_source, proposal_reason = _propose_pending_tools(
+            user_message=message,
+            context=normalized_context,
+            force_model_proposal=force_model_proposal,
+        )
+        if len(pending_tools) > MAX_PLAN_STEPS:
+            raise CopilotOperationError(f"模型提案步驟不可超過 {MAX_PLAN_STEPS} 步。", 409)
+        steps_preview, risk_notes = _build_plan_preview(pending_tools)
+        summary = _build_plan_summary(message, steps_preview)
+
+        record = agent_plan_store.create_plan(
+            user_id=user_id,
+            goal=message,
+            context=normalized_context,
+            approved_tool_payloads=_merge_tool_payloads(incoming=tool_payloads, draft=payload_draft),
+            pending_tools=pending_tools,
+            summary=summary,
+            steps_preview=steps_preview,
+            risk_notes=risk_notes,
+            proposal_source=proposal_source,
+            proposal_reason=proposal_reason,
+        )
+        duration_ms = duration_ms_since(started_at)
+        agent_trace_service.start_trace(
+            effective_request_id,
+            route="plan",
+            user_id=user_id,
+            plan_id=record.plan_id,
+            metadata={"proposal_source": proposal_source},
+        )
+        agent_trace_service.append_event(
+            effective_request_id,
+            event_type="plan",
+            step_name="create_plan",
+            status="planned",
+            duration_ms=duration_ms,
+            detail={
+                "pending_tools": pending_tools,
+                "proposal_source": proposal_source,
+                "proposal_reason": proposal_reason,
+            },
+        )
+        agent_trace_service.finish_trace(
+            effective_request_id,
+            status="planned",
+            duration_ms=duration_ms,
+            detail={"plan_id": record.plan_id},
+        )
+        logger.info(
+            "copilot_agent_plan_created user_id=%s request_id=%s proposal_source=%s pending_tools=%s proposal_reason=%s",
+            user_id,
+            effective_request_id,
+            proposal_source,
+            pending_tools,
+            proposal_reason,
+        )
+        return _with_trace(_serialize_plan(record), effective_request_id)
+    except CopilotOperationError as exc:
+        duration_ms = duration_ms_since(started_at)
+        agent_trace_service.append_event(
+            effective_request_id,
+            event_type="plan",
+            step_name="create_plan",
+            status="failed",
+            duration_ms=duration_ms,
+            error_code="PLAN_ERROR",
+            detail={"message": exc.message},
+        )
+        agent_trace_service.finish_trace(
+            effective_request_id,
+            status="failed",
+            duration_ms=duration_ms,
+            error_code="PLAN_ERROR",
+        )
+        raise
 
 
 def reject_copilot_agent_plan(
@@ -526,21 +611,67 @@ def reject_copilot_agent_plan(
     *,
     user_id: int,
     reason: str | None = None,
+    request_id: str | None = None,
 ) -> dict[str, Any]:
     """拒絕既有 agent 計畫。"""
+    effective_request_id = (request_id or "").strip() or build_agent_request_id()
+    started_at = perf_counter()
     safe_plan_id = (plan_id or "").strip()
+    agent_trace_service.start_trace(
+        effective_request_id,
+        route="reject",
+        user_id=user_id,
+        plan_id=safe_plan_id or None,
+        metadata={"reason": reason},
+    )
     if not safe_plan_id:
+        duration_ms = duration_ms_since(started_at)
+        agent_trace_service.finish_trace(
+            effective_request_id,
+            status="failed",
+            duration_ms=duration_ms,
+            error_code="BAD_REQUEST",
+        )
         raise CopilotOperationError("plan_id 不可為空。", 400)
     record = agent_plan_store.reject_plan(safe_plan_id, user_id=user_id, reason=reason)
     if record is None:
+        duration_ms = duration_ms_since(started_at)
+        agent_trace_service.finish_trace(
+            effective_request_id,
+            status="failed",
+            duration_ms=duration_ms,
+            error_code="NOT_FOUND",
+        )
         raise CopilotOperationError("找不到對應計畫。", 404)
     if record.status == "expired":
+        duration_ms = duration_ms_since(started_at)
+        agent_trace_service.finish_trace(
+            effective_request_id,
+            status="failed",
+            duration_ms=duration_ms,
+            error_code="CONFLICT",
+        )
         raise CopilotOperationError("計畫已過期，請重新規劃。", 409)
-    return {
+    duration_ms = duration_ms_since(started_at)
+    agent_trace_service.append_event(
+        effective_request_id,
+        event_type="plan",
+        step_name="reject_plan",
+        status="rejected",
+        duration_ms=duration_ms,
+        detail={"reason": reason or "", "plan_status": record.status},
+    )
+    agent_trace_service.finish_trace(
+        effective_request_id,
+        status="rejected",
+        duration_ms=duration_ms,
+        detail={"plan_id": record.plan_id},
+    )
+    return _with_trace({
         "ok": True,
         "plan_id": record.plan_id,
         "status": record.status,
-    }
+    }, effective_request_id)
 
 
 def execute_copilot_agent_plan(
@@ -550,41 +681,108 @@ def execute_copilot_agent_plan(
     confirm: bool,
     tool_payloads: dict[str, dict[str, Any]] | None = None,
     max_loops: int = 6,
+    request_id: str | None = None,
 ) -> dict[str, Any]:
     """執行已核准計畫。"""
+    effective_request_id = (request_id or "").strip() or build_agent_request_id()
+    started_at = perf_counter()
     safe_plan_id = (plan_id or "").strip()
+    agent_trace_service.start_trace(
+        effective_request_id,
+        route="execute",
+        user_id=user_id,
+        plan_id=safe_plan_id or None,
+        metadata={"confirm": confirm, "max_loops": max_loops},
+    )
     if not safe_plan_id:
+        duration_ms = duration_ms_since(started_at)
+        agent_trace_service.finish_trace(
+            effective_request_id,
+            status="failed",
+            duration_ms=duration_ms,
+            error_code="BAD_REQUEST",
+        )
         raise CopilotOperationError("plan_id 不可為空。", 400)
     if not confirm:
+        duration_ms = duration_ms_since(started_at)
+        agent_trace_service.finish_trace(
+            effective_request_id,
+            status="failed",
+            duration_ms=duration_ms,
+            error_code="BAD_REQUEST",
+        )
         raise CopilotOperationError("未確認執行，請先確認。", 400)
     if isinstance(tool_payloads, dict) and len(tool_payloads) > 0:
+        duration_ms = duration_ms_since(started_at)
+        agent_trace_service.finish_trace(
+            effective_request_id,
+            status="failed",
+            duration_ms=duration_ms,
+            error_code="CONFLICT",
+        )
         raise CopilotOperationError("已確認計畫不可再覆寫執行參數，請改用 replan。", 409)
 
     current = agent_plan_store.get_plan(safe_plan_id, user_id=user_id)
     if current is None:
+        duration_ms = duration_ms_since(started_at)
+        agent_trace_service.finish_trace(effective_request_id, status="failed", duration_ms=duration_ms, error_code="NOT_FOUND")
         raise CopilotOperationError("找不到對應計畫。", 404)
     if current.status == "expired":
+        duration_ms = duration_ms_since(started_at)
+        agent_trace_service.finish_trace(effective_request_id, status="failed", duration_ms=duration_ms, error_code="CONFLICT")
         raise CopilotOperationError("計畫已過期，請重新規劃。", 409)
     if current.status == "rejected":
+        duration_ms = duration_ms_since(started_at)
+        agent_trace_service.finish_trace(effective_request_id, status="failed", duration_ms=duration_ms, error_code="CONFLICT")
         raise CopilotOperationError("此計畫已被拒絕，請重新規劃。", 409)
     if current.status == "succeeded":
+        duration_ms = duration_ms_since(started_at)
+        agent_trace_service.finish_trace(effective_request_id, status="failed", duration_ms=duration_ms, error_code="CONFLICT")
         raise CopilotOperationError("此計畫已執行完成，不可重複執行。", 409)
     if current.status == "failed":
+        duration_ms = duration_ms_since(started_at)
+        agent_trace_service.finish_trace(effective_request_id, status="failed", duration_ms=duration_ms, error_code="CONFLICT")
         raise CopilotOperationError("此計畫已執行失敗，請重新規劃後再試。", 409)
     if current.status == "executing":
+        duration_ms = duration_ms_since(started_at)
+        agent_trace_service.finish_trace(effective_request_id, status="failed", duration_ms=duration_ms, error_code="CONFLICT")
         raise CopilotOperationError("此計畫正在執行中，請勿重複送出。", 409)
 
     record = agent_plan_store.mark_executing(safe_plan_id, user_id=user_id)
     if record is None:
+        duration_ms = duration_ms_since(started_at)
+        agent_trace_service.finish_trace(effective_request_id, status="failed", duration_ms=duration_ms, error_code="CONFLICT")
         raise CopilotOperationError("計畫狀態不允許執行，請重新規劃。", 409)
 
-    agent_payload = execute_copilot_agent_request(
-        user_message=record.goal,
-        context=record.context,
-        tool_payloads=record.approved_tool_payloads,
-        max_loops=max_loops,
-        approved_pending_tools=record.pending_tools,
-    )
+    try:
+        agent_payload = execute_copilot_agent_request(
+            user_message=record.goal,
+            context=record.context,
+            tool_payloads=record.approved_tool_payloads,
+            max_loops=max_loops,
+            approved_pending_tools=record.pending_tools,
+            request_id=effective_request_id,
+            plan_id=record.plan_id,
+        )
+    except CopilotOperationError:
+        duration_ms = duration_ms_since(started_at)
+        agent_plan_store.mark_executed(record.plan_id, user_id=user_id, succeeded=False)
+        agent_trace_service.append_event(
+            effective_request_id,
+            event_type="execution",
+            step_name="execute_plan",
+            status="failed",
+            duration_ms=duration_ms,
+            error_code="EXECUTION_ERROR",
+        )
+        agent_trace_service.finish_trace(
+            effective_request_id,
+            status="failed",
+            duration_ms=duration_ms,
+            error_code="EXECUTION_ERROR",
+            detail={"plan_id": record.plan_id, "execution_id": record.execution_id},
+        )
+        raise
 
     succeeded = agent_payload.get("route") == "finalize"
     if succeeded:
@@ -599,14 +797,34 @@ def execute_copilot_agent_plan(
         if executed_tools != record.pending_tools:
             diff_from_plan.append("實際執行順序與計畫預覽不同。")
     logger.info(
-        "copilot_agent_plan_executed plan_id=%s approved_pending_tools=%s executed_tools=%s status=%s diff_from_plan=%s",
+        "copilot_agent_plan_executed request_id=%s plan_id=%s approved_pending_tools=%s executed_tools=%s status=%s diff_from_plan=%s",
+        effective_request_id,
         record.plan_id,
         record.pending_tools,
         executed_tools,
         "succeeded" if succeeded else "failed",
         diff_from_plan,
     )
-    return {
+    duration_ms = duration_ms_since(started_at)
+    agent_trace_service.append_event(
+        effective_request_id,
+        event_type="execution",
+        step_name="execute_plan",
+        status="succeeded" if succeeded else "failed",
+        duration_ms=duration_ms,
+        detail={
+            "approved_pending_tools": record.pending_tools,
+            "executed_tools": executed_tools,
+            "route": agent_payload.get("route"),
+        },
+    )
+    agent_trace_service.finish_trace(
+        effective_request_id,
+        status="succeeded" if succeeded else "failed",
+        duration_ms=duration_ms,
+        detail={"plan_id": record.plan_id, "execution_id": record.execution_id},
+    )
+    return _with_trace({
         "ok": True,
         "plan_id": record.plan_id,
         "execution_id": record.execution_id,
@@ -617,7 +835,7 @@ def execute_copilot_agent_plan(
         "diff_from_plan": diff_from_plan,
         "steps_result": agent_payload.get("steps", []),
         "agent_result": agent_payload,
-    }
+    }, effective_request_id)
 
 
 def execute_copilot_agent_request(
@@ -626,6 +844,8 @@ def execute_copilot_agent_request(
     tool_payloads: dict[str, dict[str, Any]] | None = None,
     max_loops: int = 6,
     approved_pending_tools: list[str] | None = None,
+    request_id: str | None = None,
+    plan_id: str | None = None,
 ) -> dict[str, Any]:
     """以單體 Tool Registry + LangGraph ReAct 流程執行使用者需求。"""
     message = (user_message or "").strip()
@@ -644,6 +864,8 @@ def execute_copilot_agent_request(
             tool_payloads=safe_tool_payloads,
             max_loops=max_loops,
             pending_tools=approved_pending_tools,
+            request_id=request_id,
+            plan_id=plan_id,
         )
     except Exception as exc:
         raise CopilotOperationError(f"Agent 執行失敗：{exc}", 500) from exc

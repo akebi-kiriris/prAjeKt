@@ -49,11 +49,11 @@ export interface Subtask {
 
 export interface TaskComment {
   comment_id: number;
-  task_id: number;
+  task_id?: number;
   user_id: number;
   user_name: string;
   task_message: string;
-  created_at: string;
+  created_at: string | null;
 }
 
 export interface TaskCommentSummary {
@@ -81,12 +81,26 @@ export interface TaskCommentSummaryResponse {
 
 export interface TaskFile {
   id: number;
-  task_id: number;
   filename: string;
   original_filename: string;
   file_size: number;
-  uploaded_at: string;
-  uploaded_by: number;
+  uploaded_at: string | null;
+  uploaded_by?: number;
+  uploaded_by_name?: string;
+}
+
+export interface TaskSubtaskMutationResponse {
+  message: string;
+  subtask: Subtask;
+}
+
+export interface TaskFileUploadResponse {
+  id: number;
+  message: string;
+  filename: string;
+  original_filename: string;
+  file_size: number;
+  uploaded_at: string | null;
 }
 
 export interface Task {
@@ -119,7 +133,7 @@ export interface CreateTaskPayload {
   end_date: string;
   task_remark?: string | null;
   priority?: TaskPriority;
-  tags?: string | null;
+  tags?: string[] | string | null;
   timeline_id?: number;
   assignee_user_ids?: number[];
   depends_on_task_ids?: number[];
@@ -156,7 +170,6 @@ export type TaskUpdatePayload = Partial<Pick<
   | 'timeline_id'
   | 'priority'
   | 'status'
-  | 'tags'
   | 'estimated_hours'
   | 'actual_hours'
   | 'start_date'
@@ -164,4 +177,6 @@ export type TaskUpdatePayload = Partial<Pick<
   | 'task_remark'
   | 'isWork'
   | 'depends_on_task_ids'
->>;
+>> & {
+  tags?: string[] | string | null;
+};

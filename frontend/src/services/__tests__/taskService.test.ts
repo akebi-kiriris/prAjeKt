@@ -88,4 +88,22 @@ describe('taskService', () => {
     });
     expect(mockedApi.delete).toHaveBeenCalledWith('/tasks/3/files/20');
   });
+
+  it('should normalize string tags into backend payload arrays', () => {
+    taskService.create({ name: 'Task', end_date: '2026-06-12', tags: 'frontend, urgent' } as never);
+    taskService.update(9, { tags: 'backend, api' });
+    taskService.update(10, { tags: '' });
+
+    expect(mockedApi.post).toHaveBeenCalledWith('/tasks', {
+      name: 'Task',
+      end_date: '2026-06-12',
+      tags: ['frontend', 'urgent'],
+    });
+    expect(mockedApi.put).toHaveBeenCalledWith('/tasks/9', {
+      tags: ['backend', 'api'],
+    });
+    expect(mockedApi.put).toHaveBeenCalledWith('/tasks/10', {
+      tags: null,
+    });
+  });
 });

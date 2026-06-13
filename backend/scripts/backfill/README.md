@@ -1,19 +1,21 @@
-# backend/scripts/backfill
+# Backend Scripts Backfill 目錄說明
 
-這層放舊資料補填腳本，用來把歷史資料補成符合新結構的狀態。
+`backend/scripts/backfill/` 用於存放舊資料補填腳本，讓歷史資料對齊新欄位、新關聯或新結構要求。
 
-## 目前腳本
+## 責任範圍
 
-- `backfill_task_users.py`
-- `backfill_timeline_users.py`
+本目錄應負責以下內容：
 
-## 這層應該負責什麼
+1. 對既有資料做一次性補填
+2. 協助歷史資料對齊新結構
 
-- 對既有資料做一次性補填
-- 協助舊資料對齊新欄位或新關聯
+以下內容不應放在本目錄：
 
-## 不應該放什麼
+1. 日常啟動流程
+2. 正式 migration revision
+3. 長期主線服務邏輯
 
-- 日常啟動流程
-- 正式 migration revision
-- 長期主線服務邏輯
+## 維護原則
+
+1. backfill 腳本應清楚標示用途與適用資料範圍。
+2. 若腳本只是 schema 變更的一部分，應先評估是否應由 migration 處理。

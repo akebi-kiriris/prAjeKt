@@ -386,7 +386,10 @@ describe('TimelineViewModes', () => {
   it('adds subtask and emits refresh-all', async () => {
     mocks.getSubtasks.mockResolvedValueOnce({ data: [] });
     mocks.createSubtask.mockResolvedValueOnce({
-      data: { id: 9, task_id: 1, name: 'ship api', completed: false, sort_order: 1, created_at: null },
+      data: {
+        message: '子任務新增成功',
+        subtask: { id: 9, task_id: 1, name: 'ship api', completed: false, sort_order: 1, created_at: null },
+      },
     });
     const wrapper = createWrapper('kanban');
 

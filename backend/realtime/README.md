@@ -1,24 +1,27 @@
-# backend/realtime
+# Backend Realtime 目錄說明
 
-這層負責 Socket.IO 即時事件，處理群組聊天、即時更新與相關連線邏輯。
+`backend/realtime/` 負責 Socket.IO 即時事件與連線邏輯，處理房間、廣播、即時訊息與相關事件路由。
 
-## 主要檔案
+## 責任範圍
 
-- `socket_events.py`: 事件註冊、連線、房間、訊息傳遞與 fallback 邏輯
+本目錄應負責以下內容：
 
-## 這層應該負責什麼
+1. Socket event handler
+2. 房間與連線狀態處理
+3. 即時訊息與事件路由
 
-- Socket event handler
-- 房間 / 連線狀態處理
-- 即時訊息路由
+以下內容不應放在本目錄：
 
-## 不應該放什麼
+1. 大量核心商業邏輯
+2. 分散的資料庫查詢細節
+3. HTTP API 行為
 
-- 大量核心商業邏輯
-- 資料庫查詢細節散落
-- HTTP API 行為
+## 相鄰目錄邊界
 
-## 修改判斷
+1. 若問題只出現在 WebSocket、即時聊天或廣播行為，優先看本目錄。
+2. 若問題涉及權限、資料寫入或商業規則，通常應回到 `backend/services/` 或 `backend/blueprints/`。
 
-- 如果問題只出現在 WebSocket / 即時聊天 / room 廣播，先看這層
-- 如果訊息實際怎麼寫進資料庫或做權限驗證，通常還是要回看 `services/` 或 `blueprints/`
+## 維護原則
+
+1. 即時事件層應保持為傳遞與連線邊界，不承擔過多 domain 流程。
+2. 與 HTTP API 共用的商業規則應集中在 service 層維護。

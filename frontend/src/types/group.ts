@@ -42,7 +42,22 @@ export interface SocketGroupMessagePayload {
 }
 
 export interface GroupCreateResponse {
-  invite_code?: string;
+  message: string;
+  group_id: number;
+  invite_code: string;
+}
+
+export interface GroupJoinResponse {
+  message: string;
+}
+
+export interface GroupLeaveResponse {
+  message: string;
+}
+
+export interface GroupSendMessageResponse {
+  message: string;
+  message_id: number;
 }
 
 export interface GroupErrorPayload extends ApiErrorPayload {}

@@ -1,30 +1,28 @@
-# frontend/src/views
+# Frontend Views 目錄說明
 
-這層是頁面入口，通常一個檔案對應一個 route。
+`frontend/src/views/` 是頁面入口層，通常一個檔案對應一個 route，負責整頁資料流、頁面組裝與頁面層級的狀態協調。
 
-## 目前頁面
+## 責任範圍
 
-- `HomeView.vue`: 首頁
-- `LoginView.vue`, `RegisterView.vue`: 驗證流程
-- `TasksView.vue`, `TodosView.vue`, `TrashView.vue`: 任務 / 待辦 / 回收桶
-- `GroupsView.vue`: 群組頁
-- `TimelinesView.vue`: timeline 主頁
-- `KnowledgeBaseView.vue`: 知識庫頁
-- `ProfileView.vue`: 個人資料頁
+本目錄應負責以下內容：
 
-## 這層應該負責什麼
+1. 頁面層資料載入
+2. route 對應的 component 組裝
+3. 頁面層級的 UI 狀態協調
 
-- 頁面層資料載入
-- route 對應的組件組裝
-- 頁面層級的 UI 狀態協調
+以下內容不應長期留在本目錄：
 
-## 不應該放什麼
+1. 大量可重用子區塊的細節 template
+2. 重複出現的 API 呼叫樣板
+3. 純工具函式
 
-- 大量可重用子區塊的細節 template
-- 重複出現的 API 呼叫樣板
-- 純工具函式
+## 相鄰目錄邊界
 
-## 修改判斷
+1. 整頁行為、頁面切換與頁面層資料流，優先看本目錄。
+2. 局部區塊若能獨立理解與重用，應拆至 `components/`。
+3. API 呼叫與 request/response 封裝，應放 `services/`。
 
-- 整頁行為、頁面切換、頁面層資料流：改這裡
-- 局部區塊可獨立理解：優先拆去 `components/`
+## 維護原則
+
+1. view 應作為頁面容器，而非長期承載大量可拆分 UI。
+2. 當某段畫面或邏輯已具備重用價值時，應及時抽離。

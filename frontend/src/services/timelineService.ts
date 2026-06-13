@@ -29,7 +29,7 @@ export const timelineService = {
   getAll:           (): Promise<AxiosResponse<Timeline[]>>                                       => api.get('/timelines'),
   create:           (data: CreateTimelinePayload): Promise<AxiosResponse<ApiMutationResponse>>   => api.post('/timelines', data),
   update:           (id: number, data: UpdateTimelinePayload): Promise<AxiosResponse<ApiMutationResponse>> => api.put(`/timelines/${id}`, data),
-  remove:           (id: number): Promise<AxiosResponse<void>>                                   => api.delete(`/timelines/${id}`),
+  remove:           (id: number): Promise<AxiosResponse<ApiMutationResponse>>                    => api.delete(`/timelines/${id}`),
   getTasks:         (id: number): Promise<AxiosResponse<Task[]>>                                 => api.get(`/timelines/${id}/tasks`),
   updateRemark:     (id: number, remark: string): Promise<AxiosResponse<ApiMutationResponse>>    => api.put(`/timelines/${id}/remark`, { remark }),
   searchUser:       (timelineId: number, email: string): Promise<AxiosResponse<SearchUserResult>> => api.post('/timelines/search_user', { timeline_id: timelineId, email }),
@@ -38,7 +38,7 @@ export const timelineService = {
   batchCreateTasks: (id: number, tasks: TimelineBatchTaskPayload[]): Promise<AxiosResponse<TimelineBatchCreateTasksResponse>> =>
     api.post(`/timelines/${id}/batch-create-tasks`, { tasks }),
   getMembers:       (id: number): Promise<AxiosResponse<TaskMember[]>>                           => api.get(`/timelines/${id}/members`),
-  removeMember:     (id: number, userId: number): Promise<AxiosResponse<void>>                   => api.delete(`/timelines/${id}/members/${userId}`),
+  removeMember:     (id: number, userId: number): Promise<AxiosResponse<ApiMutationResponse>>    => api.delete(`/timelines/${id}/members/${userId}`),
   upcoming:         (): Promise<AxiosResponse<Timeline[]>>                                       => api.get('/timelines/upcoming'),
   getMemberStats:   (id: number): Promise<AxiosResponse<ProjectStats>>                          => api.get(`/timelines/${id}/member-stats`),
   getWeeklyReport:  (
