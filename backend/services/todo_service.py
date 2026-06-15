@@ -1,12 +1,15 @@
 ﻿from datetime import datetime, timezone
 from typing import Any
 
+from pydantic import ValidationError
+
 from models.todo import Todo
 from repositories.session_repository import add_entity
 from repositories.todo_repository import (
     get_active_todo_by_id_for_user,
     list_active_todos_for_user,
 )
+from contracts.todo_contracts import TodoCreateRequest, TodoUpdateRequest
 from services.transactions import transaction
 
 TODO_CREATE_ALLOWED_FIELDS = {'title', 'content', 'type', 'deadline', 'priority'}
@@ -121,6 +124,12 @@ def create_todo_for_user(user_id: int, data: dict[str, Any]) -> int:
     unknown_fields = find_unknown_fields(data, TODO_CREATE_ALLOWED_FIELDS)
     if unknown_fields:
         raise TodoOperationError(f'不允許的欄位: {", ".join(unknown_fields)}', 400)
+    try:
+        validated = TodoCreateRequest.model_validate(data)
+        data = validated.model_dump(exclude_unset=True)
+    except ValidationError as err:
+        first_error = err.errors()[0] if err.errors() else {}
+        raise TodoOperationError(str(first_error.get("msg") or "參數格式錯誤"), 400) from err
 
     content = data.get('content')
     title = data.get('title')
@@ -164,6 +173,12 @@ def update_todo_for_user(todo_id: int, user_id: int, data: dict[str, Any]) -> No
     unknown_fields = find_unknown_fields(data, TODO_UPDATE_ALLOWED_FIELDS)
     if unknown_fields:
         raise TodoOperationError(f'不允許的欄位: {", ".join(unknown_fields)}', 400)
+    try:
+        validated = TodoUpdateRequest.model_validate(data)
+        data = validated.model_dump(exclude_unset=True)
+    except ValidationError as err:
+        first_error = err.errors()[0] if err.errors() else {}
+        raise TodoOperationError(str(first_error.get("msg") or "參數格式錯誤"), 400) from err
 
     if 'title' in data:
         if not isinstance(data['title'], str) or not data['title'].strip():

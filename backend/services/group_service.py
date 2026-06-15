@@ -7,6 +7,7 @@ import threading
 import uuid
 from typing import Any, TypedDict
 
+from pydantic import ValidationError
 from sqlalchemy.exc import IntegrityError
 from models.group import Group
 from models.group import GroupMember
@@ -26,6 +27,7 @@ from repositories.group_repository import (
 )
 from repositories.session_repository import add_entity, delete_entity, flush_session
 from services.ai_provider import get_ai_provider
+from contracts.group_contracts import GroupCreateRequest, GroupJoinRequest, GroupMessageRequest
 from services.transactions import transaction
 
 
@@ -176,9 +178,11 @@ def create_group_for_user(user_id: int, group_name: str) -> dict[str, Any]:
     例外:
         GroupOperationError: 輸入無效或資料寫入失敗。
     """
-    normalized_name = group_name.strip() if isinstance(group_name, str) else ''
-    if not normalized_name:
-        raise GroupOperationError('請輸入群組名稱', 400)
+    try:
+        normalized_name = GroupCreateRequest.model_validate({"group_name": group_name}).group_name
+    except ValidationError as err:
+        first_error = err.errors()[0] if err.errors() else {}
+        raise GroupOperationError(str(first_error.get("msg") or "請輸入群組名稱"), 400) from err
 
     max_attempts = 3
     for _ in range(max_attempts):
@@ -216,9 +220,11 @@ def join_group_by_invite_code(user_id: int, invite_code: str) -> None:
     例外:
         GroupOperationError: 邀請碼無效、成員重複或交易失敗。
     """
-    normalized_code = invite_code.strip() if isinstance(invite_code, str) else ''
-    if not normalized_code:
-        raise GroupOperationError('請輸入邀請碼', 400)
+    try:
+        normalized_code = GroupJoinRequest.model_validate({"invite_code": invite_code}).invite_code
+    except ValidationError as err:
+        first_error = err.errors()[0] if err.errors() else {}
+        raise GroupOperationError(str(first_error.get("msg") or "請輸入邀請碼"), 400) from err
 
     group = get_group_by_invite_code(normalized_code)
     if not group:
@@ -287,9 +293,11 @@ def send_group_message_for_member(group_id: int, user_id: int, content: str) -> 
     例外:
         GroupOperationError: 內容為空、權限不足或資料寫入失敗。
     """
-    normalized_content = content.strip() if isinstance(content, str) else ''
-    if not normalized_content:
-        raise GroupOperationError('訊息內容不可為空', 400)
+    try:
+        normalized_content = GroupMessageRequest.model_validate({"content": content}).content
+    except ValidationError as err:
+        first_error = err.errors()[0] if err.errors() else {}
+        raise GroupOperationError(str(first_error.get("msg") or "訊息內容不可為空"), 400) from err
 
     if not is_group_member(group_id, user_id):
         raise GroupOperationError('您不是該群組成員', 403)

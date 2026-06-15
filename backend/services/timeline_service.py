@@ -49,9 +49,11 @@ from repositories.timeline_repository import (
     get_users_by_ids,
 )
 from repositories.session_repository import add_entity, delete_entity, flush_session
-from services.contracts.timeline_contracts import (
+from contracts.timeline_contracts import (
     ConflictCheckInput,
+    TimelineCreateInput,
     TimelineBatchCreateTasksInput,
+    TimelineUpdateInput,
     WeeklyReportInput,
 )
 
@@ -353,38 +355,18 @@ def create_timeline_for_user(user_id: int, data: dict[str, Any]) -> int:
     例外:
         TimelineOperationError: 驗證失敗或資料寫入失敗。
     """
-    name = data.get('name')
-    start_date_raw = data.get('start_date', '')
-    end_date_raw = data.get('end_date', '')
-    remark = data.get('remark', '')
-
-    if not isinstance(name, str) or not name.strip():
-        raise TimelineOperationError('請提供專案名稱（字串）', 400)
-    if not isinstance(start_date_raw, str):
-        raise TimelineOperationError('開始日期必須是字串', 400)
-    if not isinstance(end_date_raw, str):
-        raise TimelineOperationError('結束日期必須是字串', 400)
-
-    start_date = None
-    if start_date_raw.strip():
-        try:
-            start_date = datetime.fromisoformat(start_date_raw)
-        except ValueError:
-            raise TimelineOperationError('開始日期格式錯誤，請用 YYYY-MM-DD', 400)
-
-    end_date = None
-    if end_date_raw.strip():
-        try:
-            end_date = datetime.fromisoformat(end_date_raw)
-        except ValueError:
-            raise TimelineOperationError('結束日期格式錯誤，請用 YYYY-MM-DD', 400)
+    try:
+        create_input = TimelineCreateInput.model_validate(data)
+    except ValidationError as err:
+        first_error = err.errors()[0] if err.errors() else {}
+        raise TimelineOperationError(str(first_error.get("msg") or "參數格式錯誤"), 400) from err
 
     new_timeline = build_timeline_entity(
         user_id=user_id,
-        name=name.strip(),
-        start_date=start_date,
-        end_date=end_date,
-        remark=remark,
+        name=create_input.name.strip(),
+        start_date=create_input.start_date,
+        end_date=create_input.end_date,
+        remark=create_input.remark,
     )
 
     with transaction(TimelineOperationError, '專案新增失敗，請稍後再試'):
@@ -408,39 +390,24 @@ def update_timeline_for_member(timeline_id: int, operator_user_id: int, data: di
     unknown_fields = find_unknown_fields(data, TIMELINE_UPDATE_ALLOWED_FIELDS)
     if unknown_fields:
         raise TimelineOperationError(f'不允許的欄位: {", ".join(unknown_fields)}', 400)
+    try:
+        update_input = TimelineUpdateInput.model_validate(data)
+    except ValidationError as err:
+        first_error = err.errors()[0] if err.errors() else {}
+        raise TimelineOperationError(str(first_error.get("msg") or "參數格式錯誤"), 400) from err
 
     with transaction(TimelineOperationError, '專案更新失敗，請稍後再試'):
         if 'name' in data:
-            if not data['name'] or not data['name'].strip():
-                raise TimelineOperationError('專案名稱不可為空', 400)
-            timeline.name = data['name'].strip()
+            timeline.name = update_input.name.strip()
 
         if 'start_date' in data:
-            start_date_value = data['start_date']
-            if start_date_value and isinstance(start_date_value, str) and start_date_value.strip():
-                try:
-                    timeline.start_date = datetime.fromisoformat(start_date_value)
-                except ValueError:
-                    raise TimelineOperationError('開始日期格式錯誤', 400)
-            elif start_date_value in (None, ''):
-                timeline.start_date = None
-            else:
-                raise TimelineOperationError('開始日期格式錯誤', 400)
+            timeline.start_date = update_input.start_date
 
         if 'end_date' in data:
-            end_date_value = data['end_date']
-            if end_date_value and isinstance(end_date_value, str) and end_date_value.strip():
-                try:
-                    timeline.end_date = datetime.fromisoformat(end_date_value)
-                except ValueError:
-                    raise TimelineOperationError('結束日期格式錯誤', 400)
-            elif end_date_value in (None, ''):
-                timeline.end_date = None
-            else:
-                raise TimelineOperationError('結束日期格式錯誤', 400)
+            timeline.end_date = update_input.end_date
 
         if 'remark' in data:
-            timeline.remark = data['remark']
+            timeline.remark = update_input.remark
 
 
 def soft_delete_timeline_for_owner(timeline_id: int) -> None:

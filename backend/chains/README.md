@@ -21,7 +21,7 @@
 
 1. 若問題是流程分支、tool 選擇或錯誤後續處理，優先看本目錄。
 2. 若問題是某個能力真正如何建立資料或更新狀態，應回到 `backend/services/`。
-3. 若問題是工具 schema 或 envelope 邊界，應先檢查 `backend/services/contracts/`。
+3. 若問題是工具 schema 或 envelope 邊界，應先檢查 `backend/contracts/`。
 4. 若問題是 prompt 內容與模型規則，應檢查 `backend/prompts/`。
 
 ## 維護原則

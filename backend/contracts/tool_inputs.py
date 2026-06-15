@@ -2,17 +2,9 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from services.contracts.task_contracts import TaskCreateInput, TaskUpdateInput
-from services.contracts.timeline_contracts import ConflictCheckInput
-
-
-def _to_int_or_none(value: Any) -> int | None:
-    if value is None:
-        return None
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return None
+from contracts.shared_fields import parse_int_or_none
+from contracts.task_contracts import TaskCreateInput, TaskCreateRequest, TaskUpdateInput, TaskUpdateRequest
+from contracts.timeline_contracts import ConflictCheckInput, TimelineWriteRequest
 
 
 class CreateTaskToolInput(BaseModel):
@@ -122,7 +114,7 @@ class KnowledgeListToolInput(BaseModel):
     @field_validator("limit", mode="before")
     @classmethod
     def _normalize_limit(cls, value: Any) -> int:
-        parsed = _to_int_or_none(value)
+        parsed = parse_int_or_none(value)
         if parsed is None or parsed <= 0:
             return 50
         return min(parsed, 100)
@@ -130,54 +122,15 @@ class KnowledgeListToolInput(BaseModel):
     @field_validator("offset", mode="before")
     @classmethod
     def _normalize_offset(cls, value: Any) -> int:
-        parsed = _to_int_or_none(value)
+        parsed = parse_int_or_none(value)
         if parsed is None or parsed < 0:
             return 0
         return parsed
 
 
-class CreateTaskToolPayload(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
+class CreateTaskToolPayload(TaskCreateRequest):
     name: str | None = None
     end_date: str | None = None
-    timeline_id: int | None = None
-    priority: int | None = None
-    status: str | None = None
-    tags: list[str] | None = None
-    estimated_hours: int | float | None = None
-    start_date: str | None = None
-    task_remark: str | None = None
-    isWork: int | bool | None = None
-    assignee_user_ids: list[int] | None = None
-    depends_on_task_ids: list[int] | None = None
-
-    @field_validator("name", mode="before")
-    @classmethod
-    def _normalize_name(cls, value: Any) -> str | None:
-        if value is None:
-            return None
-        text = str(value).strip()
-        if not text:
-            raise ValueError("name 不可為空")
-        return text
-
-    @field_validator("end_date", "start_date", mode="before")
-    @classmethod
-    def _normalize_date_text(cls, value: Any) -> str | None:
-        if value in (None, ""):
-            return None
-        return str(value)
-
-    @field_validator("timeline_id", mode="before")
-    @classmethod
-    def _normalize_timeline_id(cls, value: Any) -> int | None:
-        if value in (None, ""):
-            return None
-        parsed = _to_int_or_none(value)
-        if parsed is None:
-            raise ValueError("timeline_id 必須是整數")
-        return parsed
 
     @model_validator(mode="after")
     def _validate_contract_shape(self):
@@ -196,31 +149,7 @@ class CreateTaskToolPayload(BaseModel):
         return self
 
 
-class UpdateTaskToolPayload(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    name: str | None = None
-    timeline_id: int | None = None
-    priority: int | None = None
-    status: str | None = None
-    tags: list[str] | None = None
-    estimated_hours: int | float | None = None
-    actual_hours: int | float | None = None
-    start_date: str | None = None
-    end_date: str | None = None
-    task_remark: str | None = None
-    isWork: int | bool | None = None
-    depends_on_task_ids: list[int] | None = None
-
-    @field_validator("timeline_id", mode="before")
-    @classmethod
-    def _normalize_timeline_id(cls, value: Any) -> int | None:
-        if value in (None, ""):
-            return None
-        parsed = _to_int_or_none(value)
-        if parsed is None:
-            raise ValueError("timeline_id 必須是整數")
-        return parsed
+class UpdateTaskToolPayload(TaskUpdateRequest):
 
     @model_validator(mode="after")
     def _validate_contract_shape(self):
@@ -228,30 +157,8 @@ class UpdateTaskToolPayload(BaseModel):
         return self
 
 
-class CreateTimelineToolPayload(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    name: str | None = None
-    start_date: str | None = None
-    end_date: str | None = None
-    remark: str | None = None
-
-    @field_validator("name", mode="before")
-    @classmethod
-    def _normalize_name(cls, value: Any) -> str | None:
-        if value is None:
-            return None
-        text = str(value).strip()
-        if not text:
-            raise ValueError("name 不可為空")
-        return text
-
-    @field_validator("start_date", "end_date", mode="before")
-    @classmethod
-    def _normalize_date_text(cls, value: Any) -> str | None:
-        if value in (None, ""):
-            return None
-        return str(value)
+class CreateTimelineToolPayload(TimelineWriteRequest):
+    pass
 
 
 class BatchCreateTaskItem(BaseModel):
@@ -272,7 +179,7 @@ class BatchCreateTaskItem(BaseModel):
     def _normalize_task_id(cls, value: Any) -> int | None:
         if value in (None, ""):
             return None
-        parsed = _to_int_or_none(value)
+        parsed = parse_int_or_none(value)
         if parsed is None or parsed <= 0:
             raise ValueError("task_id 必須是正整數")
         return parsed
@@ -292,7 +199,7 @@ class BatchCreateTaskItem(BaseModel):
     def _normalize_estimated_days(cls, value: Any) -> int | None:
         if value in (None, ""):
             return None
-        parsed = _to_int_or_none(value)
+        parsed = parse_int_or_none(value)
         if parsed is None or parsed <= 0:
             raise ValueError("estimated_days 必須是正整數")
         return parsed
