@@ -2,7 +2,7 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from services.contracts.tool_envelopes import ToolError
+from contracts.tool_envelopes import ToolError
 
 
 STATUS_TO_ERROR_CODE: dict[int, str] = {

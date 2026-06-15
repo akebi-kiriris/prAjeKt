@@ -1,7 +1,7 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from pydantic import BaseModel, ConfigDict, field_validator
 from blueprints.validation import error_from_exception, error_response, validate_payload_or_400
+from contracts.profile_contracts import ProfileSearchRequest, ProfileUpdateRequest
 from services.profile_service import (
     ProfileOperationError,
     build_chart_stats_for_user,
@@ -13,28 +13,6 @@ from services.profile_service import (
 )
 
 profile_bp = Blueprint('profile', __name__)
-
-
-class ProfileUpdatePayload(BaseModel):
-    model_config = ConfigDict(extra='forbid')
-    name: str | None = None
-    username: str | None = None
-    email: str | None = None
-    bio: str | None = None
-    avatar: str | None = None
-
-
-class ProfileSearchPayload(BaseModel):
-    model_config = ConfigDict(extra='forbid')
-    query: str
-
-    @field_validator('query')
-    @classmethod
-    def validate_query(cls, value):
-        if not str(value).strip():
-            raise ValueError('請提供查詢關鍵字')
-        return value
-
 
 def _get_json_dict_or_400():
     data = request.get_json(silent=True)
@@ -66,7 +44,7 @@ def update_profile():
     data, error = _get_json_dict_or_400()
     if error:
         return error
-    data, error = _validate_payload_or_400(ProfileUpdatePayload, data)
+    data, error = _validate_payload_or_400(ProfileUpdateRequest, data)
     if error:
         return error
 
@@ -83,7 +61,7 @@ def search_user():
     data, error = _get_json_dict_or_400()
     if error:
         return error
-    data, error = _validate_payload_or_400(ProfileSearchPayload, data)
+    data, error = _validate_payload_or_400(ProfileSearchRequest, data)
     if error:
         return error
 

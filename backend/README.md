@@ -6,23 +6,25 @@
 
 1. `blueprints/`
    - HTTP route、request/response 邊界與 API 層驗證。
-2. `services/`
+2. `contracts/`
+   - backend 共用契約層，供 blueprint / service / tool 共用 schema、envelope 與純欄位驗證。
+3. `services/`
    - 業務流程、交易協調與跨 repository orchestration。
-3. `repositories/`
+4. `repositories/`
    - 資料查詢、寫入與 session 存取封裝。
-4. `models/`
+5. `models/`
    - SQLAlchemy ORM model 與資料結構定義。
-5. `chains/`
+6. `chains/`
    - LangGraph、LLM chain 與 agent 流程控制。
-6. `prompts/`
+7. `prompts/`
    - AI prompt template 與 prompt 組裝 helper。
-7. `realtime/`
+8. `realtime/`
    - Socket.IO 即時事件與連線邏輯。
-8. `migrations/`
+9. `migrations/`
    - Alembic / Flask-Migrate schema 版本管理。
-9. `scripts/`
+10. `scripts/`
    - 維護型腳本、初始化工具與診斷腳本。
-10. `tests/`
+11. `tests/`
    - pytest 測試與共用測試設定。
 
 ## 根層文件與入口

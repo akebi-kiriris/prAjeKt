@@ -1,6 +1,7 @@
 ﻿from datetime import datetime, timedelta, timezone
 from typing import Any
 
+from pydantic import ValidationError
 from werkzeug.security import check_password_hash, generate_password_hash
 from models.user import User
 
@@ -14,6 +15,7 @@ from repositories.profile_repository import (
     list_timeline_ids_for_user,
     search_user_by_username_or_email,
 )
+from contracts.profile_contracts import ProfileSearchRequest, ProfileUpdateRequest
 from services.transactions import transaction
 
 
@@ -117,6 +119,12 @@ def update_profile_for_user(user_id: int, data: dict[str, Any]) -> None:
     """
     if not isinstance(data, dict):
         raise ProfileOperationError('請提供正確的 JSON 物件', 400)
+    try:
+        validated = ProfileUpdateRequest.model_validate(data)
+        data = validated.model_dump(exclude_unset=True)
+    except ValidationError as err:
+        first_error = err.errors()[0] if err.errors() else {}
+        raise ProfileOperationError(str(first_error.get("msg") or "參數格式錯誤"), 400) from err
 
     user = get_profile_user_or_404(user_id)
 
@@ -177,9 +185,11 @@ def search_user_by_query(query: str) -> User:
     例外:
         ProfileOperationError: 查詢為空或找不到使用者。
     """
-    normalized_query = query.strip() if isinstance(query, str) else ''
-    if not normalized_query:
-        raise ProfileOperationError('請提供搜尋條件', 400)
+    try:
+        normalized_query = ProfileSearchRequest.model_validate({"query": query}).query
+    except ValidationError as err:
+        first_error = err.errors()[0] if err.errors() else {}
+        raise ProfileOperationError(str(first_error.get("msg") or "請提供搜尋條件"), 400) from err
 
     user = search_user_by_username_or_email(normalized_query)
 

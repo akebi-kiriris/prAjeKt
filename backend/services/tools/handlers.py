@@ -3,8 +3,8 @@ from typing import Any
 
 from werkzeug.datastructures import FileStorage
 
-from services.contracts.tool_envelopes import make_failure, make_success
-from services.contracts.tool_inputs import (
+from contracts.tool_envelopes import make_failure, make_success
+from contracts.tool_inputs import (
     CreateTimelineToolInput,
     CreateTaskToolInput,
     GroupSnapshotToolInput,
@@ -17,7 +17,7 @@ from services.contracts.tool_inputs import (
     TimelineGenerateTasksToolInput,
     UpdateTaskToolInput,
 )
-from services.contracts.tool_outputs import (
+from contracts.tool_outputs import (
     CommonToolOutput,
     CreateTimelineToolOutput,
     GroupSnapshotToolOutput,

@@ -3,9 +3,9 @@ import os
 import warnings
 from typing import Any, Callable
 
-from services.contracts.tool_envelopes import make_failure
+from contracts.tool_envelopes import make_failure
 from services.tools.error_mapper import map_exception_to_tool_error
-from services.contracts.tool_inputs import (
+from contracts.tool_inputs import (
     CreateTimelineToolInput,
     CreateTaskToolInput,
     GroupSnapshotToolInput,

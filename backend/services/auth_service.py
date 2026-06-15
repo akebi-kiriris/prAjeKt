@@ -1,9 +1,11 @@
 ﻿from werkzeug.security import check_password_hash, generate_password_hash
 from sqlalchemy.exc import IntegrityError
+from pydantic import ValidationError
 from models.user import User
 from typing import Any
 from repositories.auth_repository import get_user_by_email, get_user_by_id, get_user_by_username
 from repositories.session_repository import add_entity
+from contracts.auth_contracts import RegisterRequest
 from services.transactions import transaction
 
 
@@ -61,11 +63,18 @@ def register_user(data: dict[str, Any]) -> int:
     例外:
         AuthOperationError: 欄位缺漏、帳號重複或交易失敗。
     """
-    name = (data.get('name') or '').strip()
-    username = data.get('username')
-    email = (data.get('email') or '').strip().lower()
-    password = data.get('password')
-    phone = data.get('phone')
+    try:
+        register_input = RegisterRequest.model_validate(data)
+    except ValidationError as err:
+        message = err.errors()
+        first_error = message[0] if message else {}
+        raise AuthOperationError(str(first_error.get("msg") or "缺少必要欄位"), 400) from err
+
+    name = register_input.name.strip()
+    username = register_input.username
+    email = register_input.email.strip().lower()
+    password = register_input.password
+    phone = register_input.phone
     username = username.strip() if isinstance(username, str) and username.strip() else None
     phone = phone.strip() if isinstance(phone, str) and phone.strip() else None
 

@@ -1,8 +1,13 @@
 from flask import Blueprint, request, jsonify, current_app
 import os
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from pydantic import BaseModel, ConfigDict, Field, field_validator
 from blueprints.validation import error_from_exception, error_response, validate_payload_or_400
+from contracts.group_contracts import (
+    GroupCreateRequest,
+    GroupJoinRequest,
+    GroupMessageRequest,
+    GroupSnapshotRequest,
+)
 from services.group_service import (
     GroupOperationError,
     count_group_messages_for_snapshot,
@@ -23,37 +28,6 @@ from services.group_service import (
 )
 
 groups_bp = Blueprint('groups', __name__)
-
-
-class GroupCreatePayload(BaseModel):
-    model_config = ConfigDict(extra='forbid')
-    group_name: str
-
-
-class GroupJoinPayload(BaseModel):
-    model_config = ConfigDict(extra='forbid')
-    invite_code: str
-
-
-class GroupMessagePayload(BaseModel):
-    model_config = ConfigDict(extra='forbid')
-    content: str
-
-
-class GroupSnapshotPayload(BaseModel):
-    model_config = ConfigDict(extra='forbid', populate_by_name=True)
-    window_days: int | None = None
-    async_flag: bool | int | str = Field(default=False, alias='async')
-
-    @field_validator('window_days')
-    @classmethod
-    def validate_window_days(cls, value):
-        if value is None:
-            return value
-        if value <= 0:
-            raise ValueError('window_days 必須為正整數')
-        return value
-
 
 def _get_json_dict_or_400():
     data = request.get_json(silent=True)
@@ -103,7 +77,7 @@ def create_group():
     data, error = _get_json_dict_or_400()
     if error:
         return error
-    data, error = _validate_payload_or_400(GroupCreatePayload, data)
+    data, error = _validate_payload_or_400(GroupCreateRequest, data)
     if error:
         return error
 
@@ -125,7 +99,7 @@ def join_group():
     data, error = _get_json_dict_or_400()
     if error:
         return error
-    data, error = _validate_payload_or_400(GroupJoinPayload, data)
+    data, error = _validate_payload_or_400(GroupJoinRequest, data)
     if error:
         return error
 
@@ -179,7 +153,7 @@ def send_message(group_id):
     data, error = _get_json_dict_or_400()
     if error:
         return error
-    data, error = _validate_payload_or_400(GroupMessagePayload, data)
+    data, error = _validate_payload_or_400(GroupMessageRequest, data)
     if error:
         return error
 
@@ -198,7 +172,7 @@ def generate_ai_snapshot(group_id):
     data, error = _get_json_dict_or_400()
     if error:
         return error
-    data, error = _validate_payload_or_400(GroupSnapshotPayload, data)
+    data, error = _validate_payload_or_400(GroupSnapshotRequest, data)
     if error:
         return error
 

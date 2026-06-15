@@ -1,7 +1,7 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from pydantic import BaseModel, ConfigDict, field_validator
 from blueprints.validation import error_from_exception, error_response, validate_payload_or_400
+from contracts.todo_contracts import TodoCreateRequest, TodoUpdateRequest
 from services.todo_service import (
     TodoOperationError,
     create_todo_for_user,
@@ -13,33 +13,6 @@ from services.todo_service import (
 )
 
 todos_bp = Blueprint('todos', __name__)
-
-
-class TodoCreatePayload(BaseModel):
-    model_config = ConfigDict(extra='forbid')
-    title: str
-    content: str
-    type: str | None = None
-    deadline: str | None = None
-    priority: int | None = None
-
-    @field_validator('title', 'content')
-    @classmethod
-    def validate_text(cls, value):
-        if not str(value).strip():
-            raise ValueError('請確認是否有填入事項名稱或內容')
-        return value
-
-
-class TodoUpdatePayload(BaseModel):
-    model_config = ConfigDict(extra='forbid')
-    title: str | None = None
-    content: str | None = None
-    type: str | None = None
-    deadline: str | None = None
-    priority: int | None = None
-    completed: bool | None = None
-
 
 def _get_json_dict_or_400():
     data = request.get_json(silent=True)
@@ -72,7 +45,7 @@ def create_todo():
     data, error = _get_json_dict_or_400()
     if error:
         return error
-    data, error = _validate_payload_or_400(TodoCreatePayload, data)
+    data, error = _validate_payload_or_400(TodoCreateRequest, data)
     if error:
         return error
 
@@ -90,7 +63,7 @@ def update_todo(todo_id):
     data, error = _get_json_dict_or_400()
     if error:
         return error
-    data, error = _validate_payload_or_400(TodoUpdatePayload, data)
+    data, error = _validate_payload_or_400(TodoUpdateRequest, data)
     if error:
         return error
 

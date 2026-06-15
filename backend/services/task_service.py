@@ -51,7 +51,13 @@ from repositories.task_repository import (
     remove_task_member,
 )
 from repositories.session_repository import add_entity, delete_entity, flush_session
-from services.contracts.task_contracts import TaskCreateInput, TaskStatusUpdateInput, TaskUpdateInput
+from contracts.task_contracts import (
+    TaskCreateInput,
+    TaskCreateRequest,
+    TaskStatusUpdateInput,
+    TaskUpdateInput,
+    TaskUpdateRequest,
+)
 
 TASK_CREATE_ALLOWED_FIELDS = {
     'name',
@@ -225,14 +231,15 @@ def _validation_error_to_task_operation_error(err: ValidationError) -> TaskOpera
 
 
 def _validate_task_create_input(data: dict[str, Any]) -> TaskCreateInput:
-    payload = {
-        'status': data.get('status', 'pending'),
-        'priority': data.get('priority', 2),
-        'start_date': data.get('start_date'),
-        'end_date': data.get('end_date'),
-        'timeline_id': data.get('timeline_id'),
-    }
     try:
+        TaskCreateRequest.model_validate(data)
+        payload = {
+            'status': data.get('status', 'pending'),
+            'priority': data.get('priority', 2),
+            'start_date': data.get('start_date'),
+            'end_date': data.get('end_date'),
+            'timeline_id': data.get('timeline_id'),
+        }
         return TaskCreateInput.model_validate(payload)
     except ValidationError as err:
         raise _validation_error_to_task_operation_error(err) from err
@@ -240,6 +247,7 @@ def _validate_task_create_input(data: dict[str, Any]) -> TaskCreateInput:
 
 def _validate_task_update_input(data: dict[str, Any]) -> TaskUpdateInput:
     try:
+        TaskUpdateRequest.model_validate(data)
         return TaskUpdateInput.model_validate(data)
     except ValidationError as err:
         raise _validation_error_to_task_operation_error(err) from err

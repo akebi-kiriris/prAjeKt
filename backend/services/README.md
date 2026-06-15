@@ -5,7 +5,7 @@
 ## 內容分工
 
 1. `contracts/`
-   - 輸入輸出 schema、欄位驗證與契約定義。
+   - 已搬遷至 `backend/contracts/`，作為 backend 共用契約層。
 2. `tools/`
    - 給 agent 使用的工具包裝層與執行入口。
 3. `*_service.py`
@@ -33,10 +33,10 @@
 1. API 層參數來源、權限與 HTTP 回應，應放 `backend/blueprints/`
 2. 純資料存取與查詢封裝，應放 `backend/repositories/`
 3. agent 流程節點與圖結構，應放 `backend/chains/`
-4. agent 工具 I/O 邊界問題，優先檢查 `contracts/` 與 `tools/`
+4. agent 工具 I/O 邊界問題，優先檢查 `backend/contracts/` 與 `tools/`
 
 ## 維護原則
 
 1. service 應以業務流程為中心，不重複包裝 route 或 repository 的責任。
-2. 若某段邏輯主要是資料契約，應抽至 `contracts/`。
+2. 若某段邏輯主要是資料契約，應抽至 `backend/contracts/`。
 3. 若某段邏輯主要是 agent 工具入口與錯誤映射，應抽至 `tools/`。

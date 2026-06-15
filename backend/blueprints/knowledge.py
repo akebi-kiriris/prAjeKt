@@ -1,7 +1,7 @@
 from flask import Blueprint, jsonify, request, send_file
 from flask_jwt_extended import get_jwt_identity, jwt_required
-from pydantic import BaseModel, ConfigDict
 from blueprints.validation import error_from_exception, error_response, validate_payload_or_400
+from contracts.knowledge_contracts import KnowledgeDocumentBatchRequest
 
 from services.knowledge_service import (
     KnowledgeOperationError,
@@ -18,12 +18,6 @@ from repositories.timeline_repository import get_timeline_member
 
 
 knowledge_bp = Blueprint("knowledge", __name__)
-
-
-class KnowledgeBatchPayload(BaseModel):
-    model_config = ConfigDict(extra='forbid')
-    document_ids: list[int]
-
 
 def _validate_payload_or_400(model_cls, payload):
     return validate_payload_or_400(model_cls, payload)
@@ -165,7 +159,7 @@ def batch_delete_knowledge_documents_api():
     if membership_error:
         return membership_error
     payload = request.get_json(silent=True) or {}
-    payload, payload_error = _validate_payload_or_400(KnowledgeBatchPayload, payload)
+    payload, payload_error = _validate_payload_or_400(KnowledgeDocumentBatchRequest, payload)
     if payload_error:
         return payload_error
     document_ids = payload["document_ids"]
@@ -186,7 +180,7 @@ def batch_reindex_knowledge_documents_api():
     if membership_error:
         return membership_error
     payload = request.get_json(silent=True) or {}
-    payload, payload_error = _validate_payload_or_400(KnowledgeBatchPayload, payload)
+    payload, payload_error = _validate_payload_or_400(KnowledgeDocumentBatchRequest, payload)
     if payload_error:
         return payload_error
     document_ids = payload["document_ids"]

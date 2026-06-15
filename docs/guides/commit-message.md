@@ -1,140 +1,118 @@
-feat: 新增 agent trace 基線並推進 Phase 10 契約收斂
+refactor: 正式定版 backend 共用契約層並收尾 Phase 10.2
 
-這次提交把兩條原本分散的主線正式收進同一波交付：一條是 `Phase 9.6` 的 trace-only 前置項，先為 agent 的 `plan / reject / execute / replan` 補上最小可追蹤能力；另一條是 `Phase 10` 的全系統契約收斂，先完成第一輪契約地圖盤點、前後端型別 / response 對齊，以及後端契約來源收斂規劃。
+這次提交把 Phase 10.2 的第一輪後端契約來源收斂正式收尾，重點不是再新增一批 request schema，而是把已經收斂完成的契約層語意正式定版為 `backend/contracts/`，讓 blueprint / service / tool 後續都以這層作為後端共用契約真相來源，同時把相關 README、索引、重構計畫與後續確認文件一併對齊。
 
 ---
 
-一、Agent trace-only 前置基線
+一、backend 契約層正式搬遷與定版
 
 - 新增：
-  - `backend/services/agent_trace_service.py`
+  - `backend/contracts/README.md`
+  - `backend/contracts/__init__.py`
+  - `backend/contracts/auth_contracts.py`
+  - `backend/contracts/group_contracts.py`
+  - `backend/contracts/knowledge_contracts.py`
+  - `backend/contracts/profile_contracts.py`
+  - `backend/contracts/shared_fields.py`
+  - `backend/contracts/task_contracts.py`
+  - `backend/contracts/timeline_contracts.py`
+  - `backend/contracts/todo_contracts.py`
+  - `backend/contracts/tool_envelopes.py`
+  - `backend/contracts/tool_inputs.py`
+  - `backend/contracts/tool_outputs.py`
 
-- 調整：
-  - `backend/blueprints/copilot.py`
-  - `backend/services/copilot_service.py`
-  - `backend/chains/agent_graph.py`
-  - `backend/chains/agent_nodes.py`
-  - `backend/chains/agent_state.py`
-  - `backend/tests/services/test_copilot_plan_flow.py`
-  - `backend/tests/chains/test_agent_graph.py`
+- 刪除：
+  - `backend/services/contracts/README.md`
+  - `backend/services/contracts/__init__.py`
+  - `backend/services/contracts/task_contracts.py`
+  - `backend/services/contracts/timeline_contracts.py`
+  - `backend/services/contracts/tool_envelopes.py`
+  - `backend/services/contracts/tool_inputs.py`
+  - `backend/services/contracts/tool_outputs.py`
 
 - 本輪收斂重點：
-  - 為 agent 操作補上 `request_id` / `plan_id` 串接
-  - 建立 in-memory trace 結構，記錄 route、event、status、duration、error_code
-  - 讓 `plan / reject / execute` 與 graph node 都能寫入一致欄位的 trace event
-  - 在 service response 中回傳 `request_id` 與 `trace`，方便前端與後續 Phase 12/13 延伸
+  - 將原本位於 `backend/services/contracts/` 的共用契約層正式搬遷到 `backend/contracts/`
+  - 不再把這層視為 service 私有子目錄，而是明確定義為 backend-wide contract layer
+  - 後續 blueprint / service / tool 直接以 `backend/contracts/` 作為 schema、envelope 與 shared field 規則的真相來源
 
 ---
 
-二、Phase 10.1 第一批前後端契約對齊
+二、backend import 與責任邊界同步對齊
 
 - 調整：
-  - `frontend/src/services/taskService.ts`
-  - `frontend/src/types/task.ts`
-  - `frontend/src/components/timelines/TimelineViewModes.vue`
-  - `frontend/src/components/timelines/__tests__/TimelineViewModes.test.ts`
-  - `frontend/src/services/groupService.ts`
-  - `frontend/src/types/group.ts`
-  - `frontend/src/stores/groups.ts`
-  - `frontend/src/stores/__tests__/groups.test.ts`
-  - `frontend/src/views/GroupsView.vue`
-  - `frontend/src/services/notificationService.ts`
-  - `frontend/src/services/timelineService.ts`
-  - `frontend/src/services/todoService.ts`
-  - `frontend/src/services/trashService.ts`
-  - `frontend/src/types/copilot.ts`
-  - `frontend/src/services/__tests__/taskService.test.ts`
+  - `backend/blueprints/auth.py`
+  - `backend/blueprints/groups.py`
+  - `backend/blueprints/knowledge.py`
+  - `backend/blueprints/profile.py`
+  - `backend/blueprints/tasks.py`
+  - `backend/blueprints/timelines.py`
+  - `backend/blueprints/todos.py`
+  - `backend/services/auth_service.py`
+  - `backend/services/group_service.py`
+  - `backend/services/profile_service.py`
+  - `backend/services/task_service.py`
+  - `backend/services/timeline_service.py`
+  - `backend/services/todo_service.py`
+  - `backend/services/tools/error_mapper.py`
+  - `backend/services/tools/handlers.py`
+  - `backend/services/tools/registry.py`
 
-- 本輪對齊內容：
-  - `tasks` 子任務 response envelope 改以 `message + subtask` 對齊後端
-  - `task tags` 支援字串輸入並在送出前正規化為陣列或 `null`
-  - `groups` create / join / leave / sendMessage response shape 改為明確契約型別
-  - `notifications` / `timelines` / `todos` / `trash` 的 mutation response 改回明確 envelope
-  - `copilot` 前端型別補上 `request_id` 與 `trace`
-  - 移除前端高風險 cast，改用可追的正式型別
+- 本輪調整內容：
+  - 將 backend 內所有 `services.contracts.*` import 改為 `contracts.*`
+  - 將 contract 檔案內部對 `shared_fields.py`、task/timeline contract 的引用一併改成新路徑
+  - 確保 blueprint / service / tools 這三個主要 consumer 都以同一層共用契約為入口
 
 ---
 
-三、Phase 10 文件與契約來源規劃
+三、README、索引與 Phase 10 文件同步更新
 
-- 新增：
-  - `docs/phases/Phase10_契約收斂與前後端對齊規劃_2026-06-12.md`
-  - `docs/phases/Phase10_1_全系統契約盤點基線規劃_2026-06-12.md`
-  - `docs/phases/Phase10_2_後端契約來源收斂規劃_2026-06-12.md`
+- 調整：
+  - `backend/README.md`
+  - `backend/services/README.md`
+  - `backend/chains/README.md`
   - `docs/reference/backend_契約來源索引.md`
-
-- 更新：
-  - `docs/phases/Phase9_6_Agent可觀測性與評測基線規劃_2026-06-02.md`
+  - `docs/reference/Phase10_2_後端契約收斂實作整理_2026-06-15.md`
+  - `docs/reference/Phase10_2_後續確認清單_2026-06-16.md`
+  - `docs/future/Future_validation_helper_位置調整評估_2026-06-16.md`
+  - `docs/phases/Phase10_2_後端契約來源收斂規劃_2026-06-12.md`
   - `docs/重構計畫.md`
   - `docs/進度追蹤.md`
 
 - 文件收斂重點：
-  - 將 9.6 明確改為 trace-only 前置項，evaluation 與 observability 延後到 Phase 12/13
-  - 將 Phase 10 重新定位為全系統前後端契約維護 phase，而非只偏 agent
-  - 為 Phase 10 補上 10.1、10.2、10.6、10.7 的收斂順序、完成定義與執行護欄
+  - 將原本「`services/contracts` 是否要升格為 `backend/contracts`」的討論，正式改成已定案狀態
+  - 更新 backend 契約來源索引與 Phase 10.2 實作整理，對齊新的 contract 真相來源位置
+  - 將 `validation.py` 保留在 `blueprints/` 的當前結論寫入後續確認清單與 future backlog
+  - 將 `10.3` 補成明確的 response contract 收斂起手式，避免後續只修 frontend consumer 而 source of truth 仍鬆散
 
 ---
 
-四、README 與 docs 目錄規範整理
+四、Phase 10.2 收尾判定
 
-- 更新：
-  - `backend/README.md`
-  - `backend/blueprints/README.md`
-  - `backend/chains/README.md`
-  - `backend/migrations/README.md`
-  - `backend/models/README.md`
-  - `backend/prompts/README.md`
-  - `backend/realtime/README.md`
-  - `backend/repositories/README.md`
-  - `backend/scripts/README.md`
-  - `backend/scripts/backfill/README.md`
-  - `backend/scripts/db/README.md`
-  - `backend/scripts/diagnostics/README.md`
-  - `backend/services/README.md`
-  - `backend/services/contracts/README.md`
-  - `backend/services/tools/README.md`
-  - `backend/tests/README.md`
-  - `frontend/src/README.md`
-  - `frontend/src/components/README.md`
-  - `frontend/src/components/__tests__/README.md`
-  - `frontend/src/components/timelines/README.md`
-  - `frontend/src/composables/README.md`
-  - `frontend/src/router/README.md`
-  - `frontend/src/services/README.md`
-  - `frontend/src/stores/README.md`
-  - `frontend/src/styles/README.md`
-  - `frontend/src/types/README.md`
-  - `frontend/src/utils/README.md`
-  - `frontend/src/views/README.md`
-  - `docs/README.md`
-  - `docs/future/README.md`
-  - `docs/workflows/README.md`
+- 本輪完成後，10.2 可視為已完成的部分：
+  - request contract 第一輪收斂
+  - contract source index 建立
+  - 欄位契約 / 業務規則 / protected fields / route-owned identifiers 邊界定義
+  - backend 共用契約層正式定版為 `backend/contracts/`
 
-- 刪除：
-  - `docs/Phase9_2_Docstring規範化規劃_2026-05-30.md`
-  - `docs/phase9_2_error_semantics_matrix.md`
-  - `docs/phase9_2_tool_entrypoints.md`
-  - `docs/phase9_2_tool_schema_contracts.md`
+- 本輪明確不納入的部分：
+  - response contract 第二輪收斂
+  - mutation / listing / analysis response 的全面命名與 envelope 統一
 
-- 本輪整理方向：
-  - 統一 backend / frontend / docs 目錄說明語氣與責任邊界
-  - 讓 README 更像持續維護的入口文件，而不是只保留一次性整理筆記
-  - 清掉已不適合留在 `docs/` 根層的舊 phase9.2 文件
+- 後續銜接：
+  - 這部分已明確留給 `10.3` 接續，先做 backend response contract 收斂，再做 frontend type / service 對齊
 
 ---
 
 五、驗證
 
-- `python -m pytest backend/tests/services/test_copilot_plan_flow.py backend/tests/chains/test_agent_graph.py -q`
-  - PASS（37 passed）
-- `npm run build`
-  - PASS
-- `npm run test -- taskService.test.ts groups.test.ts TimelineViewModes.test.ts`
-  - PASS（18 passed）
+- `python - <<py_compile>>`
+  - PASS（本輪搬遷與 import 調整涉及的 backend 檔案皆通過 `py_compile`）
+- `venv\\Scripts\\python.exe -m pytest tests/blueprints/test_auth.py tests/blueprints/test_groups.py tests/blueprints/test_knowledge.py tests/blueprints/test_profile.py tests/blueprints/test_tasks.py tests/blueprints/test_timelines.py tests/blueprints/test_todos.py tests/services/test_auth_service.py tests/services/test_group_service.py tests/services/test_profile_service.py tests/services/test_task_service.py tests/services/test_timeline_service_access.py tests/services/test_todo_service.py -q`
+  - PASS（`114 passed`，僅 `.pytest_cache` 權限 warning）
 
 ---
 
 六、補充
 
-- 這次提交同時包含行為收斂與文件收斂，但主題一致，都是為了讓 agent trace 與 Phase 10 契約治理有穩定地基
-- `agent_trace_service` 目前採用 lightweight in-memory 方式，先滿足 trace-only 前置需求；更完整的持久化與指標化收斂留待後續 phase
+- 這次提交雖然有不少檔案搬移與文件更新，但主題一致，都是為了讓 Phase 10.2 的「後端契約來源收斂」從過渡狀態變成正式結構
+- 舊的 phase / learning 文件中若仍保留 `backend/services/contracts/` 路徑，視為當時脈絡紀錄，不作為現行規範入口；現行維護應以 `backend/contracts/` 為主

@@ -1,7 +1,7 @@
 from flask import Blueprint, request, jsonify, session
 from flask_jwt_extended import create_access_token, create_refresh_token, jwt_required, get_jwt_identity
-from pydantic import BaseModel, ConfigDict, field_validator
 from blueprints.validation import error_from_exception, error_response, validate_payload_or_400
+from contracts.auth_contracts import LoginRequest, RegisterRequest
 from services.auth_service import (
     AuthOperationError,
     auth_user_to_dict,
@@ -12,38 +12,6 @@ from services.auth_service import (
 )
 
 auth_bp = Blueprint('auth', __name__)
-
-
-class RegisterPayload(BaseModel):
-    model_config = ConfigDict(extra='forbid')
-    name: str
-    username: str | None = None
-    email: str
-    password: str
-    phone: str | None = None
-
-    @field_validator('name', 'email', 'password')
-    @classmethod
-    def validate_required_text(cls, value):
-        if not str(value).strip():
-            raise ValueError('欄位不可為空')
-        return value
-
-    @field_validator('username', 'phone')
-    @classmethod
-    def validate_optional_text(cls, value):
-        if value is None:
-            return value
-        if not str(value).strip():
-            raise ValueError('欄位不可為空')
-        return value
-
-
-class LoginPayload(BaseModel):
-    model_config = ConfigDict(extra='forbid')
-    email: str
-    password: str
-
 
 def _get_json_dict_or_400():
     data = request.get_json(silent=True)
@@ -61,7 +29,7 @@ def register():
     data, error = _get_json_dict_or_400()
     if error:
         return error
-    data, error = _validate_payload_or_400(RegisterPayload, data)
+    data, error = _validate_payload_or_400(RegisterRequest, data)
     if error:
         return error
 
@@ -77,7 +45,7 @@ def login():
     data, error = _get_json_dict_or_400()
     if error:
         return error
-    data, error = _validate_payload_or_400(LoginPayload, data)
+    data, error = _validate_payload_or_400(LoginRequest, data)
     if error:
         return error
 
