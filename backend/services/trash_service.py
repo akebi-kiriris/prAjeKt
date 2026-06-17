@@ -1,5 +1,8 @@
 ﻿import os
 from typing import Any
+
+from contracts.response_helpers import build_response_payload
+from contracts.trash_contracts import TrashPayloadResponse, TrashTaskResponse, TrashTimelineResponse
 from models.task import Task
 from models.timeline import Timeline
 
@@ -27,26 +30,26 @@ class TrashOperationError(Exception):
 
 def trash_task_to_dict(task: Task, user_id: int) -> dict[str, Any]:
     """序列化已刪除任務資料。"""
-    return {
+    return build_response_payload(TrashTaskResponse, {
         'task_id': task.task_id,
         'name': task.name,
         'deleted_at': task.deleted_at.isoformat() + 'Z' if task.deleted_at else None,
         'end_date': task.end_date.isoformat() + 'Z' if task.end_date else None,
         'priority': task.priority,
         'is_owner': task.user_id == user_id,
-    }
+    })
 
 
 def trash_timeline_to_dict(timeline: Timeline, user_id: int) -> dict[str, Any]:
     """序列化已刪除專案資料。"""
-    return {
+    return build_response_payload(TrashTimelineResponse, {
         'id': timeline.id,
         'name': timeline.name,
         'deleted_at': timeline.deleted_at.isoformat() + 'Z' if timeline.deleted_at else None,
         'start_date': timeline.start_date.isoformat() + 'Z' if timeline.start_date else None,
         'end_date': timeline.end_date.isoformat() + 'Z' if timeline.end_date else None,
         'is_owner': timeline.user_id == user_id,
-    }
+    })
 
 
 def remove_task_files(task: Task) -> None:
@@ -88,7 +91,7 @@ def get_trash_payload(user_id: int) -> dict[str, list[dict[str, Any]]]:
         for timeline in own_deleted_timelines + member_deleted_timelines
     ]
 
-    return {'tasks': tasks_result, 'timelines': timelines_result}
+    return build_response_payload(TrashPayloadResponse, {'tasks': tasks_result, 'timelines': timelines_result})
 
 
 def restore_task_for_owner(task_id: int, user_id: int) -> None:

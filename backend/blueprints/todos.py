@@ -1,6 +1,7 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from blueprints.validation import error_from_exception, error_response, validate_payload_or_400
+from contracts.response_contracts import CompletionResponse, IdMutationResponse, MessageResponse, response_payload
 from contracts.todo_contracts import TodoCreateRequest, TodoUpdateRequest
 from services.todo_service import (
     TodoOperationError,
@@ -51,7 +52,7 @@ def create_todo():
 
     try:
         todo_id = create_todo_for_user(user_id, data)
-        return jsonify({'message': '待辦事項新增成功', 'id': todo_id}), 201
+        return jsonify(response_payload(IdMutationResponse(message='待辦事項新增成功', id=todo_id))), 201
     except TodoOperationError as err:
         return error_from_exception(err)
 
@@ -69,7 +70,7 @@ def update_todo(todo_id):
 
     try:
         update_todo_for_user(todo_id, user_id, data)
-        return jsonify({'message': '待辦事項更新成功'}), 200
+        return jsonify(response_payload(MessageResponse(message='待辦事項更新成功'))), 200
     except TodoOperationError as err:
         return error_from_exception(err)
 
@@ -81,7 +82,7 @@ def delete_todo(todo_id):
 
     try:
         soft_delete_todo_for_user(todo_id, user_id)
-        return jsonify({'message': '待辦事項刪除成功'}), 200
+        return jsonify(response_payload(MessageResponse(message='待辦事項刪除成功'))), 200
     except TodoOperationError as err:
         return error_from_exception(err)
 
@@ -93,7 +94,7 @@ def toggle_todo(todo_id):
 
     try:
         completed = toggle_todo_for_user(todo_id, user_id)
-        return jsonify({'message': '狀態更新成功', 'completed': completed}), 200
+        return jsonify(response_payload(CompletionResponse(message='狀態更新成功', completed=completed))), 200
     except TodoOperationError as err:
         return error_from_exception(err)
 

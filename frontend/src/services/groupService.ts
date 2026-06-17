@@ -10,6 +10,7 @@ import type {
   GroupSnapshotRequest,
   GroupSnapshotResponse,
   GroupSnapshotJobStatus,
+  GroupSnapshotGenerationResponse,
 } from '../types';
 
 export const groupService = {
@@ -20,7 +21,7 @@ export const groupService = {
   getMessages: (groupId: number): Promise<AxiosResponse<Message[]>>                       => api.get(`/groups/${groupId}/messages`),
   sendMessage: (groupId: number, content: string): Promise<AxiosResponse<GroupSendMessageResponse>> =>
     api.post(`/groups/${groupId}/messages`, { content }),
-  generateSnapshot: (groupId: number, payload: GroupSnapshotRequest = {}): Promise<AxiosResponse<GroupSnapshotResponse | GroupSnapshotJobStatus>> =>
+  generateSnapshot: (groupId: number, payload: GroupSnapshotRequest = {}): Promise<AxiosResponse<GroupSnapshotGenerationResponse>> =>
     api.post(`/groups/${groupId}/ai-snapshot`, payload),
   getLatestSnapshot: (groupId: number): Promise<AxiosResponse<GroupSnapshotResponse>>      => api.get(`/groups/${groupId}/ai-snapshot/latest`),
   getSnapshotJobStatus: (jobId: string): Promise<AxiosResponse<GroupSnapshotJobStatus>>    => api.get(`/groups/snapshot-jobs/${jobId}`),

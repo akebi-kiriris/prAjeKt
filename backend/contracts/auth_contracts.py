@@ -43,3 +43,22 @@ class LoginRequest(BaseModel):
 
     email: str
     password: str
+
+
+class AuthUserResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: int
+    name: str
+    username: str | None = None
+    email: str
+
+
+class CurrentUserResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: int
+    name: str
+    username: str | None = None
+    email: str
+    phone: str | None = None

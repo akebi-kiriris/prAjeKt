@@ -9,7 +9,8 @@ from repositories.todo_repository import (
     get_active_todo_by_id_for_user,
     list_active_todos_for_user,
 )
-from contracts.todo_contracts import TodoCreateRequest, TodoUpdateRequest
+from contracts.response_helpers import build_response_payload
+from contracts.todo_contracts import TodoCreateRequest, TodoResponse, TodoUpdateRequest
 from services.transactions import transaction
 
 TODO_CREATE_ALLOWED_FIELDS = {'title', 'content', 'type', 'deadline', 'priority'}
@@ -45,7 +46,7 @@ def todo_to_dict(todo: Todo) -> dict[str, Any]:
     回傳:
         可序列化的待辦事項 payload。
     """
-    return {
+    return build_response_payload(TodoResponse, {
         'id': todo.id,
         'title': todo.title,
         'content': todo.content,
@@ -55,7 +56,7 @@ def todo_to_dict(todo: Todo) -> dict[str, Any]:
         'priority': todo.priority,
         'created_at': todo.created_at.isoformat() + 'Z' if todo.created_at else None,
         'updated_at': todo.updated_at.isoformat() + 'Z' if todo.updated_at else None,
-    }
+    })
 
 
 def _utcnow_naive() -> datetime:

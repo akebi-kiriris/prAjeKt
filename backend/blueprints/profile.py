@@ -2,6 +2,7 @@ from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from blueprints.validation import error_from_exception, error_response, validate_payload_or_400
 from contracts.profile_contracts import ProfileSearchRequest, ProfileUpdateRequest
+from contracts.response_contracts import MessageResponse, response_payload
 from services.profile_service import (
     ProfileOperationError,
     build_chart_stats_for_user,
@@ -50,7 +51,7 @@ def update_profile():
 
     try:
         update_profile_for_user(user_id, data)
-        return jsonify({'message': '個人資料更新成功'}), 200
+        return jsonify(response_payload(MessageResponse(message='個人資料更新成功'))), 200
     except ProfileOperationError as err:
         return error_from_exception(err)
 

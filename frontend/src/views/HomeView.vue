@@ -104,10 +104,10 @@ onMounted(async () => {
       timelineService.upcoming(),
     ]);
     const tasks: UpcomingTaskRaw[] = taskRes.status === 'fulfilled'
-      ? (taskRes.value.data as unknown as UpcomingTaskRaw[]) || []
+      ? taskRes.value.data || []
       : [];
     const timelines: UpcomingItem[] = timelineRes.status === 'fulfilled'
-      ? (timelineRes.value.data as unknown as UpcomingItem[]) || []
+      ? timelineRes.value.data || []
       : [];
 
     // 合併、逾期的排最前面，再依截止日升序

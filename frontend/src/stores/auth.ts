@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia';
-import type { User } from '../types';
+import type { AuthLoginResponse, CurrentUserResponse, RegisterForm, User } from '../types';
 import api from '../services/api';
 import { getApiErrorCode, getApiErrorMessage, shouldRedirectToLogin } from '../utils/apiError';
 
@@ -29,10 +29,9 @@ export const useAuthStore = defineStore('auth', {
   actions: {
     async login(email: string, password: string): Promise<AuthResult> {
       try {
-        const response = await api.post('/auth/login', { email, password });
-        this.accessToken = response.data.access_token as string;
-        this.refreshToken = response.data.refresh_token as string;
-        this.user = response.data.user as User;
+        const response = await api.post<AuthLoginResponse>('/auth/login', { email, password });
+        this.accessToken = response.data.access_token;
+        this.refreshToken = response.data.refresh_token;
         localStorage.setItem('access_token', this.accessToken);
         localStorage.setItem('refresh_token', this.refreshToken);
         await this.fetchCurrentUser();
@@ -42,7 +41,7 @@ export const useAuthStore = defineStore('auth', {
       }
     },
 
-    async register(userData: Record<string, unknown>): Promise<AuthResult> {
+    async register(userData: RegisterForm): Promise<AuthResult> {
       try {
         await api.post('/auth/register', userData);
         return { success: true };
@@ -67,8 +66,14 @@ export const useAuthStore = defineStore('auth', {
 
     async fetchCurrentUser(): Promise<AuthResult> {
       try {
-        const response = await api.get('/auth/me');
-        this.user = response.data as User;
+        const response = await api.get<CurrentUserResponse>('/auth/me');
+        this.user = {
+          id: response.data.id,
+          name: response.data.name,
+          username: response.data.username,
+          email: response.data.email,
+          phone: response.data.phone,
+        };
         return { success: true };
       } catch (error) {
         if (shouldRedirectToLogin(getApiErrorCode(error))) {

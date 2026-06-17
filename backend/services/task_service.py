@@ -51,9 +51,17 @@ from repositories.task_repository import (
     remove_task_member,
 )
 from repositories.session_repository import add_entity, delete_entity, flush_session
+from contracts.response_helpers import build_response_payload
 from contracts.task_contracts import (
+    SubtaskResponse,
+    TaskCommentResponse,
+    TaskCommentSummaryPayloadResponse,
     TaskCreateInput,
     TaskCreateRequest,
+    TaskFileResponse,
+    TaskFileUploadResponse,
+    TaskListItemResponse,
+    TaskMemberResponse,
     TaskStatusUpdateInput,
     TaskUpdateInput,
     TaskUpdateRequest,
@@ -118,8 +126,6 @@ class TaskOperationError(Exception):
         super().__init__(message)
         self.message = message
         self.status_code = status_code
-
-
 def find_unknown_fields(payload: dict[str, Any], allowed_fields: set[str]) -> list[str]:
     """依白名單回傳請求資料中的未知欄位。"""
     return sorted(set(payload.keys()) - allowed_fields)
@@ -387,7 +393,7 @@ def task_member_to_dict(task_member: TaskUser, user: Any, include_contact: bool 
         payload['avatar'] = user.avatar
         payload['assigned_at'] = task_member.assigned_at.isoformat() + 'Z' if task_member.assigned_at else None
 
-    return payload
+    return build_response_payload(TaskMemberResponse, payload, exclude_none=True)
 
 
 def build_task_member_list(
@@ -425,7 +431,7 @@ def task_list_item_to_dict(
     is_owner: bool,
 ) -> dict[str, Any]:
     """序列化任務列表項目，整合成員、子任務與可見欄位。"""
-    return {
+    return build_response_payload(TaskListItemResponse, {
         'task_id': task.task_id,
         'name': task.name,
         'completed': task.completed,
@@ -446,19 +452,19 @@ def task_list_item_to_dict(
         'isWork': task.isWork,
         'depends_on_task_ids': task.depends_on_task_ids or [],
         'is_owner': is_owner,
-    }
+    })
 
 
 def task_comment_to_dict(comment: TaskComment, user: Any) -> dict[str, Any]:
     """序列化單一任務留言資料。"""
-    return {
+    return build_response_payload(TaskCommentResponse, {
         'comment_id': comment.comment_id,
         'user_id': comment.user_id,
         'user_name': user.name if user else '未知使用者',
         'user_avatar': user.avatar if user else None,
         'task_message': comment.task_message,
         'created_at': comment.created_at.isoformat() + 'Z' if comment.created_at else None,
-    }
+    }, exclude_none=True)
 
 
 def _utcnow_naive():
@@ -816,13 +822,13 @@ def add_task_comment_for_member(task_id: int, user_id: int, data: dict[str, Any]
             )
 
     user = get_user_by_id(user_id)
-    return {
+    return build_response_payload(TaskCommentResponse, {
         'comment_id': comment.comment_id,
         'user_id': user_id,
         'user_name': user.name if user else '未知',
         'task_message': message,
         'created_at': comment.created_at.isoformat() + 'Z' if comment.created_at else None,
-    }
+    }, exclude_none=True)
 
 
 def soft_delete_task_comment_for_user(task_id: int, comment_id: int, user_id: int) -> None:
@@ -842,7 +848,7 @@ def soft_delete_task_comment_for_user(task_id: int, comment_id: int, user_id: in
 def list_subtasks_for_task(task_id: int) -> list[dict[str, Any]]:
     """列出單一任務的子任務。"""
     subtasks = list_subtasks(task_id)
-    return [subtask.to_dict() for subtask in subtasks]
+    return [build_response_payload(SubtaskResponse, subtask.to_dict()) for subtask in subtasks]
 
 
 def create_subtask_for_task(task_id: int, name: str) -> int:
@@ -859,7 +865,7 @@ def create_subtask_for_task(task_id: int, name: str) -> int:
             sort_order=max_order + 1,
         )
         add_entity(subtask)
-    return subtask.to_dict()
+    return build_response_payload(SubtaskResponse, subtask.to_dict())
 
 
 def _find_subtask_or_404(task_id, subtask_id):
@@ -880,7 +886,7 @@ def update_subtask_for_task(task_id: int, subtask_id: int, data: dict[str, Any])
             subtask.completed = data['completed']
         if 'sort_order' in data:
             subtask.sort_order = data['sort_order']
-    return subtask.to_dict()
+    return build_response_payload(SubtaskResponse, subtask.to_dict())
 
 
 def delete_subtask_for_task(task_id: int, subtask_id: int) -> None:
@@ -896,7 +902,7 @@ def toggle_subtask_for_task(task_id: int, subtask_id: int) -> bool:
     subtask = _find_subtask_or_404(task_id, subtask_id)
     with transaction(TaskOperationError, '狀態更新失敗，請稍後再試'):
         subtask.completed = not subtask.completed
-    return subtask.to_dict()
+    return build_response_payload(SubtaskResponse, subtask.to_dict())
 
 
 def update_task_status_for_member(task_id: int, new_status: str) -> None:
@@ -923,7 +929,7 @@ def summarize_task_comments_for_member(task_id: int) -> dict[str, Any]:
     comments = list_active_task_comments(task_id, ascending=True)
 
     if not comments:
-        return {
+        return build_response_payload(TaskCommentSummaryPayloadResponse, {
             'task_id': task_id,
             'message': '目前尚無留言可摘要',
             'summary': {
@@ -935,7 +941,7 @@ def summarize_task_comments_for_member(task_id: int) -> dict[str, Any]:
                 'task_id': task_id,
                 'comment_count': 0,
             },
-        }
+        }, exclude_none=True)
 
     comment_items = []
     for comment in comments:
@@ -944,14 +950,14 @@ def summarize_task_comments_for_member(task_id: int) -> dict[str, Any]:
 
     try:
         summary, summary_meta = generate_task_comment_summary(task, comment_items)
-        return {
+        return build_response_payload(TaskCommentSummaryPayloadResponse, {
             'task_id': task_id,
             'summary': summary,
             'meta': {
                 'comment_count': len(comment_items),
                 **summary_meta,
             },
-        }
+        }, exclude_none=True)
     except RuntimeError as exc:
         raise TaskOperationError(str(exc), 503) from exc
     except Exception as exc:
@@ -988,14 +994,14 @@ def list_task_files_for_member(task_id: int) -> list[dict[str, Any]]:
     for task_file in files:
         uploader = get_user_by_id(task_file.uploaded_by)
         result.append(
-            {
+            build_response_payload(TaskFileResponse, {
                 'id': task_file.id,
                 'filename': task_file.filename,
                 'original_filename': task_file.original_filename,
                 'file_size': task_file.file_size,
                 'uploaded_at': task_file.uploaded_at.isoformat() + 'Z' if task_file.uploaded_at else None,
                 'uploaded_by_name': uploader.name if uploader else '未知',
-            }
+            }, exclude_none=True)
         )
     return result
 
@@ -1045,14 +1051,14 @@ def upload_task_file_for_member(task_id: int, user_id: int, file_storage: Any) -
         with transaction(TaskOperationError, '檔案上傳失敗，請稍後再試'):
             add_entity(task_file)
         os.replace(temp_file_path, file_path)
-        return {
+        return build_response_payload(TaskFileUploadResponse, {
             'id': task_file.id,
             'message': '檔案上傳成功',
             'filename': unique_filename,
             'original_filename': original_filename,
             'file_size': file_size,
             'uploaded_at': task_file.uploaded_at.isoformat() + 'Z' if task_file.uploaded_at else None,
-        }
+        })
     except Exception as exc:
         _cleanup_task_upload_files(temp_file_path, file_path)
         raise TaskOperationError('檔案上傳失敗，請稍後再試', 500) from exc

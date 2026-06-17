@@ -1,4 +1,9 @@
 import type { AiGeneratedTask } from './task';
+import type { JsonObject, JsonValue } from './common';
+
+export type CopilotJsonValue = JsonValue;
+export type CopilotJsonObject = JsonObject;
+export type CopilotToolPayloadMap = Record<string, JsonObject>;
 
 export interface CopilotMcpContext {
   timeline_id?: number;
@@ -15,7 +20,7 @@ export interface CopilotMcpExecutePayload {
   message: string;
   context?: CopilotMcpContext;
   preferred_tool?: string;
-  tool_arguments?: Record<string, unknown>;
+  tool_arguments?: CopilotJsonObject;
   auto_create_generated_tasks?: boolean;
 }
 
@@ -32,7 +37,7 @@ export interface CopilotAgentTraceEvent {
   status?: string | null;
   duration_ms?: number | null;
   error_code?: string | null;
-  detail: Record<string, unknown>;
+  detail: CopilotJsonObject;
   timestamp: string;
 }
 
@@ -47,7 +52,7 @@ export interface CopilotAgentTrace {
   finished_at?: string | null;
   duration_ms?: number | null;
   error_code?: string;
-  metadata: Record<string, unknown>;
+  metadata: CopilotJsonObject;
   events: CopilotAgentTraceEvent[];
 }
 
@@ -55,8 +60,8 @@ export interface CopilotMcpExecuteResponse {
   message: string;
   selected_tool: string;
   selection_source: string;
-  arguments: Record<string, unknown>;
-  result: unknown;
+  arguments: CopilotJsonObject;
+  result: CopilotJsonValue;
   generated_tasks?: AiGeneratedTask[];
   auto_create_result?: CopilotAutoCreateResult;
   request_id?: string;
@@ -66,7 +71,7 @@ export interface CopilotMcpExecuteResponse {
 export interface CopilotAgentPlanPayload {
   message: string;
   context?: CopilotAgentContext;
-  tool_payloads?: Record<string, Record<string, unknown>>;
+  tool_payloads?: CopilotToolPayloadMap;
 }
 
 export interface CopilotAgentPlanResponse {
@@ -107,15 +112,33 @@ export interface CopilotAgentReplanPayload {
   plan_id?: string;
   message: string;
   context?: CopilotAgentContext;
-  tool_payloads?: Record<string, Record<string, unknown>>;
+  tool_payloads?: CopilotToolPayloadMap;
+}
+
+export interface CopilotAgentToolDescriptor {
+  name: string;
+  description: string;
+  side_effects: string;
+  side_effect_level: string;
+  user_visible_label: string;
+  requires_confirmation: boolean;
+  permission_note: string;
+  planner_role: string;
+  workflow_group?: string | null;
+  completes_after?: string | null;
+  input_schema: CopilotJsonObject;
+}
+
+export interface CopilotAgentToolsResponse {
+  tools: CopilotAgentToolDescriptor[];
 }
 
 export interface CopilotAgentStep {
   tool_name: string;
-  input: Record<string, unknown>;
+  input: CopilotJsonObject;
   output: {
     ok: boolean;
-    data?: Record<string, unknown>;
+    data?: CopilotJsonObject;
     error?: {
       error_code: string;
       message: string;

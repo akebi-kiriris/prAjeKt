@@ -162,9 +162,11 @@ import { copilotService } from '../services/copilotService';
 import { useAuthStore } from '../stores/auth';
 import { getApiErrorMessage } from '../utils/apiError';
 import type {
+  CopilotJsonObject,
   CopilotAgentStep,
   CopilotAgentExecuteResponse,
   CopilotAgentPlanResponse,
+  CopilotToolPayloadMap,
 } from '../types';
 
 const authStore = useAuthStore();
@@ -219,7 +221,7 @@ const contextSummary = computed((): string => {
   return `已偵測頁面上下文：${areas.join('、')}。`;
 });
 
-const buildToolPayloads = (): Record<string, Record<string, unknown>> => ({});
+const buildToolPayloads = (): CopilotToolPayloadMap => ({});
 
 const toggleOpen = (): void => {
   isOpen.value = !isOpen.value;
@@ -318,9 +320,9 @@ const formatDate = (iso: string): string => {
   return date.toLocaleString('zh-TW');
 };
 
-const getObject = (value: unknown): Record<string, unknown> | null => {
+const getObject = (value: unknown): CopilotJsonObject | null => {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
-  return value as Record<string, unknown>;
+  return value as CopilotJsonObject;
 };
 
 const getStepOutputSummary = (step: CopilotAgentStep): string => {

@@ -5,7 +5,8 @@ from models.user import User
 from typing import Any
 from repositories.auth_repository import get_user_by_email, get_user_by_id, get_user_by_username
 from repositories.session_repository import add_entity
-from contracts.auth_contracts import RegisterRequest
+from contracts.auth_contracts import AuthUserResponse, CurrentUserResponse, RegisterRequest
+from contracts.response_helpers import build_response_payload
 from services.transactions import transaction
 
 
@@ -25,12 +26,12 @@ def auth_user_to_dict(user: User) -> dict[str, Any]:
     回傳:
         登入/註冊相關的最小使用者回應 payload。
     """
-    return {
+    return build_response_payload(AuthUserResponse, {
         'id': user.id,
         'name': user.name,
         'username': user.username,
         'email': user.email,
-    }
+    })
 
 
 def current_user_to_dict(user: User) -> dict[str, Any]:
@@ -42,13 +43,13 @@ def current_user_to_dict(user: User) -> dict[str, Any]:
     回傳:
         含 `phone` 欄位的目前使用者 payload。
     """
-    return {
+    return build_response_payload(CurrentUserResponse, {
         'id': user.id,
         'name': user.name,
         'username': user.username,
         'email': user.email,
         'phone': user.phone,
-    }
+    })
 
 
 def register_user(data: dict[str, Any]) -> int:

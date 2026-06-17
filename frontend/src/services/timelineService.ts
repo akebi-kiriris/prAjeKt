@@ -19,8 +19,13 @@ import type {
   ResourceConflictResponse,
   AIPlanSuggestionRequest,
   AIPlanSuggestionResponse,
+  KnowledgeBatchResponse,
   KnowledgeDocumentsResponse,
   KnowledgeDocumentEventsResponse,
+  KnowledgeDocumentMutationResponse,
+  KnowledgeDocumentReindexResponse,
+  KnowledgeDocumentUploadResponse,
+  UpcomingItem,
 } from '../types';
 
 const knowledgeProjectParams = (projectId?: number) => (projectId ? { project_id: projectId } : undefined);
@@ -39,7 +44,7 @@ export const timelineService = {
     api.post(`/timelines/${id}/batch-create-tasks`, { tasks }),
   getMembers:       (id: number): Promise<AxiosResponse<TaskMember[]>>                           => api.get(`/timelines/${id}/members`),
   removeMember:     (id: number, userId: number): Promise<AxiosResponse<ApiMutationResponse>>    => api.delete(`/timelines/${id}/members/${userId}`),
-  upcoming:         (): Promise<AxiosResponse<Timeline[]>>                                       => api.get('/timelines/upcoming'),
+  upcoming:         (): Promise<AxiosResponse<UpcomingItem[]>>                                   => api.get('/timelines/upcoming'),
   getMemberStats:   (id: number): Promise<AxiosResponse<ProjectStats>>                          => api.get(`/timelines/${id}/member-stats`),
   getWeeklyReport:  (
     id: number,
@@ -65,7 +70,7 @@ export const timelineService = {
     }
   ): Promise<AxiosResponse<KnowledgeDocumentsResponse>> =>
     api.get('/knowledge/documents', { params }),
-  uploadKnowledgeDocument: (file: File, projectId?: number): Promise<AxiosResponse<{ message: string }>> => {
+  uploadKnowledgeDocument: (file: File, projectId?: number): Promise<AxiosResponse<KnowledgeDocumentUploadResponse>> => {
     const form = new FormData();
     form.append('file', file);
     const config: { headers: { 'Content-Type': string }; params?: { project_id: number } } = {
@@ -75,13 +80,13 @@ export const timelineService = {
     if (params) config.params = params;
     return api.post('/knowledge/documents', form, config);
   },
-  deleteKnowledgeDocument: (documentId: number, projectId?: number): Promise<AxiosResponse<{ message: string }>> =>
+  deleteKnowledgeDocument: (documentId: number, projectId?: number): Promise<AxiosResponse<KnowledgeDocumentMutationResponse>> =>
     api.delete(`/knowledge/documents/${documentId}`, { params: knowledgeProjectParams(projectId) }),
-  reindexKnowledgeDocument: (documentId: number, projectId?: number): Promise<AxiosResponse<{ message: string }>> =>
+  reindexKnowledgeDocument: (documentId: number, projectId?: number): Promise<AxiosResponse<KnowledgeDocumentReindexResponse>> =>
     api.post(`/knowledge/documents/${documentId}/reindex`, null, { params: knowledgeProjectParams(projectId) }),
-  batchDeleteKnowledgeDocuments: (projectId: number, documentIds: number[]) =>
+  batchDeleteKnowledgeDocuments: (projectId: number, documentIds: number[]): Promise<AxiosResponse<KnowledgeBatchResponse>> =>
     api.post('/knowledge/documents/batch-delete', { document_ids: documentIds }, { params: { project_id: projectId } }),
-  batchReindexKnowledgeDocuments: (projectId: number, documentIds: number[]) =>
+  batchReindexKnowledgeDocuments: (projectId: number, documentIds: number[]): Promise<AxiosResponse<KnowledgeBatchResponse>> =>
     api.post('/knowledge/documents/batch-reindex', { document_ids: documentIds }, { params: { project_id: projectId } }),
   downloadKnowledgeDocumentFile: (documentId: number, projectId: number): Promise<AxiosResponse<Blob>> =>
     api.get(`/knowledge/documents/${documentId}/download`, {

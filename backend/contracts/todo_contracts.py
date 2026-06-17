@@ -56,3 +56,17 @@ class TodoCreateRequest(TodoWriteRequest):
 
 class TodoUpdateRequest(TodoWriteRequest):
     pass
+
+
+class TodoResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: int
+    title: str
+    content: str
+    type: str | None = None
+    deadline: str | None = None
+    completed: bool
+    priority: int
+    created_at: str | None = None
+    updated_at: str | None = None

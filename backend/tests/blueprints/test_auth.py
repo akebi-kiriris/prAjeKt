@@ -141,6 +141,8 @@ def test_login_success_returns_tokens_and_user_payload(client, auth_user_factory
     assert "access_token" in payload
     assert "refresh_token" in payload
     assert payload["user"]["email"] == "login-success@example.com"
+    assert response.headers["Cache-Control"] == "no-store"
+    assert response.headers["Pragma"] == "no-cache"
 
 
 def test_login_wrong_password_returns_401(client, auth_user_factory):
@@ -196,6 +198,8 @@ def test_refresh_with_refresh_token_returns_new_access_token(client, auth_user_f
     assert response.status_code == 200
     payload = response.get_json()
     assert "access_token" in payload
+    assert response.headers["Cache-Control"] == "no-store"
+    assert response.headers["Pragma"] == "no-cache"
 
 
 def test_logout_with_access_token_returns_200(client, auth_user_factory):

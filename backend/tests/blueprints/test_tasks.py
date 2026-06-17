@@ -260,14 +260,16 @@ def test_task_member_endpoints_map_service_results(client, auth_user_factory):
     )
     assert add_member.status_code == 201
     add_member_payload = add_member.get_json()
-    assert add_member_payload == {
+    expected_payload = {
         "user_id": target.id,
         "name": target.name,
         "role": 1,
         "email": target.email,
-        "avatar": target.avatar,
         "assigned_at": add_member_payload["assigned_at"],
     }
+    if target.avatar is not None:
+        expected_payload["avatar"] = target.avatar
+    assert add_member_payload == expected_payload
     assert add_member_payload["assigned_at"] is not None
 
     duplicate_member = client.post(

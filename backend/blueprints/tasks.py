@@ -4,6 +4,14 @@ from flask_jwt_extended import jwt_required, get_jwt_identity
 from pydantic import ValidationError
 from blueprints.guards import require_task_role
 from blueprints.validation import error_from_exception, error_response, format_pydantic_error, validate_payload_or_400
+from contracts.response_contracts import (
+    CompletionResponse,
+    MessageResponse,
+    SubtaskMutationResponse,
+    TaskIdMutationResponse,
+    TaskStatusMutationResponse,
+    response_payload,
+)
 from contracts.task_contracts import (
     SubtaskCreateRequest,
     SubtaskUpdateRequest,
@@ -99,7 +107,7 @@ def create_task():
 
     try:
         task_id = create_task_for_user(user_id, data)
-        return jsonify({'message': '任務新增成功', 'task_id': task_id}), 201
+        return jsonify(response_payload(TaskIdMutationResponse(message='任務新增成功', task_id=task_id))), 201
     except TaskOperationError as err:
         return error_from_exception(err)
 
@@ -117,7 +125,7 @@ def update_task(task_id):
 
     try:
         update_task_for_member(task_id, int(get_jwt_identity()), data)
-        return jsonify({'message': '任務更新成功'}), 200
+        return jsonify(response_payload(MessageResponse(message='任務更新成功'))), 200
     except TaskOperationError as err:
         return error_from_exception(err)
 
@@ -128,7 +136,7 @@ def delete_task(task_id):
     """刪除任務（軟刪除）"""
     try:
         soft_delete_task_for_owner(task_id)
-        return jsonify({'message': '任務刪除成功'}), 200
+        return jsonify(response_payload(MessageResponse(message='任務刪除成功'))), 200
     except TaskOperationError as err:
         return error_from_exception(err)
 
@@ -140,7 +148,7 @@ def toggle_task(task_id):
 
     try:
         completed = toggle_task_for_member(task_id)
-        return jsonify({'message': '狀態更新成功', 'completed': completed}), 200
+        return jsonify(response_payload(CompletionResponse(message='狀態更新成功', completed=completed))), 200
     except TaskOperationError as err:
         return error_from_exception(err)
 
@@ -183,7 +191,7 @@ def remove_task_member(task_id, member_id):
 
     try:
         remove_task_member_for_owner(task_id, member_id)
-        return jsonify({'message': '成員移除成功'}), 200
+        return jsonify(response_payload(MessageResponse(message='成員移除成功'))), 200
     except TaskOperationError as err:
         return error_from_exception(err)
 
@@ -207,7 +215,7 @@ def update_task_member_role(task_id, member_id):
             new_role=payload['role'],
             operator_user_id=int(get_jwt_identity()),
         )
-        return jsonify({'message': '成員角色更新成功'}), 200
+        return jsonify(response_payload(MessageResponse(message='成員角色更新成功'))), 200
     except TaskOperationError as err:
         return error_from_exception(err)
 
@@ -257,7 +265,7 @@ def delete_task_comment(task_id, comment_id):
 
     try:
         soft_delete_task_comment_for_user(task_id, comment_id, int(get_jwt_identity()))
-        return jsonify({'message': '留言刪除成功'}), 200
+        return jsonify(response_payload(MessageResponse(message='留言刪除成功'))), 200
     except TaskOperationError as err:
         return error_from_exception(err)
 
@@ -294,7 +302,7 @@ def delete_task_file(task_id, file_id):
     """刪除任務附件（上傳者或負責人可刪除）"""
     try:
         delete_task_file_for_user(task_id, file_id, int(get_jwt_identity()))
-        return jsonify({'message': '檔案刪除成功'}), 200
+        return jsonify(response_payload(MessageResponse(message='檔案刪除成功'))), 200
     except TaskOperationError as err:
         return error_from_exception(err)
 
@@ -334,7 +342,7 @@ def create_subtask(task_id):
 
     try:
         subtask = create_subtask_for_task(task_id, data['name'])
-        return jsonify({'message': '子任務新增成功', 'subtask': subtask}), 201
+        return jsonify(response_payload(SubtaskMutationResponse(message='子任務新增成功', subtask=subtask))), 201
     except TaskOperationError as err:
         return error_from_exception(err)
 
@@ -353,7 +361,7 @@ def update_subtask(task_id, subtask_id):
 
     try:
         subtask = update_subtask_for_task(task_id, subtask_id, data)
-        return jsonify({'message': '子任務更新成功', 'subtask': subtask}), 200
+        return jsonify(response_payload(SubtaskMutationResponse(message='子任務更新成功', subtask=subtask))), 200
     except TaskOperationError as err:
         return error_from_exception(err)
 
@@ -365,7 +373,7 @@ def delete_subtask(task_id, subtask_id):
 
     try:
         delete_subtask_for_task(task_id, subtask_id)
-        return jsonify({'message': '子任務刪除成功'}), 200
+        return jsonify(response_payload(MessageResponse(message='子任務刪除成功'))), 200
     except TaskOperationError as err:
         return error_from_exception(err)
 
@@ -377,7 +385,7 @@ def toggle_subtask(task_id, subtask_id):
 
     try:
         subtask = toggle_subtask_for_task(task_id, subtask_id)
-        return jsonify({'message': '狀態更新成功', 'subtask': subtask}), 200
+        return jsonify(response_payload(SubtaskMutationResponse(message='狀態更新成功', subtask=subtask))), 200
     except TaskOperationError as err:
         return error_from_exception(err)
 
@@ -399,7 +407,11 @@ def update_task_status(task_id):
 
     try:
         status_payload = update_task_status_for_member(task_id, data['status'])
-        return jsonify({'message': '狀態更新成功', **status_payload}), 200
+        return jsonify(response_payload(TaskStatusMutationResponse(
+            message='狀態更新成功',
+            completed=status_payload['completed'],
+            status=status_payload['status'],
+        ))), 200
     except TaskOperationError as err:
         return error_from_exception(err)
 

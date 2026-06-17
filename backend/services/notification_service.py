@@ -4,10 +4,13 @@
     list_notifications_for_user,
     mark_all_unread_notifications_as_read,
 )
+from typing import Any
+
+from contracts.notification_contracts import NotificationResponse
+from contracts.response_helpers import build_response_payload
+from models.notification import Notification
 from repositories.session_repository import delete_entity
 from services.transactions import transaction
-from models.notification import Notification
-from typing import Any
 
 
 class NotificationOperationError(Exception):
@@ -26,7 +29,7 @@ def notification_to_dict(notification: Notification) -> dict[str, Any]:
     回傳:
         API 回應用通知 payload。
     """
-    return {
+    return build_response_payload(NotificationResponse, {
         'id': notification.id,
         'type': notification.type,
         'title': notification.title,
@@ -34,7 +37,7 @@ def notification_to_dict(notification: Notification) -> dict[str, Any]:
         'link': notification.link,
         'is_read': notification.is_read,
         'created_at': notification.created_at.isoformat() + 'Z' if notification.created_at else None,
-    }
+    })
 
 
 def get_notifications_for_user(user_id: int, limit: int = 50) -> list[Notification]:
