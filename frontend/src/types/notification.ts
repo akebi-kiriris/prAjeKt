@@ -7,11 +7,11 @@ export type NotificationType =
 
 export interface Notification {
   id: number;
-  user_id: number;
   type: NotificationType;
   title: string;
   content: string | null;
   link: string | null;
   is_read: boolean;
-  created_at: string;
+  user_id?: number;
+  created_at: string | null;
 }

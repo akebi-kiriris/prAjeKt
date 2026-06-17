@@ -23,6 +23,17 @@ from repositories.knowledge_repository import (
     update_knowledge_document_status_by_id,
 )
 from repositories.timeline_repository import get_active_timeline_by_id, get_timeline_member
+from contracts.response_helpers import build_response_payload
+from contracts.knowledge_contracts import (
+    KnowledgeBatchResponse,
+    KnowledgeDocumentEventsResponse,
+    KnowledgeDocumentIdResponse,
+    KnowledgeDocumentReindexResponse,
+    KnowledgeDocumentResponse,
+    KnowledgeDocumentsListResponse,
+    KnowledgeDocumentUploadResponse,
+    KnowledgeDocumentEventResponse,
+)
 from services.embedding_service import EmbeddingOperationError, GeminiEmbeddingService
 from services.text_splitter_service import TextSplitterOperationError, TextSplitterService
 from services.transactions import transaction
@@ -33,8 +44,6 @@ class KnowledgeOperationError(Exception):
         super().__init__(message)
         self.message = message
         self.status_code = status_code
-
-
 def _validate_project_knowledge_membership(user_id: int, project_id: int | None) -> None:
     if project_id is None:
         return
@@ -119,7 +128,7 @@ def _decode_text_content(filename: str, payload: bytes) -> str:
 
 
 def _doc_to_dict(document: Any, chunk_count: int | None = None) -> dict[str, Any]:
-    return {
+    return build_response_payload(KnowledgeDocumentResponse, {
         "id": document.id,
         "filename": document.filename,
         "project_id": getattr(document, "project_id", None),
@@ -135,11 +144,11 @@ def _doc_to_dict(document: Any, chunk_count: int | None = None) -> dict[str, Any
         "error_message": document.error_message,
         "created_at": document.created_at.isoformat() + "Z" if document.created_at else None,
         "updated_at": document.updated_at.isoformat() + "Z" if document.updated_at else None,
-    }
+    })
 
 
 def _event_to_dict(event: Any) -> dict[str, Any]:
-    return {
+    return build_response_payload(KnowledgeDocumentEventResponse, {
         "id": event.id,
         "document_id": event.document_id,
         "project_id": event.project_id,
@@ -147,7 +156,7 @@ def _event_to_dict(event: Any) -> dict[str, Any]:
         "event_type": event.event_type,
         "event_payload": event.event_payload or {},
         "created_at": event.created_at.isoformat() + "Z" if event.created_at else None,
-    }
+    })
 
 
 def _resolve_project_storage_path(project_id: int, filename: str) -> tuple[str, str]:
@@ -421,11 +430,11 @@ def upload_and_index_knowledge_document(
     )
 
     refreshed = get_knowledge_document_by_id(user_id=user_id, document_id=document_id)
-    return {
+    return build_response_payload(KnowledgeDocumentUploadResponse, {
         "message": "文件上傳與索引完成",
         "document": _doc_to_dict(refreshed),
         "chunk_count": count_knowledge_chunks_for_document(user_id=user_id, document_id=document_id, project_id=project_id),
-    }
+    })
 
 
 def list_knowledge_documents(
@@ -448,7 +457,7 @@ def list_knowledge_documents(
         sort=sort,
         status=status,
     )
-    return {
+    return build_response_payload(KnowledgeDocumentsListResponse, {
         "message": "知識文件列表",
         "documents": [
             _doc_to_dict(
@@ -466,7 +475,7 @@ def list_knowledge_documents(
             "offset": offset,
             "count": len(docs),
         },
-    }
+    })
 
 
 def _resolve_document_for_operation(
@@ -504,7 +513,7 @@ def delete_knowledge_document(user_id: int, document_id: int, project_id: int | 
         else:
             delete_knowledge_document_for_user(user_id=user_id, document_id=document_id)
 
-    return {"message": "知識文件已刪除", "document_id": document_id}
+    return build_response_payload(KnowledgeDocumentIdResponse, {"message": "知識文件已刪除", "document_id": document_id})
 
 
 def reindex_knowledge_document(user_id: int, document_id: int, project_id: int | None = None) -> dict[str, Any]:
@@ -559,7 +568,7 @@ def reindex_knowledge_document(user_id: int, document_id: int, project_id: int |
         event_payload={"chunk_count": len(chunks)},
     )
 
-    return {
+    return build_response_payload(KnowledgeDocumentReindexResponse, {
         "message": "文件已重新建立索引",
         "document_id": document_id,
         "chunk_count": count_knowledge_chunks_for_document(
@@ -567,7 +576,7 @@ def reindex_knowledge_document(user_id: int, document_id: int, project_id: int |
             document_id=document_id,
             project_id=resolved_project_id,
         ),
-    }
+    })
 
 
 def batch_delete_knowledge_documents(
@@ -585,12 +594,12 @@ def batch_delete_knowledge_documents(
         except KnowledgeOperationError as err:
             results.append({"document_id": document_id, "success": False, "error": err.message})
     success_count = len([item for item in results if item["success"]])
-    return {
+    return build_response_payload(KnowledgeBatchResponse, {
         "message": "批次刪除完成",
         "project_id": project_id,
         "results": results,
         "meta": {"total": len(results), "success": success_count, "failed": len(results) - success_count},
-    }
+    })
 
 
 def batch_reindex_knowledge_documents(
@@ -616,12 +625,12 @@ def batch_reindex_knowledge_documents(
         except KnowledgeOperationError as err:
             results.append({"document_id": document_id, "success": False, "error": err.message})
     success_count = len([item for item in results if item["success"]])
-    return {
+    return build_response_payload(KnowledgeBatchResponse, {
         "message": "批次重建完成",
         "project_id": project_id,
         "results": results,
         "meta": {"total": len(results), "success": success_count, "failed": len(results) - success_count},
-    }
+    })
 
 
 def get_project_knowledge_document_file(
@@ -651,10 +660,10 @@ def get_project_knowledge_document_file(
 def list_project_knowledge_events(project_id: int, limit: int = 50, offset: int = 0) -> dict[str, Any]:
     """列出專案知識操作事件。"""
     events = list_knowledge_document_events(project_id=project_id, limit=limit, offset=offset)
-    return {
+    return build_response_payload(KnowledgeDocumentEventsResponse, {
         "message": "專案檔案操作紀錄",
         "events": [_event_to_dict(event) for event in events],
         "meta": {"limit": limit, "offset": offset, "count": len(events)},
-    }
+    })
 
 

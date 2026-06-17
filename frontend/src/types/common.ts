@@ -1,3 +1,15 @@
+export type JsonValue =
+  | string
+  | number
+  | boolean
+  | null
+  | JsonObject
+  | JsonValue[];
+
+export interface JsonObject {
+  [key: string]: JsonValue;
+}
+
 export interface ApiResponse<T = unknown> {
   data: T;
   message?: string;
@@ -6,7 +18,7 @@ export interface ApiResponse<T = unknown> {
 export interface ApiErrorPayload {
   error?: string;
   error_code?: string;
-  error_details?: Record<string, unknown>;
+  error_details?: JsonObject;
 }
 
 export interface ApiMutationResponse {

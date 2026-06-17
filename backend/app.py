@@ -1,8 +1,9 @@
-from flask import Flask, request
+from flask import Flask, jsonify, request
 from flask_cors import CORS
 from flask_migrate import Migrate
 from flask_jwt_extended import JWTManager
 from flask_socketio import SocketIO
+from flask_swagger_ui import get_swaggerui_blueprint
 import os
 from datetime import timedelta
 from dotenv import load_dotenv
@@ -19,6 +20,8 @@ else:
     print("⚠️ 使用 .env（雲端 PostgreSQL）", flush=True)
 
 from models import db
+from contracts.response_contracts import HealthDatabaseInfo, HealthDebugInfo, HealthResponse, response_payload
+from openapi_document import build_openapi_document
 migrate = None
 jwt = JWTManager()
 socketio = SocketIO(async_mode='threading')
@@ -29,6 +32,14 @@ def _resolve_secret(env_key: str, fallback: str) -> str:
     is_production = os.getenv('FLASK_ENV') == 'production' or os.getenv('APP_ENV') == 'production'
     if is_production and value == fallback:
         raise RuntimeError(f'{env_key} 必須在生產環境中設定，不能使用預設值')
+    return value
+
+
+def _resolve_cookie_samesite() -> str:
+    value = os.getenv('COOKIE_SAMESITE', 'Strict').strip().title()
+    allowed = {'Strict', 'Lax', 'None'}
+    if value not in allowed:
+        raise RuntimeError('COOKIE_SAMESITE 只允許 Strict / Lax / None')
     return value
 
 def create_app():
@@ -65,11 +76,20 @@ def create_app():
     app.config['JWT_SECRET_KEY'] = _resolve_secret('JWT_SECRET_KEY', 'jwt-secret-key-change-in-production')
     app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(hours=1)
     app.config['JWT_REFRESH_TOKEN_EXPIRES'] = timedelta(days=30)
+    app.config['JWT_TOKEN_LOCATION'] = ['headers']
     app.config['JWT_ENCODE_ISSUER'] = None
     app.config['JWT_DECODE_ISSUER'] = None
     app.config['JWT_ENCODE_AUDIENCE'] = None
     app.config['JWT_DECODE_AUDIENCE'] = None
     app.config['UPLOAD_FOLDER'] = os.path.join(os.path.dirname(__file__), 'uploads')
+
+    cookie_samesite = _resolve_cookie_samesite()
+    app.config['SESSION_COOKIE_HTTPONLY'] = True
+    app.config['SESSION_COOKIE_SAMESITE'] = cookie_samesite
+    app.config['SESSION_COOKIE_SECURE'] = is_production
+    app.config['JWT_COOKIE_SECURE'] = is_production
+    app.config['JWT_COOKIE_SAMESITE'] = cookie_samesite
+    app.config['JWT_COOKIE_CSRF_PROTECT'] = True
     
     # CORS 設定
     CORS(app, 
@@ -119,6 +139,15 @@ def create_app():
     app.register_blueprint(trash_bp, url_prefix='/api/trash')
     app.register_blueprint(notifications_bp, url_prefix='/api/notifications')
     app.register_blueprint(copilot_bp, url_prefix='/api/copilot')
+    app.register_blueprint(
+        get_swaggerui_blueprint(
+            '/api/docs',
+            '/api/openapi.json',
+            config={
+                'app_name': 'Learnlink Backend API',
+            },
+        )
+    )
 
     from realtime import register_socket_events
     register_socket_events(socketio)
@@ -153,7 +182,8 @@ def create_app():
     # 健康檢查
     @app.route('/api/health')
     def health():
-        payload = {'status': 'ok'}
+        database = None
+        debug = None
         if app.debug:
             active_db_url = app.config.get('SQLALCHEMY_DATABASE_URI', '')
             db_info = {'url': active_db_url}
@@ -166,12 +196,16 @@ def create_app():
                     'absolute_path': sqlite_abs_path,
                     'exists': os.path.exists(sqlite_abs_path),
                 })
-            payload['database'] = db_info
-            payload['debug'] = {
-                'cwd': os.getcwd(),
-                'flask_env': os.getenv('FLASK_ENV', ''),
-            }
-        return payload
+            database = HealthDatabaseInfo(**db_info)
+            debug = HealthDebugInfo(
+                cwd=os.getcwd(),
+                flask_env=os.getenv('FLASK_ENV', ''),
+            )
+        return response_payload(HealthResponse(database=database, debug=debug))
+
+    @app.route('/api/openapi.json')
+    def openapi_json():
+        return jsonify(build_openapi_document()), 200
     
     print(f"🔍 create_app() 完成 | app.debug={app.debug} | FLASK_ENV={os.getenv('FLASK_ENV')}", flush=True)
     

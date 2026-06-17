@@ -90,8 +90,8 @@ export const useProfileStore = defineStore('profile', () => {
         groupService.getAll(),
       ]);
 
-      const taskList = tasksRes.data as Task[];
-      const timelineList = timelinesRes.data as Timeline[];
+      const taskList = tasksRes.data;
+      const timelineList = timelinesRes.data;
 
       stats.value = {
         totalTasks: taskList.length,

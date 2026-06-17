@@ -250,3 +250,115 @@ class TaskStatusUpdateInput(BaseModel):
         if value not in TASK_STATUS_BOARD_VALUES:
             raise ValueError(f"無效的狀態，有效值為: {['pending', 'in_progress', 'completed']}")
         return value
+
+
+class TaskMemberResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    user_id: int
+    name: str
+    role: int
+    email: str | None = None
+    avatar: str | None = None
+    assigned_at: str | None = None
+
+
+class SubtaskResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: int
+    task_id: int
+    name: str
+    completed: bool
+    sort_order: int
+    created_at: str | None = None
+
+
+class TaskListItemResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    task_id: int
+    name: str
+    completed: bool
+    completed_at: str | None = None
+    timeline_id: int | None = None
+    priority: int
+    status: str
+    tags: list[str] | str | None = None
+    estimated_hours: int | float | None = None
+    actual_hours: int | float | None = None
+    members: list[dict[str, Any]] = Field(default_factory=list)
+    subtasks: list[dict[str, Any]] = Field(default_factory=list)
+    created_at: str | None = None
+    start_date: str | None = None
+    end_date: str | None = None
+    updated_at: str | None = None
+    task_remark: str | None = None
+    isWork: int | bool | None = None
+    depends_on_task_ids: list[int] = Field(default_factory=list)
+    is_owner: bool
+
+
+class TaskCommentResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    comment_id: int
+    task_id: int | None = None
+    user_id: int
+    user_name: str
+    user_avatar: str | None = None
+    task_message: str
+    created_at: str | None = None
+
+
+class TaskCommentSummaryResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    decisions: list[str] = Field(default_factory=list)
+    risks: list[str] = Field(default_factory=list)
+    next_actions: list[str] = Field(default_factory=list)
+    raw: str | None = None
+
+
+class TaskCommentSummaryMetaResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    task_id: int | None = None
+    comment_count: int
+    total_comments: int | None = None
+    used_comments: int | None = None
+    truncated: bool | None = None
+    context_chars: int | None = None
+    model: str | None = None
+
+
+class TaskCommentSummaryPayloadResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    task_id: int
+    message: str | None = None
+    summary: TaskCommentSummaryResponse
+    meta: TaskCommentSummaryMetaResponse
+
+
+class TaskFileResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: int
+    filename: str
+    original_filename: str
+    file_size: int
+    uploaded_at: str | None = None
+    uploaded_by: int | None = None
+    uploaded_by_name: str | None = None
+
+
+class TaskFileUploadResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: int
+    message: str
+    filename: str
+    original_filename: str
+    file_size: int
+    uploaded_at: str | None = None

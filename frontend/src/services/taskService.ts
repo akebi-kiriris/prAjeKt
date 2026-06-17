@@ -15,6 +15,7 @@ import type {
   TaskMember,
   TaskSubtaskMutationResponse,
   SearchUserResult,
+  UpcomingTaskRaw,
 } from '../types';
 
 const normalizeTags = (tags: string[] | string | null | undefined): string[] | null | undefined => {
@@ -77,5 +78,5 @@ export const taskService = {
   }),
   deleteFile:    (taskId: number, fileId: number): Promise<AxiosResponse<ApiMutationResponse>> => api.delete(`/tasks/${taskId}/files/${fileId}`),
 
-  upcoming:      (): Promise<AxiosResponse<Task[]>>                                   => api.get('/tasks/upcoming'),
+  upcoming:      (): Promise<AxiosResponse<UpcomingTaskRaw[]>>                        => api.get('/tasks/upcoming'),
 };

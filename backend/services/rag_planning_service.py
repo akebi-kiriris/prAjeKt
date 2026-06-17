@@ -5,6 +5,8 @@ from datetime import datetime, timezone
 from typing import Any
 
 from chains import generate_rag_plan_suggestion, get_default_llm
+from contracts.response_helpers import build_response_payload
+from contracts.timeline_contracts import TimelinePlanSuggestionResponse
 from repositories.knowledge_repository import (
     search_knowledge_chunks_by_text,
     search_knowledge_chunks_with_scores,
@@ -374,10 +376,10 @@ def suggest_plan_with_rag(user_id: int, payload: dict[str, Any]) -> dict[str, An
             "retrieved_history_count": len(history_refs),
             "retrieved_knowledge_count": len(knowledge_refs),
         }
-        return {
+        return build_response_payload(TimelinePlanSuggestionResponse, {
             "message": "AI 規劃建議完成",
             **ai_result,
-        }
+        }, exclude_none=True)
     except Exception:
         fallback = _fallback_suggestion(user_request=user_request, references=merged_refs)
         fallback["meta"].update(
@@ -389,9 +391,9 @@ def suggest_plan_with_rag(user_id: int, payload: dict[str, Any]) -> dict[str, An
                 "retrieved_knowledge_count": len(knowledge_refs),
             }
         )
-        return {
+        return build_response_payload(TimelinePlanSuggestionResponse, {
             "message": "AI 規劃建議完成（降級模式）",
             **fallback,
-        }
+        }, exclude_none=True)
 
 

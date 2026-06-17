@@ -15,7 +15,14 @@ from repositories.profile_repository import (
     list_timeline_ids_for_user,
     search_user_by_username_or_email,
 )
-from contracts.profile_contracts import ProfileSearchRequest, ProfileUpdateRequest
+from contracts.profile_contracts import (
+    ProfileChartStatsResponse,
+    ProfileResponse,
+    ProfileSearchRequest,
+    ProfileSearchResponse,
+    ProfileUpdateRequest,
+)
+from contracts.response_helpers import build_response_payload
 from services.transactions import transaction
 
 
@@ -60,7 +67,7 @@ def profile_to_dict(user: User) -> dict[str, Any]:
     回傳:
         個人資料回應 payload。
     """
-    return {
+    return build_response_payload(ProfileResponse, {
         'id': user.id,
         'name': user.name,
         'username': user.username,
@@ -69,7 +76,7 @@ def profile_to_dict(user: User) -> dict[str, Any]:
         'avatar': user.avatar,
         'bio': user.bio,
         'created_at': user.created_at.isoformat() + 'Z' if user.created_at else None,
-    }
+    })
 
 
 def search_user_to_dict(user: User) -> dict[str, Any]:
@@ -81,12 +88,12 @@ def search_user_to_dict(user: User) -> dict[str, Any]:
     回傳:
         提供搜尋端點使用的精簡使用者 payload。
     """
-    return {
+    return build_response_payload(ProfileSearchResponse, {
         'id': user.id,
         'name': user.name,
         'username': user.username,
         'email': user.email,
-    }
+    })
 
 
 def get_profile_user_or_404(user_id: int) -> User:
@@ -252,10 +259,10 @@ def build_chart_stats_for_user(user_id: int) -> dict[str, Any]:
 
     tasks_by_project = sorted(project_counts.values(), key=lambda item: -item['count'])[:8]
 
-    return {
+    return build_response_payload(ProfileChartStatsResponse, {
         'status_distribution': status_dist,
         'daily_completions': daily_completions,
         'tasks_by_project': tasks_by_project,
-    }
+    })
 
 

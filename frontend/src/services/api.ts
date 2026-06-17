@@ -1,4 +1,4 @@
-import axios, { type InternalAxiosRequestConfig, type AxiosResponse } from 'axios';
+import axios, { type AxiosError, type InternalAxiosRequestConfig, type AxiosResponse } from 'axios';
 import router from '../router';
 import { shouldRedirectToLogin } from '../utils/apiError';
 
@@ -124,9 +124,10 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response: AxiosResponse) => response,
   async (error) => {
-    const originalRequest = error.config as RetryableAxiosRequestConfig;
-    const statusCode: number | undefined = error.response?.status;
-    const payload = (error.response?.data as JwtErrorPayload | undefined);
+    const axiosError = error as AxiosError<JwtErrorPayload>;
+    const originalRequest = axiosError.config as RetryableAxiosRequestConfig;
+    const statusCode: number | undefined = axiosError.response?.status;
+    const payload = axiosError.response?.data;
     const message = String(payload?.msg || '');
     const errorCode = payload?.error_code;
 
@@ -147,6 +148,7 @@ api.interceptors.response.use(
           failedQueue.push({ resolve, reject });
         })
           .then(token => {
+            originalRequest.headers = originalRequest.headers ?? {};
             originalRequest.headers.Authorization = `Bearer ${token}`;
             return api(originalRequest);
           })
@@ -179,6 +181,7 @@ api.interceptors.response.use(
         localStorage.setItem('access_token', newAccessToken);
 
         // 更新原本失敗請求的 header
+        originalRequest.headers = originalRequest.headers ?? {};
         originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
 
         // 處理佇列中所有等待的請求

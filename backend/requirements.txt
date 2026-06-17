@@ -16,6 +16,7 @@ google-genai>=1.0.0
 langgraph
 pydantic>=2.0
 flask-socketio
+flask-swagger-ui
 requests
 networkx>=3.0
 tenacity>=8.0

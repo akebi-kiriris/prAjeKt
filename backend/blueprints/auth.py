@@ -1,7 +1,14 @@
-from flask import Blueprint, request, jsonify, session
+from flask import Blueprint, request, jsonify
 from flask_jwt_extended import create_access_token, create_refresh_token, jwt_required, get_jwt_identity
 from blueprints.validation import error_from_exception, error_response, validate_payload_or_400
 from contracts.auth_contracts import LoginRequest, RegisterRequest
+from contracts.response_contracts import (
+    AuthLoginResponse,
+    AuthRefreshResponse,
+    MessageResponse,
+    UserIdMutationResponse,
+    response_payload,
+)
 from services.auth_service import (
     AuthOperationError,
     auth_user_to_dict,
@@ -12,6 +19,15 @@ from services.auth_service import (
 )
 
 auth_bp = Blueprint('auth', __name__)
+
+
+def _auth_json_response(payload: dict, status_code: int = 200):
+    response = jsonify(payload)
+    response.status_code = status_code
+    # Auth payload 會回傳 token 或目前使用者資訊，不應被瀏覽器或中介快取。
+    response.headers['Cache-Control'] = 'no-store'
+    response.headers['Pragma'] = 'no-cache'
+    return response
 
 def _get_json_dict_or_400():
     data = request.get_json(silent=True)
@@ -35,7 +51,7 @@ def register():
 
     try:
         user_id = register_user(data)
-        return jsonify({'message': '註冊成功', 'user_id': user_id}), 201
+        return _auth_json_response(response_payload(UserIdMutationResponse(message='註冊成功', user_id=user_id)), 201)
     except AuthOperationError as err:
         return error_from_exception(err)
 
@@ -58,18 +74,18 @@ def login():
     access_token = create_access_token(identity=str(user.id))
     refresh_token = create_refresh_token(identity=str(user.id))
     
-    return jsonify({
-        'access_token': access_token,
-        'refresh_token': refresh_token,
-        'user': auth_user_to_dict(user)
-    }), 200
+    return _auth_json_response(response_payload(AuthLoginResponse(
+        access_token=access_token,
+        refresh_token=refresh_token,
+        user=auth_user_to_dict(user),
+    )), 200)
 
 @auth_bp.route('/logout', methods=['POST'])
 @jwt_required()
 def logout():
     """登出"""
     # JWT 無狀態，前端刪除 token 即可
-    return jsonify({'message': '登出成功'}), 200
+    return _auth_json_response(response_payload(MessageResponse(message='登出成功'))), 200
 
 @auth_bp.route('/me', methods=['GET'])
 @jwt_required()
@@ -79,7 +95,7 @@ def get_current_user():
 
     try:
         user = get_current_user_or_404(user_id)
-        return jsonify(current_user_to_dict(user)), 200
+        return _auth_json_response(current_user_to_dict(user)), 200
     except AuthOperationError as err:
         return error_from_exception(err)
     
@@ -93,6 +109,4 @@ def refresh_access_token():
     # 產生新的 access token
     new_access_token = create_access_token(identity=user_id)
     
-    return jsonify({
-        'access_token': new_access_token
-    }), 200
+    return _auth_json_response(response_payload(AuthRefreshResponse(access_token=new_access_token))), 200

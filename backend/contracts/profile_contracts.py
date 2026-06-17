@@ -1,6 +1,6 @@
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from contracts.shared_fields import validate_non_empty_text
 
@@ -45,3 +45,47 @@ class ProfileSearchRequest(BaseModel):
         if text is None:
             raise ValueError("請提供查詢關鍵字")
         return text
+
+
+class ProfileResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: int
+    name: str
+    username: str | None = None
+    email: str
+    phone: str | None = None
+    avatar: str | None = None
+    bio: str | None = None
+    created_at: str | None = None
+
+
+class ProfileSearchResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: int
+    name: str
+    username: str | None = None
+    email: str
+
+
+class DailyCompletionResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    date: str
+    count: int
+
+
+class TasksByProjectResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    count: int
+
+
+class ProfileChartStatsResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    status_distribution: dict[str, int]
+    daily_completions: list[DailyCompletionResponse] = Field(default_factory=list)
+    tasks_by_project: list[TasksByProjectResponse] = Field(default_factory=list)

@@ -246,7 +246,6 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
-import type { Ref } from 'vue';
 import { toast } from 'vue-sonner';
 import { storeToRefs } from 'pinia';
 import { useProfileStore } from '../stores/profile';
@@ -259,11 +258,9 @@ import { GridComponent, TooltipComponent, LegendComponent } from 'echarts/compon
 import { timelineService } from '../services/timelineService';
 import { getApiErrorMessage } from '../utils/apiError';
 import type {
-  ChartStats,
   ProfileForm,
   ProfileUpdatePayload,
   ProjectStats,
-  Timeline,
 } from '../types';
 
 use([CanvasRenderer, LineChart, BarChart, PieChart, GridComponent, TooltipComponent, LegendComponent]);
@@ -278,12 +275,10 @@ const {
   profile,
   loading,
   statCards,
-  chartStats: rawChartStats,
+  chartStats,
   chartLoading,
   ownedTimelines,
 } = storeToRefs(profileStore);
-
-const chartStats = rawChartStats as unknown as Ref<ChartStats | null>;
 
 // ────────────── View-local UI 狀態 ──────────────
 const isEditing = ref(false);
@@ -361,6 +356,20 @@ const STATUS_COLORS = {
   completed: '#10b981', cancelled: '#9ca3af',
 } as const;
 
+const isStatusKey = (value: string): value is StatusKey => value in STATUS_LABELS;
+
+const mapStatusDistributionToPieData = (distribution: Record<string, number>) =>
+  Object.entries(distribution)
+    .filter((entry): entry is [StatusKey, number] => {
+      const [key, count] = entry;
+      return count > 0 && isStatusKey(key);
+    })
+    .map(([key, value]) => ({
+      name: STATUS_LABELS[key],
+      value,
+      itemStyle: { color: STATUS_COLORS[key] },
+    }));
+
 // ──────────────── Level 1：個人圖表 Options ────────────────
 const trendOption = computed(() => {
   if (!chartStats.value) return {};
@@ -386,17 +395,7 @@ const trendOption = computed(() => {
 
 const statusPieOption = computed(() => {
   if (!chartStats.value) return {};
-  const dist = chartStats.value.status_distribution;
-  const pieData = Object.entries(dist)
-    .filter(([, v]) => v > 0)
-    .map(([k, v]) => {
-      const key = k as StatusKey;
-      return {
-        name: STATUS_LABELS[key] || key,
-        value: v,
-        itemStyle: { color: STATUS_COLORS[key] },
-      };
-    });
+  const pieData = mapStatusDistributionToPieData(chartStats.value.status_distribution);
   return {
     tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
     legend: { orient: 'vertical', right: 8, top: 'center', textStyle: { fontSize: 11 } },
@@ -466,17 +465,7 @@ const memberBarOption = computed(() => {
 
 const projectStatusOption = computed(() => {
   if (!projectStats.value) return {};
-  const dist = projectStats.value.status_distribution;
-  const pieData = Object.entries(dist)
-    .filter(([, v]) => v > 0)
-    .map(([k, v]) => {
-      const key = k as StatusKey;
-      return {
-        name: STATUS_LABELS[key] || key,
-        value: v,
-        itemStyle: { color: STATUS_COLORS[key] },
-      };
-    });
+  const pieData = mapStatusDistributionToPieData(projectStats.value.status_distribution);
   return {
     tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
     legend: { orient: 'vertical', right: 8, top: 'center', textStyle: { fontSize: 11 } },
@@ -490,7 +479,7 @@ onMounted(async () => {
   syncFormFromStore();
   await profileStore.fetchChartStats();
   if (ownedTimelines.value.length > 0) {
-    selectedTimelineId.value = (ownedTimelines.value[0] as Timeline).id;
+    selectedTimelineId.value = ownedTimelines.value[0].id;
     await loadProjectStats();
   }
 });

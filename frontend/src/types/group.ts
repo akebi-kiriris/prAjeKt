@@ -1,4 +1,4 @@
-import type { ApiErrorPayload } from './common';
+import type { ApiErrorPayload, JsonObject } from './common';
 
 export interface Group {
   group_id: number;
@@ -111,7 +111,7 @@ export interface GroupSnapshotResponse {
   source_count: number;
   model: string | null;
   provider: string | null;
-  metadata: Record<string, unknown>;
+  metadata: JsonObject;
 }
 
 export interface GroupSnapshotJobStatus {
@@ -129,3 +129,5 @@ export interface GroupSnapshotRequest {
   window_days?: number;
   async?: boolean;
 }
+
+export type GroupSnapshotGenerationResponse = GroupSnapshotResponse | GroupSnapshotJobStatus;

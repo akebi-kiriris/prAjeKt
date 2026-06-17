@@ -5,6 +5,12 @@ from pydantic import ValidationError
 from blueprints.guards import require_timeline_role
 from blueprints.validation import format_pydantic_error, validate_payload_or_400
 from blueprints.validation import error_from_exception, error_response
+from contracts.response_contracts import (
+    IdMutationResponse,
+    MessageResponse,
+    SearchUserResponse,
+    response_payload,
+)
 from contracts.timeline_contracts import (
     ConflictCheckInput,
     TimelineAddMemberRequest,
@@ -95,7 +101,7 @@ def create_timeline():
 
     try:
         timeline_id = create_timeline_for_user(user_id, data)
-        return jsonify({"message": "專案新增成功", "id": timeline_id}), 201
+        return jsonify(response_payload(IdMutationResponse(message="專案新增成功", id=timeline_id))), 201
     except TimelineOperationError as err:
         return error_from_exception(err)
 
@@ -114,7 +120,7 @@ def update_timeline(timeline_id):
 
     try:
         update_timeline_for_member(timeline_id, int(get_jwt_identity()), data)
-        return jsonify({"message": "專案更新成功"}), 200
+        return jsonify(response_payload(MessageResponse(message="專案更新成功"))), 200
     except TimelineOperationError as err:
         return error_from_exception(err)
 
@@ -126,7 +132,7 @@ def delete_timeline(timeline_id):
     """刪除專案時程（軟刪除，僅負責人可操作）"""
     try:
         soft_delete_timeline_for_owner(timeline_id)
-        return jsonify({"message": "專案刪除成功"}), 200
+        return jsonify(response_payload(MessageResponse(message="專案刪除成功"))), 200
     except TimelineOperationError as err:
         return error_from_exception(err)
 
@@ -229,7 +235,7 @@ def update_timeline_remark(timeline_id):
 
     try:
         update_timeline_remark_for_member(timeline_id, data.get("remark", ""))
-        return jsonify({"message": "備註更新成功"}), 200
+        return jsonify(response_payload(MessageResponse(message="備註更新成功"))), 200
     except TimelineOperationError as err:
         return error_from_exception(err)
 
@@ -251,10 +257,7 @@ def search_user_by_email():
             int(get_jwt_identity()),
             data.get("email"),
         )
-        return jsonify({
-            "id": user.id,
-            "name": user.name,
-        }), 200
+        return jsonify(response_payload(SearchUserResponse(id=user.id, name=user.name))), 200
     except TimelineOperationError as err:
         return error_from_exception(err)
 
@@ -300,7 +303,7 @@ def remove_timeline_member(timeline_id, member_user_id):
 
     try:
         remove_timeline_member_for_owner(timeline_id, member_user_id, user_id)
-        return jsonify({"message": "成員已移除"}), 200
+        return jsonify(response_payload(MessageResponse(message="成員已移除"))), 200
     except TimelineOperationError as err:
         return error_from_exception(err)
 

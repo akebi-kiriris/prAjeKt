@@ -27,7 +27,17 @@ from repositories.group_repository import (
 )
 from repositories.session_repository import add_entity, delete_entity, flush_session
 from services.ai_provider import get_ai_provider
-from contracts.group_contracts import GroupCreateRequest, GroupJoinRequest, GroupMessageRequest
+from contracts.response_helpers import build_response_payload
+from contracts.group_contracts import (
+    GroupCreateRequest,
+    GroupJoinRequest,
+    GroupListItemResponse,
+    GroupMemberResponse,
+    GroupMessageRequest,
+    GroupMessageResponse,
+    GroupSnapshotJobResponse,
+    GroupSnapshotResponse,
+)
 from services.transactions import transaction
 
 
@@ -36,8 +46,6 @@ class GroupOperationError(Exception):
         super().__init__(message)
         self.message = message
         self.status_code = status_code
-
-
 _snapshot_jobs = {}
 _snapshot_jobs_lock = threading.Lock()
 _snapshot_executor = ThreadPoolExecutor(max_workers=2)
@@ -106,13 +114,13 @@ def generate_unique_invite_code() -> str:
 
 def group_to_dict(group: Group) -> dict[str, Any]:
     """將群組模型轉為前端可用的回應資料。"""
-    return {
+    return build_response_payload(GroupListItemResponse, {
         'group_id': group.group_id,
         'group_name': group.group_name,
         'group_type': group.group_type,
         'invite_code': group.group_inviteCode,
         'created_at': group.created_at.isoformat() + 'Z' if group.created_at else None,
-    }
+    })
 
 
 def group_member_to_dict(member: GroupMemberRow | Any, include_email: bool = True) -> dict[str, Any]:
@@ -132,7 +140,7 @@ def group_member_to_dict(member: GroupMemberRow | Any, include_email: bool = Tru
     }
     if include_email:
         payload['email'] = email
-    return payload
+    return build_response_payload(GroupMemberResponse, payload, exclude_none=True)
 
 
 def group_message_to_dict(message: GroupMessageRow | Any) -> dict[str, Any]:
@@ -148,12 +156,12 @@ def group_message_to_dict(message: GroupMessageRow | Any) -> dict[str, Any]:
         sender_name = str(getattr(message, "sender_name"))
         created_at = getattr(message, "created_at")
 
-    return {
+    return build_response_payload(GroupMessageResponse, {
         'message_id': message_id,
         'content': content,
         'sender_name': sender_name,
         'created_at': created_at.isoformat() + 'Z' if created_at else None,
-    }
+    })
 
 
 def is_group_member(group_id: int, user_id: int) -> bool:
@@ -315,7 +323,7 @@ def send_group_message_for_member(group_id: int, user_id: int, content: str) -> 
 
 def group_snapshot_to_dict(snapshot: GroupAISnapshot) -> dict[str, Any]:
     """將快照模型轉為介面回應資料。"""
-    return {
+    return build_response_payload(GroupSnapshotResponse, {
         'snapshot_id': snapshot.snapshot_id,
         'group_id': snapshot.group_id,
         'summary': snapshot.summary_json,
@@ -325,7 +333,7 @@ def group_snapshot_to_dict(snapshot: GroupAISnapshot) -> dict[str, Any]:
         'model': snapshot.model,
         'provider': snapshot.provider,
         'metadata': snapshot.metadata_json or {},
-    }
+    })
 
 
 def _normalize_message_ids(raw_ids):
@@ -904,7 +912,7 @@ def enqueue_snapshot_job(app: Any, group_id: int, user_id: int, window_days: int
         _snapshot_jobs[job_id] = payload
 
     _snapshot_executor.submit(_run_snapshot_job, app, job_id, group_id, user_id, window_days)
-    return payload
+    return build_response_payload(GroupSnapshotJobResponse, payload)
 
 
 def get_snapshot_job_status(job_id: str, requester_user_id: int | None = None) -> dict[str, Any]:
@@ -923,6 +931,6 @@ def get_snapshot_job_status(job_id: str, requester_user_id: int | None = None) -
     if requester_user_id is not None and payload.get('requested_by') != requester_user_id:
         raise GroupOperationError('無權查看此工作', 403)
 
-    return payload
+    return build_response_payload(GroupSnapshotJobResponse, payload)
 
 

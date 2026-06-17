@@ -234,6 +234,20 @@ type FrappeTask = {
   custom_class?: string;
 };
 
+const isObjectRecord = (value: unknown): value is Record<string, unknown> =>
+  Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+
+const isTimeline = (value: unknown): value is Timeline =>
+  isObjectRecord(value) &&
+  typeof value.id === 'number' &&
+  typeof value.name === 'string';
+
+const isFrappeTask = (value: unknown): value is FrappeTask =>
+  isObjectRecord(value) &&
+  typeof value.id === 'string' &&
+  typeof value.name === 'string' &&
+  typeof value.full_name === 'string';
+
 let ganttInstance: Gantt | null = null;
 const ganttSavingTaskIds = new Set<number>();
 const ganttSaveTimers = new Map<number, ReturnType<typeof setTimeout>>();
@@ -430,7 +444,7 @@ const renderGantt = async () => {
       const timelineName = getTimelineNameById(hit?.timeline_id ?? null) || '未分配專案';
       const statusLabel = hit ? getTaskStatusLabel(hit.status) : '待辦';
       const progress = `${Math.round(task.progress ?? 0)}%`;
-      const fullName = (task as FrappeTask).full_name || hit?.name || task.name;
+      const fullName = isFrappeTask(task) ? task.full_name || hit?.name || task.name : hit?.name || task.name;
       const dependencyNames = (hit?.depends_on_task_ids || [])
         .map((dependencyTaskId) => props.allTasks.find((item) => item.task_id === dependencyTaskId)?.name || `#${dependencyTaskId}`)
         .join('、');
@@ -580,7 +594,12 @@ const calendarOptions = computed<CalendarOptions>(() => ({
   buttonText: { today: '今天', month: '月', year: '年度' },
   height: 'auto',
   events: calendarEvents.value,
-  eventClick: (info: EventClickArg) => emit('view-timeline', info.event.extendedProps.timeline as Timeline),
+  eventClick: (info: EventClickArg) => {
+    const timeline = info.event.extendedProps.timeline;
+    if (isTimeline(timeline)) {
+      emit('view-timeline', timeline);
+    }
+  },
   eventDidMount: (info: EventMountArg) => {
     const el = info.el;
     el.title = `${info.event.title}\n狀態：${info.event.extendedProps.status}\n進度：${info.event.extendedProps.progress}% 完成`;

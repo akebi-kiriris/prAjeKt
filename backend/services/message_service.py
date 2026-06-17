@@ -1,7 +1,10 @@
 ﻿from datetime import datetime
 from typing import Any
+
 from sqlalchemy.orm import Query
 
+from contracts.group_contracts import GroupRealtimeMessageResponse
+from contracts.response_helpers import build_response_payload
 from models import db
 from models.message import Message, MessageRead
 from repositories.message_repository import (
@@ -89,14 +92,14 @@ def serialize_group_message(message: Message, sender_name: str) -> dict[str, Any
     回傳:
         API 與即時推播共用的訊息資料。
     """
-    return {
+    return build_response_payload(GroupRealtimeMessageResponse, {
         'message_id': message.message_id,
         'group_id': message.group_id,
         'sender_id': message.sender_id,
         'sender_name': sender_name,
         'content': message.content,
         'created_at': message.created_at.isoformat() + 'Z' if message.created_at else None,
-    }
+    })
 
 
 def create_group_message(group_id: int, sender_id: int, content: str) -> dict[str, Any]:

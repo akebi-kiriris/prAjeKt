@@ -8,6 +8,13 @@ from contracts.group_contracts import (
     GroupMessageRequest,
     GroupSnapshotRequest,
 )
+from contracts.response_contracts import (
+    GroupCreateResponse,
+    GroupMessageSentResponse,
+    GroupSnapshotQueuedResponse,
+    MessageResponse,
+    response_payload,
+)
 from services.group_service import (
     GroupOperationError,
     count_group_messages_for_snapshot,
@@ -83,11 +90,11 @@ def create_group():
 
     try:
         payload = create_group_for_user(user_id, data.get('group_name', ''))
-        return jsonify({
-            'message': '任務小組已創建',
-            'group_id': payload['group_id'],
-            'invite_code': payload['invite_code'],
-        }), 201
+        return jsonify(response_payload(GroupCreateResponse(
+            message='任務小組已創建',
+            group_id=payload['group_id'],
+            invite_code=payload['invite_code'],
+        ))), 201
     except GroupOperationError as err:
         return error_from_exception(err)
 
@@ -105,7 +112,7 @@ def join_group():
 
     try:
         join_group_by_invite_code(user_id, data.get('invite_code', ''))
-        return jsonify({'message': '成功加入群組'}), 200
+        return jsonify(response_payload(MessageResponse(message='成功加入群組'))), 200
     except GroupOperationError as err:
         return error_from_exception(err)
 
@@ -117,7 +124,7 @@ def leave_group(group_id):
 
     try:
         leave_group_for_user(group_id, user_id)
-        return jsonify({'message': '已離開群組'}), 200
+        return jsonify(response_payload(MessageResponse(message='已離開群組'))), 200
     except GroupOperationError as err:
         return error_from_exception(err)
 
@@ -159,7 +166,7 @@ def send_message(group_id):
 
     try:
         message_id = send_group_message_for_member(group_id, user_id, data.get('content', ''))
-        return jsonify({'message': '訊息已發送', 'message_id': message_id}), 201
+        return jsonify(response_payload(GroupMessageSentResponse(message='訊息已發送', message_id=message_id))), 201
     except GroupOperationError as err:
         return error_from_exception(err)
 
@@ -190,12 +197,12 @@ def generate_ai_snapshot(group_id):
         if should_enqueue_snapshot(source_count, async_requested):
             app_obj = current_app._get_current_object()
             job_payload = enqueue_snapshot_job(app_obj, group_id, user_id, window_days)
-            return jsonify({
-                'job_id': job_payload['job_id'],
-                'status': job_payload['status'],
-                'source_count': source_count,
-                'threshold': int(os.getenv('SNAPSHOT_ASYNC_THRESHOLD', 500)),
-            }), 202
+            return jsonify(response_payload(GroupSnapshotQueuedResponse(
+                job_id=job_payload['job_id'],
+                status=job_payload['status'],
+                source_count=source_count,
+                threshold=int(os.getenv('SNAPSHOT_ASYNC_THRESHOLD', 500)),
+            ))), 202
 
         snapshot = generate_group_snapshot(
             group_id=group_id,

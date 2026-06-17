@@ -5,8 +5,10 @@ export interface TaskMember {
   user_id: number;
   name: string;
   username?: string | null;
-  email: string;
+  email?: string | null;
   role: 0 | 1;
+  avatar?: string | null;
+  assigned_at?: string | null;
 }
 
 export interface SearchUserResult {
@@ -36,7 +38,12 @@ export interface GenerateTasksRequest {
   description?: string;
 }
 
-export type GenerateTasksResponse = AiGeneratedTask[] | { tasks: AiGeneratedTask[] };
+export interface GenerateTasksResponse {
+  message: string;
+  tasks: AiGeneratedTask[];
+  existingCount: number;
+  generatedCount: number;
+}
 
 export interface Subtask {
   id: number;
@@ -52,6 +59,7 @@ export interface TaskComment {
   task_id?: number;
   user_id: number;
   user_name: string;
+  user_avatar?: string | null;
   task_message: string;
   created_at: string | null;
 }
@@ -111,7 +119,7 @@ export interface Task {
   timeline_id: number | null;
   priority: TaskPriority;
   status: TaskStatus;
-  tags: string | null;
+  tags: string[] | string | null;
   estimated_hours: number | null;
   actual_hours: number | null;
   members: TaskMember[];

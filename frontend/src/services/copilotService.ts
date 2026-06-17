@@ -8,6 +8,7 @@ import type {
   CopilotAgentRejectPayload,
   CopilotAgentRejectResponse,
   CopilotAgentReplanPayload,
+  CopilotAgentToolsResponse,
   CopilotMcpExecutePayload,
   CopilotMcpExecuteResponse,
 } from '../types';
@@ -28,5 +29,5 @@ export const copilotService = {
   replanAgent: (
     payload: CopilotAgentReplanPayload,
   ): Promise<AxiosResponse<CopilotAgentPlanResponse>> => api.post('/copilot/agent/replan', payload),
-  listAgentTools: (): Promise<AxiosResponse<{ tools: Array<Record<string, unknown>> }>> => api.get('/copilot/agent/tools'),
+  listAgentTools: (): Promise<AxiosResponse<CopilotAgentToolsResponse>> => api.get('/copilot/agent/tools'),
 };

@@ -291,7 +291,6 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue';
-import type { Ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { toast } from 'vue-sonner';
 import { storeToRefs } from 'pinia';
@@ -303,8 +302,8 @@ import { getApiErrorMessage } from '../utils/apiError';
 import type {
   Group,
   Message,
-  GroupCreateResponse,
   GroupSnapshotResponse,
+  GroupSnapshotGenerationResponse,
   GroupSnapshotJobStatus,
 } from '../types';
 
@@ -322,10 +321,10 @@ const {
   lastSocketError: storeLastSocketError,
 } = storeToRefs(groupStore);
 
-const groups = storeGroups as unknown as Ref<Group[]>;
-const currentGroup = storeCurrentGroup as unknown as Ref<Group | null>;
-const messages = storeMessages as unknown as Ref<Message[]>;
-const lastSocketError = storeLastSocketError as unknown as Ref<string | null>;
+const groups = storeGroups;
+const currentGroup = storeCurrentGroup;
+const messages = storeMessages;
+const lastSocketError = storeLastSocketError;
 
 // ────────────── View-local UI 狀態 ──────────────
 const newMessage = ref('');
@@ -375,8 +374,7 @@ const handleJoinGroup = async () => {
 };
 
 const openChat = async (group: Group) => {
-  const storeGroup = group as unknown as Parameters<typeof groupStore.openChat>[0];
-  await groupStore.openChat(storeGroup, scrollToBottom);
+  await groupStore.openChat(group, scrollToBottom);
   await router.replace({ query: { ...route.query, group_id: String(group.group_id) } });
 };
 
@@ -423,13 +421,17 @@ const snapshotDecisionItems = computed(() => {
   return snapshotPreview.value?.summary?.decisions || [];
 });
 
+const isSnapshotJobStatus = (
+  payload: GroupSnapshotGenerationResponse,
+): payload is GroupSnapshotJobStatus => 'job_id' in payload;
+
 const pollSnapshotJob = async (jobId: string): Promise<GroupSnapshotJobStatus> => {
   const maxAttempts = 15;
   const intervalMs = 1000;
 
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     const response = await groupService.getSnapshotJobStatus(jobId);
-    const payload = response.data as GroupSnapshotJobStatus;
+    const payload = response.data;
 
     if (payload.status === 'completed') {
       return payload;
@@ -449,8 +451,8 @@ const generateSnapshot = async (groupId: number) => {
     snapshotLoadingGroupId.value = groupId;
     const response = await groupService.generateSnapshot(groupId, { window_days: 30, async: false });
 
-    if (response.status === 202) {
-      const jobPayload = response.data as GroupSnapshotJobStatus;
+    if (response.status === 202 && isSnapshotJobStatus(response.data)) {
+      const jobPayload = response.data;
       toast.info('群組快照已進入背景工作，正在等待完成...');
       const finalJob = await pollSnapshotJob(jobPayload.job_id);
       if (finalJob.snapshot) {
@@ -460,10 +462,10 @@ const generateSnapshot = async (groupId: number) => {
       return;
     }
 
-    openSnapshotModal(response.data as GroupSnapshotResponse);
+    openSnapshotModal(response.data);
     toast.success('群組快照生成完成');
   } catch (error) {
-    toast.error(getApiErrorMessage(error, (error as Error).message || '生成群組快照失敗'));
+    toast.error(getApiErrorMessage(error, '生成群組快照失敗'));
   } finally {
     snapshotLoadingGroupId.value = null;
   }
@@ -473,7 +475,7 @@ const viewLatestSnapshot = async (groupId: number) => {
   try {
     snapshotLoadingGroupId.value = groupId;
     const response = await groupService.getLatestSnapshot(groupId);
-    openSnapshotModal(response.data as GroupSnapshotResponse);
+    openSnapshotModal(response.data);
   } catch (error) {
     toast.error(getApiErrorMessage(error, '取得最新快照失敗'));
   } finally {

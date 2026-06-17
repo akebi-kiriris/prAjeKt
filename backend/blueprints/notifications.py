@@ -1,6 +1,7 @@
 from flask import Blueprint, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from blueprints.validation import error_from_exception
+from contracts.response_contracts import CountResponse, MessageResponse, response_payload
 from services.notification_service import (
     NotificationOperationError,
     delete_notification_for_user,
@@ -29,7 +30,7 @@ def get_unread_count():
     """取得未讀通知數量"""
     user_id = int(get_jwt_identity())
     count = get_unread_count_for_user(user_id)
-    return jsonify({'count': count}), 200
+    return jsonify(response_payload(CountResponse(count=count))), 200
 
 
 @notifications_bp.route('/<int:notification_id>/read', methods=['PATCH'])
@@ -39,7 +40,7 @@ def mark_as_read(notification_id):
     user_id = int(get_jwt_identity())
     try:
         mark_notification_as_read(notification_id, user_id)
-        return jsonify({'message': '已標記為已讀'}), 200
+        return jsonify(response_payload(MessageResponse(message='已標記為已讀'))), 200
     except NotificationOperationError as err:
         return error_from_exception(err)
 
@@ -51,7 +52,7 @@ def mark_all_as_read():
     user_id = int(get_jwt_identity())
     try:
         mark_all_notifications_as_read(user_id)
-        return jsonify({'message': '全部標記為已讀'}), 200
+        return jsonify(response_payload(MessageResponse(message='全部標記為已讀'))), 200
     except NotificationOperationError as err:
         return error_from_exception(err)
 
@@ -63,7 +64,7 @@ def delete_notification(notification_id):
     user_id = int(get_jwt_identity())
     try:
         delete_notification_for_user(notification_id, user_id)
-        return jsonify({'message': '通知已刪除'}), 200
+        return jsonify(response_payload(MessageResponse(message='通知已刪除'))), 200
     except NotificationOperationError as err:
         return error_from_exception(err)
 

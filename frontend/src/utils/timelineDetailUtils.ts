@@ -133,8 +133,8 @@ export const normalizeGeneratedTasks = (payload: unknown): AiGeneratedTask[] => 
     return payload.filter((item): item is AiGeneratedTask => Boolean(item && typeof item === 'object'));
   }
 
-  if (payload && typeof payload === 'object') {
-    const candidate = (payload as Record<string, unknown>).tasks;
+  if (payload && typeof payload === 'object' && 'tasks' in payload) {
+    const candidate = payload.tasks;
     if (Array.isArray(candidate)) {
       return candidate.filter((item): item is AiGeneratedTask => Boolean(item && typeof item === 'object'));
     }

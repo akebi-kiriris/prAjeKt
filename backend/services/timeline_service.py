@@ -49,12 +49,24 @@ from repositories.timeline_repository import (
     get_users_by_ids,
 )
 from repositories.session_repository import add_entity, delete_entity, flush_session
+from contracts.response_helpers import build_response_payload
 from contracts.timeline_contracts import (
     ConflictCheckInput,
+    TimelineConflictCheckResponse,
+    TimelineBatchCreateTasksResponse,
     TimelineCreateInput,
     TimelineBatchCreateTasksInput,
+    TimelineGenerateTasksResponse,
+    TimelineListItemResponse,
+    TimelineMemberResponse,
+    TimelineMemberStatsResponse,
+    TimelineRiskAnalysisResponse,
+    TimelineRiskNotificationResponse,
+    TimelineTaskItemResponse,
     TimelineUpdateInput,
+    UpcomingTimelineResponse,
     WeeklyReportInput,
+    WeeklyReportResponse,
 )
 
 TIMELINE_UPDATE_ALLOWED_FIELDS = {'name', 'start_date', 'end_date', 'remark'}
@@ -75,8 +87,6 @@ class TimelineOperationError(Exception):
         super().__init__(message)
         self.message = message
         self.status_code = status_code
-
-
 def find_unknown_fields(payload: dict[str, Any], allowed_fields: set[str]) -> list[str]:
     """依白名單回傳請求資料中的未知欄位。"""
     return sorted(set(payload.keys()) - allowed_fields)
@@ -111,7 +121,7 @@ def timeline_list_item_to_dict(
     completed_tasks: int,
 ) -> dict[str, Any]:
     """序列化專案列表卡片回應資料。"""
-    return {
+    return build_response_payload(TimelineListItemResponse, {
         'id': timeline.id,
         'name': timeline.name,
         'startDate': timeline.start_date.isoformat() + 'Z' if timeline.start_date else None,
@@ -120,7 +130,7 @@ def timeline_list_item_to_dict(
         'role': role,
         'totalTasks': total_tasks,
         'completedTasks': completed_tasks,
-    }
+    })
 
 
 def timeline_task_item_to_dict(
@@ -130,7 +140,7 @@ def timeline_task_item_to_dict(
     can_manage_members: bool = False,
 ) -> dict[str, Any]:
     """序列化專案任務詳情回應資料。"""
-    return {
+    return build_response_payload(TimelineTaskItemResponse, {
         'task_id': task.task_id,
         'name': task.name,
         'assignee': assignee_name,
@@ -147,18 +157,18 @@ def timeline_task_item_to_dict(
         'tags': task.tags,
         'depends_on_task_ids': task.depends_on_task_ids or [],
         'can_manage_members': bool(can_manage_members),
-    }
+    })
 
 
 def timeline_member_item_to_dict(timeline_member: TimelineUser, user: Any) -> dict[str, Any]:
     """序列化專案成員回應資料。"""
-    return {
+    return build_response_payload(TimelineMemberResponse, {
         'user_id': user.id,
         'name': user.name,
         'username': user.username,
         'email': user.email,
         'role': timeline_member.role,
-    }
+    })
 
 
 def _build_existing_tasks_info(timeline_id):
@@ -309,12 +319,12 @@ def generate_timeline_tasks_with_ai(
     generated_tasks = _normalize_generated_tasks(parsed, timeline_id)
     all_tasks = existing_tasks_info + generated_tasks
 
-    return {
+    return build_response_payload(TimelineGenerateTasksResponse, {
         'message': f'現有 {len(existing_tasks_info)} 個任務，AI 生成 {len(generated_tasks)} 個新任務',
         'tasks': all_tasks,
         'existingCount': len(existing_tasks_info),
         'generatedCount': len(generated_tasks),
-    }
+    }, exclude_none=True)
 
 
 def _utcnow_naive():
@@ -878,27 +888,27 @@ def trigger_timeline_risk_notifications(timeline_id: int) -> dict[str, Any]:
     warning_count = len(analysis.get('warnings', []))
 
     if len(risk_items) == 0:
-        return {
+        return build_response_payload(TimelineRiskNotificationResponse, {
             'message': '目前無風險項目，未發送通知',
             'timeline_id': timeline_id,
             'risk_item_count': 0,
             'high_risk_count': 0,
             'warning_count': warning_count,
             'notified_user_count': 0,
-        }
+        })
 
     members = get_timeline_members(timeline_id)
     notified_user_ids = sorted({member.user_id for member in members})
 
     if len(notified_user_ids) == 0:
-        return {
+        return build_response_payload(TimelineRiskNotificationResponse, {
             'message': '專案目前無成員，未發送通知',
             'timeline_id': timeline_id,
             'risk_item_count': len(risk_items),
             'high_risk_count': len(high_risk_items),
             'warning_count': warning_count,
             'notified_user_count': 0,
-        }
+        })
 
     preview_names = [item.get('name') for item in high_risk_items[:3] if item.get('name')]
     if len(preview_names) == 0:
@@ -927,14 +937,14 @@ def trigger_timeline_risk_notifications(timeline_id: int) -> dict[str, Any]:
                 )
             )
 
-    return {
+    return build_response_payload(TimelineRiskNotificationResponse, {
         'message': '風險通知已發送',
         'timeline_id': timeline_id,
         'risk_item_count': len(risk_items),
         'high_risk_count': len(high_risk_items),
         'warning_count': warning_count,
         'notified_user_count': len(notified_user_ids),
-    }
+    })
 
 
 def build_weekly_report_for_timeline(
@@ -1127,7 +1137,7 @@ def build_weekly_report_for_timeline(
         fallback=ai_summary,
     )
 
-    return {
+    return build_response_payload(WeeklyReportResponse, {
         'message': '週報生成成功',
         'timeline_id': timeline.id,
         'timeline_name': timeline.name,
@@ -1160,7 +1170,7 @@ def build_weekly_report_for_timeline(
             'blocking_comment_count': blocking_comment_count,
             'ai_summary_source': ai_summary_source,
         },
-    }
+    })
 
 
 def check_timeline_task_conflicts(
@@ -1424,7 +1434,7 @@ def check_timeline_task_conflicts(
         if workload_overload_count:
             message += f'，另有 {workload_overload_count} 天工作量過載'
 
-    return {
+    return build_response_payload(TimelineConflictCheckResponse, {
         'message': message,
         'timeline_id': timeline_id,
         'task_name': task_name,
@@ -1444,7 +1454,7 @@ def check_timeline_task_conflicts(
         'suggestion': suggestion if has_conflict else None,
         'ai_suggestion': ai_suggestion_text,
         'include_ai_suggestion': include_ai_suggestion,
-    }
+    })
 
 
 def update_timeline_remark_for_member(timeline_id: int, remark: str) -> None:
@@ -1596,14 +1606,14 @@ def batch_create_tasks_for_timeline(
     if ignored_dependency_id_count > 0:
         message += f'，忽略 {ignored_dependency_id_count} 個無效的前置依賴 ID'
 
-    return {
+    return build_response_payload(TimelineBatchCreateTasksResponse, {
         'message': message,
         'kept': len(selected_existing_task_ids),
         'deleted': len(tasks_to_delete),
         'created': len(created_task_names),
         'ignored_dependency_refs': ignored_dependency_ref_count,
         'ignored_dependency_ids': ignored_dependency_id_count,
-    }
+    })
 
 
 def list_upcoming_timelines_for_user(user_id: int) -> list[dict[str, Any]]:
@@ -1628,14 +1638,14 @@ def list_upcoming_timelines_for_user(user_id: int) -> list[dict[str, Any]]:
 
         if upcoming:
             result.append(
-                {
+                build_response_payload(UpcomingTimelineResponse, {
                     'id': timeline.id,
                     'name': timeline.name,
                     'end_date': end.isoformat(),
                     'role': role,
                     'is_overdue': end < today,
                     'type': 'timeline',
-                }
+                })
             )
 
     return result
@@ -1679,10 +1689,10 @@ def build_timeline_member_stats_payload(timeline_id: int) -> dict[str, Any]:
         if status in status_dist:
             status_dist[status] += 1
 
-    return {
+    return build_response_payload(TimelineMemberStatsResponse, {
         'members': sorted(members_payload, key=lambda item: -item['total_tasks']),
         'status_distribution': status_dist,
         'total_tasks': len(tasks),
-    }
+    })
 
 

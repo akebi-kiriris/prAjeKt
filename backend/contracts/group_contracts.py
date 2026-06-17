@@ -74,3 +74,70 @@ class GroupSnapshotRequest(BaseModel):
         if value is None:
             return None
         return normalize_positive_int(value, field_name="window_days")
+
+
+class GroupListItemResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    group_id: int
+    group_name: str
+    group_type: str | None = None
+    invite_code: str | None = None
+    created_at: str | None = None
+
+
+class GroupMemberResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    user_id: int
+    name: str
+    email: str | None = None
+
+
+class GroupMessageResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    message_id: int
+    content: str
+    sender_name: str
+    created_at: str | None = None
+
+
+class GroupRealtimeMessageResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    message_id: int
+    group_id: int
+    sender_id: int
+    sender_name: str
+    content: str
+    created_at: str | None = None
+
+
+class GroupSnapshotResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    snapshot_id: int
+    group_id: int
+    summary: dict[str, Any]
+    created_by: int | None = None
+    created_at: str | None = None
+    source_count: int
+    model: str | None = None
+    provider: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class GroupSnapshotJobResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    job_id: str
+    status: str
+    group_id: int
+    requested_by: int
+    window_days: int
+    snapshot_id: int | None = None
+    snapshot: dict[str, Any] | None = None
+    error: str | None = None
+    created_at: str
+    updated_at: str

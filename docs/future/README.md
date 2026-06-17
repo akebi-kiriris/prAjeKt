@@ -38,3 +38,9 @@
 1. 本目錄文件可以保留探索性內容，但主題與適用範圍應寫清楚。
 2. 當提案被採納並進入正式規劃後，應移往對應正式目錄。
 3. 若內容已失效或被新方案取代，應在文件中標明狀態或整理歸檔。
+
+## 目前條目
+
+1. `Future_AgentPrompt分域與Planner收斂方向_2026-06-07.md`
+2. `Future_validation_helper_位置調整評估_2026-06-16.md`
+3. `Future_refresh_token_HttpOnly_cookie_與_SameSite策略評估_2026-06-17.md`

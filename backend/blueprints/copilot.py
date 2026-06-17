@@ -2,6 +2,7 @@ from flask import Blueprint, jsonify, request
 from flask_jwt_extended import get_jwt_identity, jwt_required
 
 from blueprints.validation import error_from_exception, error_response
+from contracts.response_contracts import ToolsListResponse, response_payload
 from services.agent_trace_service import build_agent_request_id
 from services.copilot_service import (
     CopilotOperationError,
@@ -76,7 +77,7 @@ def execute_copilot_mcp():
 @jwt_required()
 def list_copilot_agent_tools():
     """回傳單體 registry 已開放給 agent 的工具清單。"""
-    return jsonify({"tools": list_registered_tools()}), 200
+    return jsonify(response_payload(ToolsListResponse(tools=list_registered_tools()))), 200
 
 
 @copilot_bp.route('/agent/execute', methods=['POST'])

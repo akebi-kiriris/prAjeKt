@@ -1,5 +1,6 @@
 import type { TaskStatus } from './task';
 import type { TaskPriority } from './task';
+import type { JsonObject } from './common';
 
 export interface Timeline {
   id: number;
@@ -29,7 +30,9 @@ export interface MemberStat {
 }
 
 export interface ProjectMemberStat {
+  user_id?: number;
   name: string;
+  role?: number;
   total_tasks: number;
   completed_tasks: number;
 }
@@ -257,7 +260,7 @@ export interface ResourceConflictResponse {
 }
 
 export interface SourceReference {
-  source_type: 'timeline_task' | 'knowledge_chunk';
+  source_type: 'timeline_task' | 'knowledge_chunk' | string;
   source_id: string;
   title: string;
   snippet: string;
@@ -282,10 +285,11 @@ export interface AIPlanSuggestionResponse {
   suggested_timeline: AIPlanSuggestedTimeline;
   suggested_tasks: AIPlanSuggestedTask[];
   source_references: SourceReference[];
-  summary?: string;
-  meta?: {
+  summary: string;
+  meta: {
     fallback_used?: boolean;
     generated_at?: string;
+    signal_tags?: string[] | null;
     use_personal_knowledge?: boolean;
     use_project_knowledge?: boolean;
     project_id?: number | null;
@@ -326,7 +330,7 @@ export interface KnowledgeDocumentEventItem {
   project_id: number;
   actor_user_id: number;
   event_type: string;
-  event_payload: Record<string, unknown>;
+  event_payload: JsonObject;
   created_at?: string | null;
 }
 
@@ -347,5 +351,38 @@ export interface KnowledgeDocumentEventsResponse {
     limit: number;
     offset: number;
     count: number;
+  };
+}
+
+export interface KnowledgeDocumentUploadResponse {
+  message: string;
+  document: KnowledgeDocumentItem;
+  chunk_count: number;
+}
+
+export interface KnowledgeDocumentMutationResponse {
+  message: string;
+  document_id: number;
+}
+
+export interface KnowledgeDocumentReindexResponse extends KnowledgeDocumentMutationResponse {
+  chunk_count: number;
+}
+
+export interface KnowledgeBatchItemResponse {
+  document_id: number;
+  success: boolean;
+  error?: string | null;
+  chunk_count?: number | null;
+}
+
+export interface KnowledgeBatchResponse {
+  message: string;
+  project_id: number;
+  results: KnowledgeBatchItemResponse[];
+  meta: {
+    total: number;
+    success: number;
+    failed: number;
   };
 }
