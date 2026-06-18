@@ -114,12 +114,68 @@ class GroupRealtimeMessageResponse(BaseModel):
     created_at: str | None = None
 
 
+class GroupSnapshotTopicResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    title: str
+    message_ids: list[int] = Field(default_factory=list)
+
+
+class GroupSnapshotDecisionResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    text: str
+    message_ids: list[int] = Field(default_factory=list)
+
+
+class GroupSnapshotActionItemResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    text: str
+    assignee: str | None = None
+    message_ids: list[int] = Field(default_factory=list)
+
+
+class GroupSnapshotBlockerResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    text: str
+    message_ids: list[int] = Field(default_factory=list)
+
+
+class GroupSnapshotQuoteResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    text: str
+    message_id: int | None = None
+
+
+class GroupSnapshotDigestResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    overview: str
+    todo_for_user: list[GroupSnapshotActionItemResponse] = Field(default_factory=list)
+    watch_out: list[GroupSnapshotBlockerResponse] = Field(default_factory=list)
+    decisions_brief: list[GroupSnapshotDecisionResponse] = Field(default_factory=list)
+
+
+class GroupSnapshotSummaryResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    topics: list[GroupSnapshotTopicResponse] = Field(default_factory=list)
+    decisions: list[GroupSnapshotDecisionResponse] = Field(default_factory=list)
+    action_items: list[GroupSnapshotActionItemResponse] = Field(default_factory=list)
+    blockers: list[GroupSnapshotBlockerResponse] = Field(default_factory=list)
+    notable_quotes: list[GroupSnapshotQuoteResponse] = Field(default_factory=list)
+    digest: GroupSnapshotDigestResponse
+
+
 class GroupSnapshotResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     snapshot_id: int
     group_id: int
-    summary: dict[str, Any]
+    summary: GroupSnapshotSummaryResponse
     created_by: int | None = None
     created_at: str | None = None
     source_count: int
@@ -137,7 +193,7 @@ class GroupSnapshotJobResponse(BaseModel):
     requested_by: int
     window_days: int
     snapshot_id: int | None = None
-    snapshot: dict[str, Any] | None = None
+    snapshot: GroupSnapshotResponse | None = None
     error: str | None = None
     created_at: str
     updated_at: str

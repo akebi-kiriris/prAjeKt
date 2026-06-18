@@ -11,6 +11,13 @@ const phase7Mocks = vi.hoisted(() => ({
   searchUser: vi.fn(),
   addMember: vi.fn(),
   removeMember: vi.fn(),
+  listKnowledgeDocuments: vi.fn(),
+  listKnowledgeDocumentEvents: vi.fn(),
+  uploadKnowledgeDocument: vi.fn(),
+  batchDeleteKnowledgeDocuments: vi.fn(),
+  batchReindexKnowledgeDocuments: vi.fn(),
+  downloadKnowledgeDocumentFile: vi.fn(),
+  previewKnowledgeDocumentFile: vi.fn(),
   generateTasks: vi.fn(),
   batchCreateTasks: vi.fn(),
   createTask: vi.fn(),
@@ -50,6 +57,18 @@ vi.mock('../../../services/timelineService', () => ({
     removeMember: phase7Mocks.removeMember,
     generateTasks: phase7Mocks.generateTasks,
     batchCreateTasks: phase7Mocks.batchCreateTasks,
+  },
+}));
+
+vi.mock('../../../services/knowledgeService', () => ({
+  knowledgeService: {
+    listDocuments: phase7Mocks.listKnowledgeDocuments,
+    listDocumentEvents: phase7Mocks.listKnowledgeDocumentEvents,
+    uploadDocument: phase7Mocks.uploadKnowledgeDocument,
+    batchDeleteDocuments: phase7Mocks.batchDeleteKnowledgeDocuments,
+    batchReindexDocuments: phase7Mocks.batchReindexKnowledgeDocuments,
+    downloadDocumentFile: phase7Mocks.downloadKnowledgeDocumentFile,
+    previewDocumentFile: phase7Mocks.previewKnowledgeDocumentFile,
   },
 }));
 
@@ -233,6 +252,17 @@ describe('TimelineDetailDialog Phase 7.1', () => {
       },
     });
     phase7Mocks.createTask.mockResolvedValue({ data: { message: 'ok' } });
+    phase7Mocks.listKnowledgeDocuments.mockResolvedValue({
+      data: { message: 'ok', documents: [], meta: { limit: 50, offset: 0, count: 0 } },
+    });
+    phase7Mocks.listKnowledgeDocumentEvents.mockResolvedValue({
+      data: { message: 'ok', events: [], meta: { limit: 10, offset: 0, count: 0 } },
+    });
+    phase7Mocks.uploadKnowledgeDocument.mockResolvedValue({ data: { message: 'uploaded' } });
+    phase7Mocks.batchDeleteKnowledgeDocuments.mockResolvedValue({ data: { message: 'deleted', results: [] } });
+    phase7Mocks.batchReindexKnowledgeDocuments.mockResolvedValue({ data: { message: 'reindexed', results: [] } });
+    phase7Mocks.downloadKnowledgeDocumentFile.mockResolvedValue({ data: new Blob(['download']) });
+    phase7Mocks.previewKnowledgeDocumentFile.mockResolvedValue({ data: new Blob(['preview']) });
   });
 
   it('顯示週報任務與風險列表', async () => {

@@ -16,6 +16,12 @@
 2. 大型畫面狀態管理
 3. 可重用 UI 元件內容
 
+## 相鄰目錄邊界
+
+1. route 對應的頁面實作放 `frontend/src/views/`。
+2. 可重用 UI 區塊放 `frontend/src/components/`。
+3. 需要呼叫 API 或處理 response shape 時，應透過 `frontend/src/services/` 與 `frontend/src/types/`。
+
 ## 維護原則
 
 1. router 應聚焦在頁面入口與導向規則，不承擔頁面內部流程。

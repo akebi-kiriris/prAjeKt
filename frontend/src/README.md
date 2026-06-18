@@ -31,6 +31,12 @@
 4. 跨頁共享狀態，應放 `stores/`
 5. 不依賴畫面的純工具函式，應放 `utils/`
 
+## 相鄰目錄邊界
+
+1. 後端 API、contract 與 service 實作放 `backend/`。
+2. 前端正式文件與跨目錄規範放 `docs/`。
+3. build、測試輸出與部署產物不應混入 `frontend/src/`。
+
 ## 維護原則
 
 1. 前端結構應優先維持 view、component、service、store、type 的分層清楚。

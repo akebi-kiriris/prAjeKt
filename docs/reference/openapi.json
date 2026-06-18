@@ -4967,6 +4967,211 @@
         "title": "GroupMessageSentResponse",
         "type": "object"
       },
+      "GroupSnapshotActionItemResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "assignee": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Assignee"
+          },
+          "message_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Message Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "GroupSnapshotActionItemResponse",
+        "type": "object"
+      },
+      "GroupSnapshotBlockerResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "message_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Message Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "GroupSnapshotBlockerResponse",
+        "type": "object"
+      },
+      "GroupSnapshotDecisionResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "message_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Message Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "GroupSnapshotDecisionResponse",
+        "type": "object"
+      },
+      "GroupSnapshotDigestResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "overview": {
+            "title": "Overview",
+            "type": "string"
+          },
+          "todo_for_user": {
+            "items": {
+              "$ref": "#/components/schemas/GroupSnapshotActionItemResponse"
+            },
+            "title": "Todo For User",
+            "type": "array"
+          },
+          "watch_out": {
+            "items": {
+              "$ref": "#/components/schemas/GroupSnapshotBlockerResponse"
+            },
+            "title": "Watch Out",
+            "type": "array"
+          },
+          "decisions_brief": {
+            "items": {
+              "$ref": "#/components/schemas/GroupSnapshotDecisionResponse"
+            },
+            "title": "Decisions Brief",
+            "type": "array"
+          }
+        },
+        "required": [
+          "overview"
+        ],
+        "title": "GroupSnapshotDigestResponse",
+        "type": "object"
+      },
+      "GroupSnapshotQuoteResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "message_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Message Id"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "GroupSnapshotQuoteResponse",
+        "type": "object"
+      },
+      "GroupSnapshotSummaryResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "topics": {
+            "items": {
+              "$ref": "#/components/schemas/GroupSnapshotTopicResponse"
+            },
+            "title": "Topics",
+            "type": "array"
+          },
+          "decisions": {
+            "items": {
+              "$ref": "#/components/schemas/GroupSnapshotDecisionResponse"
+            },
+            "title": "Decisions",
+            "type": "array"
+          },
+          "action_items": {
+            "items": {
+              "$ref": "#/components/schemas/GroupSnapshotActionItemResponse"
+            },
+            "title": "Action Items",
+            "type": "array"
+          },
+          "blockers": {
+            "items": {
+              "$ref": "#/components/schemas/GroupSnapshotBlockerResponse"
+            },
+            "title": "Blockers",
+            "type": "array"
+          },
+          "notable_quotes": {
+            "items": {
+              "$ref": "#/components/schemas/GroupSnapshotQuoteResponse"
+            },
+            "title": "Notable Quotes",
+            "type": "array"
+          },
+          "digest": {
+            "$ref": "#/components/schemas/GroupSnapshotDigestResponse"
+          }
+        },
+        "required": [
+          "digest"
+        ],
+        "title": "GroupSnapshotSummaryResponse",
+        "type": "object"
+      },
+      "GroupSnapshotTopicResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "message_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Message Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "title"
+        ],
+        "title": "GroupSnapshotTopicResponse",
+        "type": "object"
+      },
       "GroupSnapshotResponse": {
         "additionalProperties": false,
         "properties": {
@@ -4979,9 +5184,7 @@
             "type": "integer"
           },
           "summary": {
-            "additionalProperties": true,
-            "title": "Summary",
-            "type": "object"
+            "$ref": "#/components/schemas/GroupSnapshotSummaryResponse"
           },
           "created_by": {
             "anyOf": [
@@ -5151,15 +5354,13 @@
           "snapshot": {
             "anyOf": [
               {
-                "additionalProperties": true,
-                "type": "object"
+                "$ref": "#/components/schemas/GroupSnapshotResponse"
               },
               {
                 "type": "null"
               }
             ],
-            "default": null,
-            "title": "Snapshot"
+            "default": null
           },
           "error": {
             "anyOf": [

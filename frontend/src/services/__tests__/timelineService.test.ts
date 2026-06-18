@@ -67,18 +67,6 @@ describe('timelineService', () => {
       end_date: '2026-04-18',
     });
     timelineService.suggestPlan({ request: '幫我規劃 API 上線' });
-    timelineService.listKnowledgeDocuments({ limit: 10, offset: 0 });
-    timelineService.uploadKnowledgeDocument(new File(['personal'], 'personal.md', { type: 'text/markdown' }));
-    timelineService.deleteKnowledgeDocument(8);
-    timelineService.reindexKnowledgeDocument(8);
-    timelineService.uploadKnowledgeDocument(new File(['hello'], 'doc.md', { type: 'text/markdown' }), 5);
-    timelineService.deleteKnowledgeDocument(9, 5);
-    timelineService.reindexKnowledgeDocument(9, 5);
-    timelineService.batchDeleteKnowledgeDocuments(5, [1, 2]);
-    timelineService.batchReindexKnowledgeDocuments(5, [1, 2]);
-    timelineService.downloadKnowledgeDocumentFile(9, 5);
-    timelineService.previewKnowledgeDocumentFile(9, 5);
-    timelineService.listKnowledgeDocumentEvents({ project_id: 5, limit: 10, offset: 0 });
 
     expect(mockedApi.put).toHaveBeenCalledWith('/timelines/5/remark', { remark: 'memo' });
     expect(mockedApi.post).toHaveBeenCalledWith('/timelines/search_user', { timeline_id: 5, email: 'u@example.com' });
@@ -97,31 +85,5 @@ describe('timelineService', () => {
       end_date: '2026-04-18',
     });
     expect(mockedApi.post).toHaveBeenCalledWith('/timelines/ai-suggest-plan', { request: '幫我規劃 API 上線' }, { timeout: 90000 });
-    expect(mockedApi.get).toHaveBeenCalledWith('/knowledge/documents', { params: { limit: 10, offset: 0 } });
-    expect(mockedApi.post).toHaveBeenCalledWith(
-      '/knowledge/documents',
-      expect.any(FormData),
-      { headers: { 'Content-Type': 'multipart/form-data' } },
-    );
-    expect(mockedApi.delete).toHaveBeenCalledWith('/knowledge/documents/8', { params: undefined });
-    expect(mockedApi.post).toHaveBeenCalledWith('/knowledge/documents/8/reindex', null, { params: undefined });
-    expect(mockedApi.post).toHaveBeenCalledWith(
-      '/knowledge/documents',
-      expect.any(FormData),
-      { params: { project_id: 5 }, headers: { 'Content-Type': 'multipart/form-data' } },
-    );
-    expect(mockedApi.delete).toHaveBeenCalledWith('/knowledge/documents/9', { params: { project_id: 5 } });
-    expect(mockedApi.post).toHaveBeenCalledWith('/knowledge/documents/9/reindex', null, { params: { project_id: 5 } });
-    expect(mockedApi.post).toHaveBeenCalledWith('/knowledge/documents/batch-delete', { document_ids: [1, 2] }, { params: { project_id: 5 } });
-    expect(mockedApi.post).toHaveBeenCalledWith('/knowledge/documents/batch-reindex', { document_ids: [1, 2] }, { params: { project_id: 5 } });
-    expect(mockedApi.get).toHaveBeenCalledWith('/knowledge/documents/9/download', {
-      params: { project_id: 5 },
-      responseType: 'blob',
-    });
-    expect(mockedApi.get).toHaveBeenCalledWith('/knowledge/documents/9/preview', {
-      params: { project_id: 5 },
-      responseType: 'blob',
-    });
-    expect(mockedApi.get).toHaveBeenCalledWith('/knowledge/documents/events', { params: { project_id: 5, limit: 10, offset: 0 } });
   });
 });

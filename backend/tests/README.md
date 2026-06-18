@@ -30,6 +30,12 @@
 2. 臨時 debug script
 3. 與測試無關的筆記
 
+## 相鄰目錄邊界
+
+1. 被測試的主線程式碼應留在 `backend/blueprints/`、`backend/services/`、`backend/contracts/`、`backend/repositories/` 或其他正式模組。
+2. 測試用 fixture、factory 與共用 app setup 優先放 `conftest.py` 或測試 helper，不反向污染正式程式碼。
+3. 臨時資料檢查或修復腳本應放 `backend/scripts/`，不要混入 pytest 測試目錄。
+
 ## 維護原則
 
 1. 變更 API、service、contract 或 agent 流程時，應同步檢查本目錄。

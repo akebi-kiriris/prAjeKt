@@ -119,7 +119,7 @@ Phase 10.4 只整理契約成果如何被查閱與維護，不重新定義 API�
 | `POST /groups/{group_id}/leave` | 不適用 | `MessageResponse` | 已覆蓋 | 已覆蓋 | `stable` | membership 邏輯仍在 blueprint / service |
 | group members | route 邊界 | `GroupMemberResponse[]` | 已覆蓋 | 已覆蓋 | `stable` | member response 已 schema 化 |
 | group messages | `GroupMessageRequest` | `GroupMessageResponse` / `GroupMessageSentResponse` | 已覆蓋 | 已覆蓋 | `stable` | socket / REST serializer 已共用 response model |
-| group AI snapshot | `GroupSnapshotRequest` | `GroupSnapshotQueuedResponse` / `GroupSnapshotResponse` / `GroupSnapshotJobResponse` | 已覆蓋 | 已覆蓋 | `partial` | snapshot `summary` 內容保留 dict 彈性 |
+| group AI snapshot | `GroupSnapshotRequest` | `GroupSnapshotQueuedResponse` / `GroupSnapshotResponse` / `GroupSnapshotJobResponse` | 已覆蓋 | 已覆蓋 | `stable` | snapshot `summary` 已收斂為 named schema；LLM 原始輸入仍在 service normalize |
 | messages unread / mark read | 不適用 | `UnreadCountResponse` / `MessageResponse` | 已覆蓋 | 已覆蓋 | `stable` | counter / mutation shape 已固定 |
 | notifications list | 不適用 | `NotificationResponse[]` | 已覆蓋 | 已覆蓋 | `legacy-flexible` | list 維持既有 shape |
 | notification counter / mutations | 不適用 | `CountResponse` / `MessageResponse` | 已覆蓋 | 已覆蓋 | `stable` | read / read-all / delete 已固定 |
@@ -142,7 +142,7 @@ Phase 10.4 只整理契約成果如何被查閱與維護，不重新定義 API�
 | --- | --- | --- | --- | --- | --- | --- |
 | `GET /copilot/agent/tools` | 不適用 | `ToolsListResponse` | 已覆蓋 | 已覆蓋 | `stable` | frontend tool-list 外層型別已補齊 |
 | `POST /copilot/agent/plan` | `CopilotAgentPlanRequest` | `CopilotGenericResponse` / service payload | 已覆蓋 | 已覆蓋 | `dynamic` | plan steps / tool payloads 仍保留彈性 |
-| `POST /copilot/agent/execute` | `CopilotAgentExecuteRequest` | `CopilotGenericResponse` / tool envelope | 已覆蓋 | 已覆蓋 | `dynamic` | tool-specific result 不假裝穩定 |
+| `POST /copilot/agent/execute` | `CopilotAgentExecuteRequest` | `CopilotGenericResponse` / tool envelope | 已覆蓋 | 已覆蓋 | `dynamic` | 常用 tool result 已接上 named output model；plan / trace metadata 仍保留彈性 |
 | `POST /copilot/agent/reject` | `CopilotAgentRejectRequest` | `CopilotGenericResponse` | 已覆蓋 | 已覆蓋 | `dynamic` | agent 專用 payload |
 | `POST /copilot/agent/replan` | `CopilotAgentReplanRequest` | `CopilotGenericResponse` | 已覆蓋 | 已覆蓋 | `dynamic` | replan payload 保留 tool-specific 彈性 |
 | `POST /copilot/mcp/execute` | `CopilotMcpExecuteRequest` | `CopilotGenericResponse` | 已覆蓋 | 已覆蓋 | `dynamic` | result / metadata 用 JSON 彈性型別描述 |
@@ -179,12 +179,14 @@ Phase 10.4 只整理契約成果如何被查閱與維護，不重新定義 API�
 以下不是 10.4 要硬改的缺口，而是維護時要如實標記的彈性區：
 
 1. `copilot / agent`
-   - tool-specific `result`
+   - plan / execute 外層仍由 `CopilotGenericResponse` 承接
+   - 常用 tool-specific `result` 已在 `tool_outputs.py` 接上 named output model
    - trace metadata
    - `tool_payloads`
    - planner / execution step data
 2. group snapshot
-   - snapshot `summary` 內層內容保留 dict 彈性
+   - snapshot `summary` 已在 contract / OpenAPI 收斂為 named schema
+   - LLM 原始回傳仍只在 service normalize 前保持彈性，不直接暴露為 API contract
 3. 既有 list endpoint
    - 多數 list 仍維持裸陣列或既有 payload shape，不改成統一 envelope
 4. file download / preview

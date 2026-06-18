@@ -18,7 +18,17 @@ import TimelineListView from '../TimelineListView.vue';
 import TaskDetailPanel from '../TaskDetailPanel.vue';
 import AiTaskGeneratePanel from '../AiTaskGeneratePanel.vue';
 import ProjectKnowledgePanel from '../ProjectKnowledgePanel.vue';
-import type { Task, Timeline } from '../../../types';
+import type {
+  AiGeneratedTask,
+  KnowledgeDocumentEventItem,
+  KnowledgeDocumentItem,
+  SourceReference,
+  Task,
+  TaskComment,
+  TaskFile,
+  TaskMember,
+  Timeline,
+} from '../../../types';
 
 const baseTimeline: Timeline = {
   id: 1,
@@ -272,12 +282,12 @@ describe('Timeline subcomponents (phase 8.4 split)', () => {
         taskMembersForAssign: [
           { user_id: 1, name: 'Owner', username: 'owner', role: 0 },
           { user_id: 2, name: 'Pair', username: 'pair', role: 1 },
-        ] as any,
+        ] satisfies TaskMember[],
         timelineMembers: [
           { user_id: 1, name: 'Owner', username: 'owner', role: 0 },
           { user_id: 2, name: 'Pair', username: 'pair', role: 1 },
           { user_id: 3, name: 'Newbie', username: 'newbie', role: 1 },
-        ] as any,
+        ] satisfies TaskMember[],
         taskSubtasks: [
           { id: 9, task_id: 77, name: 'child', completed: false, sort_order: 1, created_at: null },
         ],
@@ -291,16 +301,17 @@ describe('Timeline subcomponents (phase 8.4 split)', () => {
             file_size: 1024,
             uploaded_at: '2026-06-03T00:00:00Z',
           },
-        ] as any,
+        ] satisfies TaskFile[],
         apiBaseUrl: 'http://localhost:5000/api',
         taskComments: [
           {
             comment_id: 100,
+            user_id: 1,
             user_name: 'Alice',
             created_at: '2026-06-03T01:00:00Z',
             task_message: 'Need review',
           },
-        ] as any,
+        ] satisfies TaskComment[],
         isSummarizingComments: false,
         commentSummary: {
           decisions: ['Keep API stable'],
@@ -308,6 +319,7 @@ describe('Timeline subcomponents (phase 8.4 split)', () => {
           next_actions: ['Ship tests'],
         },
         commentSummaryMeta: {
+          comment_count: 10,
           total_comments: 10,
           used_comments: 5,
           truncated: true,
@@ -496,7 +508,7 @@ describe('Timeline subcomponents (phase 8.4 split)', () => {
             depends_on_task_refs: [],
             remark: '',
           },
-        ] as any,
+        ] satisfies AiGeneratedTask[],
         selectedAiTasks: [0],
         aiPrompt: '拆任務',
         useRagPlanning: false,
@@ -513,7 +525,7 @@ describe('Timeline subcomponents (phase 8.4 split)', () => {
             snippet: 'snippet',
             score: 0.91,
           },
-        ] as any,
+        ] satisfies SourceReference[],
         ragSummary: 'summary',
       },
     });
@@ -554,15 +566,18 @@ describe('Timeline subcomponents (phase 8.4 split)', () => {
             chunk_count: null,
             error_message: '解析失敗',
           },
-        ] as any,
+        ] satisfies KnowledgeDocumentItem[],
         events: [
           {
             id: 8,
             document_id: 31,
+            project_id: 1,
+            actor_user_id: 1,
             event_type: 'download',
+            event_payload: {},
             created_at: '2026-06-03T10:00:00Z',
           },
-        ] as any,
+        ] satisfies KnowledgeDocumentEventItem[],
         loading: false,
         uploading: false,
         selectedIds: [31],
