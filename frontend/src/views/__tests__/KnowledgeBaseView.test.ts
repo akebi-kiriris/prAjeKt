@@ -1,7 +1,7 @@
 import { flushPromises, mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import KnowledgeBaseView from '../KnowledgeBaseView.vue';
-import { timelineService } from '../../services/timelineService';
+import { knowledgeService } from '../../services/knowledgeService';
 
 vi.mock('vue-sonner', () => ({
   toast: {
@@ -16,20 +16,20 @@ vi.mock('../../composables/useConfirm', () => ({
   }),
 }));
 
-vi.mock('../../services/timelineService', () => ({
-  timelineService: {
-    listKnowledgeDocuments: vi.fn(),
-    uploadKnowledgeDocument: vi.fn(),
-    deleteKnowledgeDocument: vi.fn(),
-    reindexKnowledgeDocument: vi.fn(),
+vi.mock('../../services/knowledgeService', () => ({
+  knowledgeService: {
+    listDocuments: vi.fn(),
+    uploadDocument: vi.fn(),
+    deleteDocument: vi.fn(),
+    reindexDocument: vi.fn(),
   },
 }));
 
-const mockedTimelineService = timelineService as unknown as {
-  listKnowledgeDocuments: ReturnType<typeof vi.fn>;
-  uploadKnowledgeDocument: ReturnType<typeof vi.fn>;
-  deleteKnowledgeDocument: ReturnType<typeof vi.fn>;
-  reindexKnowledgeDocument: ReturnType<typeof vi.fn>;
+const mockedKnowledgeService = knowledgeService as unknown as {
+  listDocuments: ReturnType<typeof vi.fn>;
+  uploadDocument: ReturnType<typeof vi.fn>;
+  deleteDocument: ReturnType<typeof vi.fn>;
+  reindexDocument: ReturnType<typeof vi.fn>;
 };
 
 const documentPayload = {
@@ -50,17 +50,17 @@ const documentPayload = {
 describe('KnowledgeBaseView', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockedTimelineService.listKnowledgeDocuments.mockResolvedValue({ data: documentPayload });
-    mockedTimelineService.uploadKnowledgeDocument.mockResolvedValue({ data: { message: 'uploaded' } });
-    mockedTimelineService.deleteKnowledgeDocument.mockResolvedValue({ data: { message: 'deleted' } });
-    mockedTimelineService.reindexKnowledgeDocument.mockResolvedValue({ data: { message: 'reindexed' } });
+    mockedKnowledgeService.listDocuments.mockResolvedValue({ data: documentPayload });
+    mockedKnowledgeService.uploadDocument.mockResolvedValue({ data: { message: 'uploaded' } });
+    mockedKnowledgeService.deleteDocument.mockResolvedValue({ data: { message: 'deleted' } });
+    mockedKnowledgeService.reindexDocument.mockResolvedValue({ data: { message: 'reindexed' } });
   });
 
   it('renders personal knowledge documents', async () => {
     const wrapper = mount(KnowledgeBaseView);
     await flushPromises();
 
-    expect(mockedTimelineService.listKnowledgeDocuments).toHaveBeenCalledWith({
+    expect(mockedKnowledgeService.listDocuments).toHaveBeenCalledWith({
       limit: 20,
       offset: 0,
       q: undefined,
@@ -73,7 +73,7 @@ describe('KnowledgeBaseView', () => {
   });
 
   it('renders an empty state', async () => {
-    mockedTimelineService.listKnowledgeDocuments.mockResolvedValueOnce({
+    mockedKnowledgeService.listDocuments.mockResolvedValueOnce({
       data: { message: 'ok', documents: [], meta: { limit: 20, offset: 0, count: 0 } },
     });
 
@@ -95,8 +95,8 @@ describe('KnowledgeBaseView', () => {
     await input.trigger('change');
     await flushPromises();
 
-    expect(mockedTimelineService.uploadKnowledgeDocument).toHaveBeenCalledWith(expect.any(File));
-    expect(mockedTimelineService.listKnowledgeDocuments).toHaveBeenCalledTimes(2);
+    expect(mockedKnowledgeService.uploadDocument).toHaveBeenCalledWith(expect.any(File));
+    expect(mockedKnowledgeService.listDocuments).toHaveBeenCalledTimes(2);
   });
 
   it('deletes and reindexes one document without project_id', async () => {
@@ -108,12 +108,12 @@ describe('KnowledgeBaseView', () => {
     await wrapper.findAll('button').find(button => button.text() === '刪除')!.trigger('click');
     await flushPromises();
 
-    expect(mockedTimelineService.reindexKnowledgeDocument).toHaveBeenCalledWith(7);
-    expect(mockedTimelineService.deleteKnowledgeDocument).toHaveBeenCalledWith(7);
+    expect(mockedKnowledgeService.reindexDocument).toHaveBeenCalledWith(7);
+    expect(mockedKnowledgeService.deleteDocument).toHaveBeenCalledWith(7);
   });
 
   it('shows load errors', async () => {
-    mockedTimelineService.listKnowledgeDocuments.mockRejectedValueOnce({
+    mockedKnowledgeService.listDocuments.mockRejectedValueOnce({
       response: { data: { error: '讀取失敗' } },
       isAxiosError: true,
     });

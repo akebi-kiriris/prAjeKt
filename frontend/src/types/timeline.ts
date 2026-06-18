@@ -318,7 +318,7 @@ export interface KnowledgeDocumentItem {
   sha256?: string;
   status: 'uploaded' | 'indexing' | 'ready' | 'failed' | string;
   error_message?: string | null;
-  chunk_count?: number;
+  chunk_count?: number | null;
   has_source_text?: boolean;
   created_at?: string | null;
   updated_at?: string | null;

@@ -25,6 +25,12 @@
 2. HTTP route
 3. 正式 service / repository 程式碼
 
+## 相鄰目錄邊界
+
+1. 可被產品主線呼叫的業務邏輯應放 `backend/services/`，不要藏在 scripts。
+2. schema revision 與正式資料庫演進應放 `backend/migrations/`。
+3. 單純診斷用腳本放 `diagnostics/`，一次性資料補填放 `backfill/`，資料庫初始化或 migration 輔助放 `db/`。
+
 ## 維護原則
 
 1. 腳本應有明確用途與適用情境，避免成為根層雜項集合。

@@ -172,7 +172,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
 import { toast } from 'vue-sonner';
-import { timelineService } from '../services/timelineService';
+import { knowledgeService } from '../services/knowledgeService';
 import { getApiErrorMessage } from '../utils/apiError';
 import type { KnowledgeDocumentItem } from '../types';
 import { formatDateTime, formatFileSize, getFileIcon } from '../utils/formatters';
@@ -197,7 +197,7 @@ const loadDocuments = async () => {
   loading.value = true;
   errorMessage.value = '';
   try {
-    const res = await timelineService.listKnowledgeDocuments({
+    const res = await knowledgeService.listDocuments({
       limit,
       offset: offset.value,
       q: query.value.trim() || undefined,
@@ -224,7 +224,7 @@ const handleUpload = async (event: Event) => {
   if (!file) return;
   uploading.value = true;
   try {
-    await timelineService.uploadKnowledgeDocument(file);
+    await knowledgeService.uploadDocument(file);
     toast.success('文件已上傳');
     offset.value = 0;
     await loadDocuments();
@@ -239,7 +239,7 @@ const handleUpload = async (event: Event) => {
 const reindexDocument = async (document: KnowledgeDocumentItem) => {
   busyDocumentId.value = document.id;
   try {
-    await timelineService.reindexKnowledgeDocument(document.id);
+    await knowledgeService.reindexDocument(document.id);
     toast.success('已重建索引');
     await loadDocuments();
   } catch (err: unknown) {
@@ -258,7 +258,7 @@ const deleteDocument = async (document: KnowledgeDocumentItem) => {
 
   busyDocumentId.value = document.id;
   try {
-    await timelineService.deleteKnowledgeDocument(document.id);
+    await knowledgeService.deleteDocument(document.id);
     toast.success('文件已刪除');
     await loadDocuments();
   } catch (err: unknown) {

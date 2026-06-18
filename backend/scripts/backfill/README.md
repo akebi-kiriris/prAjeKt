@@ -15,6 +15,12 @@
 2. 正式 migration revision
 3. 長期主線服務邏輯
 
+## 相鄰目錄邊界
+
+1. schema 版本演進優先放 `backend/migrations/`。
+2. 可重複執行的資料庫初始化或檢查腳本放 `backend/scripts/db/`。
+3. 只讀診斷腳本放 `backend/scripts/diagnostics/`。
+
 ## 維護原則
 
 1. backfill 腳本應清楚標示用途與適用資料範圍。

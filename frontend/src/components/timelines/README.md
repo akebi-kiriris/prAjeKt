@@ -16,6 +16,12 @@
 2. 子面板元件負責單一區塊的展示與局部互動。
 3. 只服務單一 panel 的局部邏輯，可先留在該 panel 內維護。
 
+## 相鄰目錄邊界
+
+1. timeline 頁面入口與跨面板流程協調優先放 `frontend/src/views/` 或主容器元件。
+2. API 呼叫與 response mapping 放 `frontend/src/services/`。
+3. timeline / task / knowledge 相關型別放 `frontend/src/types/`，不要在元件內重複定義後端契約。
+
 ## 維護原則
 
 1. 不應將所有 panel 的 loading、error、empty state 全部塞回單一主容器。

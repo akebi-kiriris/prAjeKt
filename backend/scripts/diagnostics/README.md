@@ -16,6 +16,12 @@
 2. 主線啟動流程
 3. 一般業務程式碼
 
+## 相鄰目錄邊界
+
+1. 會修改資料的補填流程應放 `backend/scripts/backfill/` 或正式 migration。
+2. schema 版本演進放 `backend/migrations/`。
+3. service 行為驗證應放 `backend/tests/`，不要用診斷腳本取代測試。
+
 ## 維護原則
 
 1. 診斷腳本應聚焦在檢查與報告，不混入長期修補流程。

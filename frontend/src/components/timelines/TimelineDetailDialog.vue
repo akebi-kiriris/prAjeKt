@@ -264,6 +264,7 @@ import { ref, computed, watch } from 'vue';
 import { toast } from 'vue-sonner';
 import { taskService } from '../../services/taskService';
 import { timelineService } from '../../services/timelineService';
+import { knowledgeService } from '../../services/knowledgeService';
 import { copilotService } from '../../services/copilotService';
 import { formatDate, formatDateTime } from '../../utils/formatters';
 import { downloadFileFromUrl, loadTaskDetailResourcesWithMembers } from '../../utils/taskDetails';
@@ -1509,7 +1510,7 @@ const fetchProjectKnowledgeDocuments = async () => {
   projectKnowledgeLoading.value = true;
   projectKnowledgeError.value = '';
   try {
-    const res = await timelineService.listKnowledgeDocuments({
+    const res = await knowledgeService.listDocuments({
       project_id: props.selectedTimeline.id,
       q: projectKnowledgeQuery.value || undefined,
       sort: projectKnowledgeSort.value,
@@ -1531,7 +1532,7 @@ const fetchProjectKnowledgeDocuments = async () => {
 const fetchProjectKnowledgeEvents = async () => {
   if (!props.selectedTimeline) return;
   try {
-    const res = await timelineService.listKnowledgeDocumentEvents({
+    const res = await knowledgeService.listDocumentEvents({
       project_id: props.selectedTimeline.id,
       limit: 10,
       offset: 0,
@@ -1554,7 +1555,7 @@ const handleProjectKnowledgeUpload = async (event: Event) => {
   if (!file || !props.selectedTimeline) return;
   projectKnowledgeUploading.value = true;
   try {
-    await timelineService.uploadKnowledgeDocument(file, props.selectedTimeline.id);
+    await knowledgeService.uploadDocument(file, props.selectedTimeline.id);
     toast.success('檔案已上傳');
     await fetchProjectKnowledgeDocuments();
     await fetchProjectKnowledgeEvents();
@@ -1569,7 +1570,7 @@ const batchDeleteProjectKnowledge = async () => {
   if (!props.selectedTimeline || projectKnowledgeSelectedIds.value.length === 0) return;
   if (!await confirm({ title: `確定刪除 ${projectKnowledgeSelectedIds.value.length} 份檔案？`, danger: true })) return;
   try {
-    await timelineService.batchDeleteKnowledgeDocuments(props.selectedTimeline.id, projectKnowledgeSelectedIds.value);
+    await knowledgeService.batchDeleteDocuments(props.selectedTimeline.id, projectKnowledgeSelectedIds.value);
     projectKnowledgeSelectedIds.value = [];
     await fetchProjectKnowledgeDocuments();
     await fetchProjectKnowledgeEvents();
@@ -1582,7 +1583,7 @@ const batchDeleteProjectKnowledge = async () => {
 const batchReindexProjectKnowledge = async () => {
   if (!props.selectedTimeline || projectKnowledgeSelectedIds.value.length === 0) return;
   try {
-    await timelineService.batchReindexKnowledgeDocuments(props.selectedTimeline.id, projectKnowledgeSelectedIds.value);
+    await knowledgeService.batchReindexDocuments(props.selectedTimeline.id, projectKnowledgeSelectedIds.value);
     await fetchProjectKnowledgeDocuments();
     await fetchProjectKnowledgeEvents();
     toast.success('批次重建完成');
@@ -1596,7 +1597,7 @@ const createKnowledgeBlobUrl = (blob: Blob) => URL.createObjectURL(blob);
 const downloadProjectKnowledgeDocument = async (document: KnowledgeDocumentItem) => {
   if (!props.selectedTimeline) return;
   try {
-    const res = await timelineService.downloadKnowledgeDocumentFile(document.id, props.selectedTimeline.id);
+    const res = await knowledgeService.downloadDocumentFile(document.id, props.selectedTimeline.id);
     const blobUrl = createKnowledgeBlobUrl(res.data);
     const anchor = window.document.createElement('a');
     anchor.href = blobUrl;
@@ -1614,7 +1615,7 @@ const downloadProjectKnowledgeDocument = async (document: KnowledgeDocumentItem)
 const previewProjectKnowledgeDocument = async (document: KnowledgeDocumentItem) => {
   if (!props.selectedTimeline) return;
   try {
-    const res = await timelineService.previewKnowledgeDocumentFile(document.id, props.selectedTimeline.id);
+    const res = await knowledgeService.previewDocumentFile(document.id, props.selectedTimeline.id);
     const blobUrl = createKnowledgeBlobUrl(res.data);
     window.open(blobUrl, '_blank', 'noopener,noreferrer');
     window.setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
