@@ -501,6 +501,63 @@ def test_agent_graph_falls_back_to_generated_tasks_when_batch_payload_empty(monk
     ]
 
 
+def test_agent_graph_strips_generated_task_response_only_fields_for_batch_create(monkeypatch):
+    captured_payloads: list[dict] = []
+
+    def fake_execute(tool_name: str, payload: dict):
+        captured_payloads.append({"tool_name": tool_name, "payload": payload})
+        if tool_name == "generate_timeline_tasks_with_ai":
+            return {
+                "ok": True,
+                "data": {
+                    "tasks": [
+                        {
+                            "timeline_id": 39,
+                            "completed": False,
+                            "unknown": "drop me",
+                            "isExisting": False,
+                            "name": "Task A",
+                            "priority": 2,
+                            "status": "pending",
+                            "estimated_days": 3,
+                            "task_remark": "from AI",
+                            "depends_on_task_refs": ["Task Before"],
+                        },
+                    ],
+                },
+            }
+        if tool_name == "batch_create_tasks_for_timeline":
+            return {"ok": True, "data": {"result": {"created": 1}}}
+        return {"ok": True, "data": {}}
+
+    monkeypatch.setattr("chains.agent_nodes.execute_registered_tool", fake_execute)
+
+    result = run_react_agent(
+        user_message="建立任務",
+        context={"user_id": 1, "timeline_id": 39},
+        tool_payloads={
+            "batch_create_tasks_for_timeline": {
+                "tasks": [],
+            }
+        },
+        pending_tools=["generate_timeline_tasks_with_ai", "batch_create_tasks_for_timeline"],
+        max_loops=3,
+    )
+
+    assert result["final_answer"] == "已套用任務規劃，新增 1 個任務。"
+    assert captured_payloads[1]["payload"]["tasks"] == [
+        {
+            "isExisting": False,
+            "name": "Task A",
+            "priority": 2,
+            "status": "pending",
+            "estimated_days": 3,
+            "task_remark": "from AI",
+            "depends_on_task_refs": ["Task Before"],
+        }
+    ]
+
+
 def test_agent_graph_preserves_malformed_conflict_payload_for_validation_error(monkeypatch):
     captured_payloads: list[dict] = []
 

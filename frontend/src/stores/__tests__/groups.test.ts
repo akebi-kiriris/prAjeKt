@@ -1,6 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createPinia, setActivePinia } from 'pinia';
 
+const socketCallbacks = vi.hoisted(() => ({
+  connect: null as null | (() => void),
+  disconnect: null as null | (() => void),
+  ready: null as null | ((payload: { user_id?: number | null }) => void),
+  groupMessage: null as null | ((payload: Record<string, unknown>) => Promise<void>),
+  groupError: null as null | ((payload: { message?: string }) => void),
+}));
+
 vi.mock('../../services/groupService', () => ({
   groupService: {
     getAll: vi.fn(),
@@ -48,6 +56,26 @@ describe('group store', () => {
     localStorage.clear();
     mockedSocketService.isConnected.mockReturnValue(false);
     mockedSocketService.getSocket.mockReturnValue(null);
+    socketCallbacks.connect = null;
+    socketCallbacks.disconnect = null;
+    socketCallbacks.ready = null;
+    socketCallbacks.groupMessage = null;
+    socketCallbacks.groupError = null;
+    mockedSocketService.onConnect.mockImplementation((callback) => {
+      socketCallbacks.connect = callback;
+    });
+    mockedSocketService.onDisconnect.mockImplementation((callback) => {
+      socketCallbacks.disconnect = callback;
+    });
+    mockedSocketService.onReady.mockImplementation((callback) => {
+      socketCallbacks.ready = callback;
+    });
+    mockedSocketService.onGroupMessage.mockImplementation((callback) => {
+      socketCallbacks.groupMessage = callback;
+    });
+    mockedSocketService.onGroupError.mockImplementation((callback) => {
+      socketCallbacks.groupError = callback;
+    });
   });
 
   it('fetchGroups should set groups and loading', async () => {
@@ -141,5 +169,111 @@ describe('group store', () => {
     expect(mockedSocketService.disconnect).toHaveBeenCalled();
     expect(store.socketConnected).toBe(false);
     expect(store.socketReady).toBe(false);
+  });
+
+  it('loads messages over HTTP but does not connect or join without an access token', async () => {
+    mockedGroupService.getMessages.mockResolvedValueOnce({ data: [] });
+    const store = useGroupStore();
+
+    await store.openChat({ group_id: 20, name: 'No Token' } as never);
+
+    expect(mockedGroupService.getMessages).toHaveBeenCalledWith(20);
+    expect(mockedSocketService.connect).not.toHaveBeenCalled();
+    expect(mockedSocketService.joinGroup).not.toHaveBeenCalled();
+    expect(store.currentGroup?.group_id).toBe(20);
+    expect(store.activeRoomId).toBeNull();
+  });
+
+  it('deduplicates socket messages, ignores other rooms and keeps messages sorted', async () => {
+    localStorage.setItem('access_token', 'token-a');
+    mockedSocketService.isConnected.mockReturnValue(true);
+    mockedGroupService.getMessages.mockResolvedValueOnce({
+      data: [{ message_id: 2, group_id: 10, content: 'later', created_at: '2026-06-25T10:00:00Z' }],
+    });
+    const scrollCallback = vi.fn();
+    const store = useGroupStore();
+    await store.openChat({ group_id: 10, name: 'Team' } as never, scrollCallback);
+
+    expect(socketCallbacks.groupMessage).toBeTypeOf('function');
+    await socketCallbacks.groupMessage?.({
+      message_id: 2,
+      group_id: 10,
+      content: 'duplicate',
+      created_at: '2026-06-25T10:00:00Z',
+    });
+    await socketCallbacks.groupMessage?.({
+      message_id: 3,
+      group_id: 99,
+      content: 'other room',
+      created_at: '2026-06-25T08:00:00Z',
+    });
+    await socketCallbacks.groupMessage?.({
+      message_id: 1,
+      group_id: 10,
+      content: 'earlier',
+      created_at: '2026-06-25T09:00:00Z',
+    });
+
+    expect(store.messages).toHaveLength(2);
+    expect(store.messages.map((message) => message.message_id)).toEqual([1, 2]);
+    expect(store.messages.map((message) => message.content)).not.toContain('other room');
+    expect(scrollCallback).toHaveBeenCalledTimes(2);
+
+    store.closeChat();
+    await socketCallbacks.groupMessage?.({
+      message_id: 4,
+      group_id: 10,
+      content: 'after close',
+      created_at: '2026-06-25T11:00:00Z',
+    });
+    expect(store.messages).toEqual([]);
+  });
+
+  it('updates connection, ready and error state from socket callbacks', async () => {
+    localStorage.setItem('access_token', 'token-a');
+    mockedGroupService.getMessages.mockResolvedValueOnce({ data: [] });
+    const store = useGroupStore();
+    await store.openChat({ group_id: 10, name: 'Team' } as never);
+
+    socketCallbacks.connect?.();
+    expect(store.socketConnected).toBe(true);
+
+    socketCallbacks.ready?.({ user_id: 12 });
+    expect(store.socketReady).toBe(true);
+
+    socketCallbacks.groupError?.({ message: '房間權限不足' });
+    expect(store.lastSocketError).toBe('房間權限不足');
+
+    socketCallbacks.disconnect?.();
+    expect(store.socketConnected).toBe(false);
+    expect(store.socketReady).toBe(false);
+
+    socketCallbacks.groupError?.({});
+    expect(store.lastSocketError).toBe('Socket 發生錯誤');
+  });
+
+  it('destroySocket leaves the room and unregisters the captured handlers', async () => {
+    localStorage.setItem('access_token', 'token-a');
+    mockedSocketService.isConnected.mockReturnValue(true);
+    mockedGroupService.getMessages.mockResolvedValueOnce({ data: [] });
+    const store = useGroupStore();
+    await store.openChat({ group_id: 10, name: 'Team' } as never);
+    socketCallbacks.connect?.();
+    socketCallbacks.ready?.({ user_id: 12 });
+    socketCallbacks.groupError?.({ message: 'temporary' });
+
+    store.destroySocket();
+
+    expect(mockedSocketService.leaveGroup).toHaveBeenCalledWith(10);
+    expect(mockedSocketService.offConnect).toHaveBeenCalledWith(socketCallbacks.connect);
+    expect(mockedSocketService.offDisconnect).toHaveBeenCalledWith(socketCallbacks.disconnect);
+    expect(mockedSocketService.offReady).toHaveBeenCalledWith(socketCallbacks.ready);
+    expect(mockedSocketService.offGroupMessage).toHaveBeenCalledWith(socketCallbacks.groupMessage);
+    expect(mockedSocketService.offGroupError).toHaveBeenCalledWith(socketCallbacks.groupError);
+    expect(mockedSocketService.disconnect).toHaveBeenCalled();
+    expect(store.activeRoomId).toBeNull();
+    expect(store.socketConnected).toBe(false);
+    expect(store.socketReady).toBe(false);
+    expect(store.lastSocketError).toBeNull();
   });
 });

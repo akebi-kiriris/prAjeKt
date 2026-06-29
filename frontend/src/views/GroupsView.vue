@@ -425,6 +425,8 @@ const isSnapshotJobStatus = (
   payload: GroupSnapshotGenerationResponse,
 ): payload is GroupSnapshotJobStatus => 'job_id' in payload;
 
+class SnapshotJobError extends Error {}
+
 const pollSnapshotJob = async (jobId: string): Promise<GroupSnapshotJobStatus> => {
   const maxAttempts = 15;
   const intervalMs = 1000;
@@ -437,13 +439,13 @@ const pollSnapshotJob = async (jobId: string): Promise<GroupSnapshotJobStatus> =
       return payload;
     }
     if (payload.status === 'failed') {
-      throw new Error(payload.error || '群組快照背景工作失敗');
+      throw new SnapshotJobError(payload.error || '群組快照背景工作失敗');
     }
 
     await new Promise((resolve) => setTimeout(resolve, intervalMs));
   }
 
-  throw new Error('群組快照背景工作逾時，請稍後再查詢');
+  throw new SnapshotJobError('群組快照背景工作逾時，請稍後再查詢');
 };
 
 const generateSnapshot = async (groupId: number) => {
@@ -451,21 +453,26 @@ const generateSnapshot = async (groupId: number) => {
     snapshotLoadingGroupId.value = groupId;
     const response = await groupService.generateSnapshot(groupId, { window_days: 30, async: false });
 
-    if (response.status === 202 && isSnapshotJobStatus(response.data)) {
+    if (isSnapshotJobStatus(response.data)) {
       const jobPayload = response.data;
       toast.info('群組快照已進入背景工作，正在等待完成...');
       const finalJob = await pollSnapshotJob(jobPayload.job_id);
-      if (finalJob.snapshot) {
-        openSnapshotModal(finalJob.snapshot);
-        toast.success('群組快照生成完成');
+      if (!finalJob.snapshot) {
+        throw new SnapshotJobError('群組快照背景工作已完成，但沒有可顯示的快照');
       }
+      openSnapshotModal(finalJob.snapshot);
+      toast.success('群組快照生成完成');
       return;
     }
 
     openSnapshotModal(response.data);
     toast.success('群組快照生成完成');
   } catch (error) {
-    toast.error(getApiErrorMessage(error, '生成群組快照失敗'));
+    toast.error(
+      error instanceof SnapshotJobError
+        ? error.message
+        : getApiErrorMessage(error, '生成群組快照失敗'),
+    );
   } finally {
     snapshotLoadingGroupId.value = null;
   }

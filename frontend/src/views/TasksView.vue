@@ -818,8 +818,8 @@ const runConflictPrecheckForSubmit = async (): Promise<boolean> => {
     const res = await timelineService.conflictCheck(timelineId, {
       task_id: editingTask.value.task_id,
       name: taskForm.value.name,
-      start_date: taskForm.value.start_date || null,
-      end_date: taskForm.value.end_date || null,
+      start_date: taskForm.value.start_date,
+      end_date: taskForm.value.end_date,
       include_ai_suggestion: false,
     });
     taskConflictPreview.value = res.data;
@@ -913,8 +913,9 @@ const handleSubmit = async () => {
       await store.addTask(payload);
     }
     resetForm();
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('儲存任務失敗:', error);
+    toast.error(getApiErrorMessage(error, '儲存任務失敗'));
   }
 };
 
@@ -937,16 +938,18 @@ const deleteTask = async (taskId: number) => {
   if (!await confirm({ title: '確定要刪除此任務？', danger: true })) return;
   try {
     await store.removeTask(taskId);
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('刪除任務失敗:', error);
+    toast.error(getApiErrorMessage(error, '刪除任務失敗'));
   }
 };
 
 const toggleTask = async (task: Task) => {
   try {
     await store.toggleTask(task.task_id);
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('更新任務狀態失敗:', error);
+    toast.error(getApiErrorMessage(error, '更新任務狀態失敗'));
   }
 };
 

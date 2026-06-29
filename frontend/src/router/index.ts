@@ -1,74 +1,63 @@
 import { createRouter, createWebHistory } from 'vue-router';
 import type { NavigationGuardReturn, RouteRecordRaw } from 'vue-router';
 
-import GroupsView from '../views/GroupsView.vue';
-import HomeView from '../views/HomeView.vue';
-import KnowledgeBaseView from '../views/KnowledgeBaseView.vue';
-import LoginView from '../views/LoginView.vue';
-import ProfileView from '../views/ProfileView.vue';
-import RegisterView from '../views/RegisterView.vue';
-import TasksView from '../views/TasksView.vue';
-import TimelinesView from '../views/TimelinesView.vue';
-import TodosView from '../views/TodosView.vue';
-import TrashView from '../views/TrashView.vue';
-
 const routes: RouteRecordRaw[] = [
   {
     path: '/',
     name: 'Home',
-    component: HomeView,
+    component: () => import('../views/HomeView.vue'),
     meta: { requiresAuth: true },
   },
   {
     path: '/login',
     name: 'Login',
-    component: LoginView,
+    component: () => import('../views/LoginView.vue'),
   },
   {
     path: '/register',
     name: 'Register',
-    component: RegisterView,
+    component: () => import('../views/RegisterView.vue'),
   },
   {
     path: '/timelines',
     name: 'Timelines',
-    component: TimelinesView,
+    component: () => import('../views/TimelinesView.vue'),
     meta: { requiresAuth: true },
   },
   {
     path: '/knowledge',
     name: 'KnowledgeBase',
-    component: KnowledgeBaseView,
+    component: () => import('../views/KnowledgeBaseView.vue'),
     meta: { requiresAuth: true },
   },
   {
     path: '/tasks',
     name: 'Tasks',
-    component: TasksView,
+    component: () => import('../views/TasksView.vue'),
     meta: { requiresAuth: true },
   },
   {
     path: '/todos',
     name: 'Todos',
-    component: TodosView,
+    component: () => import('../views/TodosView.vue'),
     meta: { requiresAuth: true },
   },
   {
     path: '/groups',
     name: 'Groups',
-    component: GroupsView,
+    component: () => import('../views/GroupsView.vue'),
     meta: { requiresAuth: true },
   },
   {
     path: '/profile',
     name: 'Profile',
-    component: ProfileView,
+    component: () => import('../views/ProfileView.vue'),
     meta: { requiresAuth: true },
   },
   {
     path: '/trash',
     name: 'Trash',
-    component: TrashView,
+    component: () => import('../views/TrashView.vue'),
     meta: { requiresAuth: true },
   },
 ];

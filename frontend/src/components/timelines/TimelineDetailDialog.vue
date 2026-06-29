@@ -918,17 +918,17 @@ const runConflictPrecheckForAddTask = async (timelineId: number, data: CreateTas
 const requestAddTaskConflictAiSuggestion = async (assigneeUserId: number | null) => {
   if (!props.selectedTimeline) return;
 
+  if (!taskForm.value.end_date) {
+    toast.warning('請先填寫截止日期再產生 AI 衝突建議');
+    return;
+  }
+
   const payloadData = mapToCreateTaskPayload({
     ...taskForm.value,
     timeline_id: props.selectedTimeline.id,
     assignee_user_ids: normalizeIdList(addTaskAssigneeIds.value),
     depends_on_task_ids: normalizeIdList(addTaskDependencyIds.value),
   });
-
-  if (!payloadData.end_date) {
-    toast.warning('請先填寫截止日期再產生 AI 衝突建議');
-    return;
-  }
 
   const key = getConflictPreviewKey(assigneeUserId);
   conflictAiSuggestionLoadingKey.value = key;

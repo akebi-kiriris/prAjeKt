@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build --mode production",
+    "type-check": "vue-tsc --noEmit",
     "preview": "vite preview",
     "guardrails:payload": "node scripts/check-payload-guardrails.mjs",
     "test": "vitest",
@@ -25,11 +26,12 @@
     "@vue/test-utils": "^2.4.6",
     "autoprefixer": "^10.4.23",
     "jsdom": "^29.0.1",
-    "postcss": "^8.5.6",
+    "postcss": "^8.5.15",
     "tailwindcss": "^4.1.18",
     "typescript": "^5.9.3",
-    "vite": "^7.2.4",
-    "vitest": "^4.1.2"
+    "vite": "^7.3.5",
+    "vitest": "^4.1.2",
+    "vue-tsc": "^3.3.5"
   },
   "dependencies": {
     "@fullcalendar/core": "^6.1.20",
@@ -39,9 +41,8 @@
     "@fullcalendar/vue3": "^6.1.20",
     "@headlessui/vue": "^1.7.23",
     "@tailwindcss/vite": "^4.1.18",
-    "axios": "^1.13.2",
+    "axios": "^1.18.0",
     "echarts": "^6.0.0",
-    "firebase": "^12.11.0",
     "frappe-gantt": "^1.2.2",
     "pinia": "^3.0.4",
     "socket.io-client": "^4.8.1",

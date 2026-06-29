@@ -3,6 +3,7 @@ import type {
   AiGeneratedTask,
   SourceReference,
   TimelineBatchTaskPayload,
+  TaskPriority,
   WeeklyReportAiSummarySource,
 } from '../types';
 
@@ -143,7 +144,7 @@ export const normalizeGeneratedTasks = (payload: unknown): AiGeneratedTask[] => 
   return [];
 };
 
-export const mapRagPriorityToTaskPriority = (priority: string | undefined): number => {
+export const mapRagPriorityToTaskPriority = (priority: string | undefined): TaskPriority => {
   const normalized = String(priority || '').toUpperCase();
   if (normalized === 'CRITICAL' || normalized === 'HIGH') return 1;
   if (normalized === 'LOW') return 3;

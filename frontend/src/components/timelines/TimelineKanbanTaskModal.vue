@@ -42,7 +42,7 @@
             <button @click="$emit('update-tags')" class="px-4 py-2 bg-primary text-white rounded-xl hover:brightness-110 transition-all">儲存</button>
           </div>
           <div v-if="task.tags" class="flex flex-wrap gap-2 mt-2">
-            <span v-for="tag in task.tags.split(',')" :key="tag" class="px-3 py-1 bg-blue-100 text-blue-700 text-sm rounded-full">{{ tag.trim() }}</span>
+            <span v-for="tag in getTaskTags(task.tags)" :key="tag" class="px-3 py-1 bg-blue-100 text-blue-700 text-sm rounded-full">{{ tag.trim() }}</span>
           </div>
         </div>
         <div>
@@ -80,6 +80,11 @@
 <script setup lang="ts">
 import { formatDate } from '../../utils/formatters';
 import type { Subtask, Task } from '../../types';
+
+const getTaskTags = (tags: Task['tags']): string[] => {
+  if (Array.isArray(tags)) return tags;
+  return tags ? tags.split(',') : [];
+};
 
 defineProps<{
   show: boolean;

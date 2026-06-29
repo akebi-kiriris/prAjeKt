@@ -12,6 +12,7 @@ vi.mock('@fullcalendar/vue3', () => ({
 import TimelineKanbanBoard from '../TimelineKanbanBoard.vue';
 import TimelineCalendarView from '../TimelineCalendarView.vue';
 import TimelineCardView from '../TimelineCardView.vue';
+import TimelineGanttView from '../TimelineGanttView.vue';
 import TimelineHeader from '../TimelineHeader.vue';
 import TimelineKanbanTaskModal from '../TimelineKanbanTaskModal.vue';
 import TimelineListView from '../TimelineListView.vue';
@@ -86,6 +87,55 @@ describe('Timeline subcomponents (phase 8.4 split)', () => {
     expect(wrapper.text()).toContain('12');
     expect(wrapper.emitted('update:viewMode')).toEqual([['card'], ['timeline'], ['calendar'], ['gantt']]);
     expect(buttons[4].classes()).toContain('bg-primary');
+  });
+
+  it('TimelineGanttView renders the empty state and missing-date metrics', () => {
+    const setGanttContainerRef = vi.fn();
+    const wrapper = mount(TimelineGanttView, {
+      props: {
+        timelines: [baseTimeline],
+        selectedGanttTimeline: 'all',
+        selectedGanttRange: 'all',
+        selectedGanttViewMode: 'Week',
+        ganttRenderableTaskCount: 0,
+        missingGanttTaskDates: 2,
+        setGanttContainerRef,
+      },
+    });
+
+    expect(wrapper.text()).toContain('目前沒有可繪製的任務');
+    expect(wrapper.text()).toContain('任務 0');
+    expect(wrapper.text()).toContain('缺日期 2');
+    expect(wrapper.find('.frappe-gantt-container').exists()).toBe(false);
+    expect(setGanttContainerRef).not.toHaveBeenCalled();
+  });
+
+  it('TimelineGanttView emits filter changes and exposes its render container', async () => {
+    const setGanttContainerRef = vi.fn();
+    const wrapper = mount(TimelineGanttView, {
+      props: {
+        timelines: [baseTimeline, { ...baseTimeline, id: 2, name: 'Beta' }],
+        selectedGanttTimeline: 'all',
+        selectedGanttRange: '90d',
+        selectedGanttViewMode: 'Day',
+        ganttRenderableTaskCount: 3,
+        missingGanttTaskDates: 1,
+        setGanttContainerRef,
+      },
+    });
+
+    const selects = wrapper.findAll('select');
+    await selects[0].setValue('2');
+    await selects[1].setValue('30d');
+    await selects[2].setValue('Month');
+
+    expect(wrapper.text()).toContain('任務 3');
+    expect(wrapper.text()).toContain('缺日期 1');
+    expect(wrapper.find('.frappe-gantt-container').exists()).toBe(true);
+    expect(setGanttContainerRef.mock.calls[0][0]).toBeInstanceOf(HTMLElement);
+    expect(wrapper.emitted('update:selected-gantt-timeline')).toEqual([['2']]);
+    expect(wrapper.emitted('update:selected-gantt-range')).toEqual([['30d']]);
+    expect(wrapper.emitted('update:selected-gantt-view-mode')).toEqual([['Month']]);
   });
 
   it('TimelineListView emits view/edit/delete actions', async () => {
@@ -770,6 +820,108 @@ describe('Timeline subcomponents (phase 8.4 split)', () => {
     expect(wrapper.emitted('add-subtask')).toBeTruthy();
     expect(wrapper.emitted('update-tags')).toBeTruthy();
     expect(wrapper.emitted('delete-subtask')?.[0][0]).toMatchObject({ id: 1 });
+  });
+
+  it('TimelineKanbanTaskModal renders string, array and null tags safely', () => {
+    const task: Task = {
+      task_id: 10,
+      name: 'Kanban Task',
+      completed: false,
+      completed_at: null,
+      timeline_id: 1,
+      status: 'pending',
+      priority: 2,
+      tags: ['api', 'backend'],
+      estimated_hours: null,
+      actual_hours: null,
+      members: [],
+      start_date: null,
+      end_date: null,
+      created_at: null,
+      updated_at: null,
+      task_remark: null,
+      isWork: 1,
+      is_owner: true,
+      subtasks: [],
+    };
+
+    const arrayWrapper = mount(TimelineKanbanTaskModal, {
+      props: {
+        show: true,
+        task,
+        newSubtaskName: '',
+        getSubtaskProgress: () => 0,
+        getCompletedSubtaskCount: () => 0,
+      },
+    });
+
+    expect(arrayWrapper.text()).toContain('api');
+    expect(arrayWrapper.text()).toContain('backend');
+
+    const nullWrapper = mount(TimelineKanbanTaskModal, {
+      props: {
+        show: true,
+        task: { ...task, tags: null },
+        newSubtaskName: '',
+        getSubtaskProgress: () => 0,
+        getCompletedSubtaskCount: () => 0,
+      },
+    });
+
+    expect(nullWrapper.find('.bg-blue-100').exists()).toBe(false);
+  });
+
+  it('TimelineKanbanBoard renders string, array and null tags safely', () => {
+    const tasks = [
+      { tags: 'api,frontend', task_id: 1, name: 'String tags' },
+      { tags: ['backend', 'urgent'], task_id: 2, name: 'Array tags' },
+      { tags: null, task_id: 3, name: 'Null tags' },
+    ].map((task) => ({
+      completed: false,
+      completed_at: null,
+      timeline_id: 1,
+      status: 'pending' as const,
+      priority: 2 as const,
+      estimated_hours: null,
+      actual_hours: null,
+      members: [],
+      start_date: null,
+      end_date: null,
+      created_at: null,
+      updated_at: null,
+      task_remark: null,
+      isWork: 1,
+      is_owner: true,
+      subtasks: [],
+      ...task,
+    })) satisfies Task[];
+
+    const wrapper = mount(TimelineKanbanBoard, {
+      props: {
+        timelines: [baseTimeline],
+        selectedKanbanTimeline: null,
+        searchQuery: '',
+        showFilterPanel: false,
+        hasActiveFilters: false,
+        activeFilterCount: 0,
+        filterPriority: null,
+        filterTag: '',
+        pendingTasks: tasks,
+        inProgressTasks: [],
+        completedTasks: [],
+        isDragging: false,
+        getPriorityBadgeClass: () => '',
+        getPriorityLabel: () => '中',
+        getSubtaskProgress: () => 0,
+        getCompletedSubtaskCount: () => 0,
+        getTaskTimelineName: () => 'Alpha',
+        formatDateFn: () => '',
+      },
+    });
+
+    expect(wrapper.text()).toContain('frontend');
+    expect(wrapper.text()).toContain('urgent');
+    expect(wrapper.text()).toContain('Null tags');
   });
 
   it('TimelineKanbanBoard emits filters, search and task open actions', async () => {

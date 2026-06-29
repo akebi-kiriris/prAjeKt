@@ -56,6 +56,20 @@ const basePlan = {
   proposal_reason: '因為有上下文',
 };
 
+const mountOpenedDock = async () => {
+  const wrapper = mount(CopilotDock, {
+    global: { stubs: { transition: false } },
+  });
+  await wrapper.find('button').trigger('click');
+  return wrapper;
+};
+
+const createPlan = async (wrapper: ReturnType<typeof mount>, goal = '建立專案') => {
+  await wrapper.find('textarea').setValue(goal);
+  await wrapper.find('form').trigger('submit.prevent');
+  await flushPromises();
+};
+
 describe('CopilotDock', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -237,5 +251,119 @@ describe('CopilotDock', () => {
       reason: '使用者取消',
     });
     expect(wrapper.text()).not.toContain('Plan ID：plan_a');
+  });
+
+  it('keeps the goal editable and clears planning state when plan creation fails', async () => {
+    mocks.createAgentPlan.mockRejectedValueOnce(new Error('plan failed'));
+    const wrapper = await mountOpenedDock();
+
+    await createPlan(wrapper, '建立失敗後可重試');
+
+    expect(mocks.toastError).toHaveBeenCalledWith('Agent 規劃失敗');
+    expect(wrapper.text()).not.toContain('執行計畫預覽');
+    expect((wrapper.find('textarea').element as HTMLTextAreaElement).value).toBe('建立失敗後可重試');
+    expect(wrapper.find('button[type="submit"]').text()).toBe('產生執行計畫');
+    expect(wrapper.find('button[type="submit"]').attributes('disabled')).toBeUndefined();
+  });
+
+  it('keeps the original plan when replan fails', async () => {
+    mocks.createAgentPlan.mockResolvedValueOnce({ data: basePlan });
+    mocks.replanAgent.mockRejectedValueOnce(new Error('replan failed'));
+    const wrapper = await mountOpenedDock();
+    await createPlan(wrapper);
+
+    const areas = wrapper.findAll('textarea');
+    await areas[1].setValue('改成另一個方案');
+    await wrapper.findAll('button').find((btn) => btn.text().includes('調整後重提案'))?.trigger('click');
+    await flushPromises();
+
+    expect(mocks.toastError).toHaveBeenCalledWith('重提案失敗');
+    expect(wrapper.text()).toContain('Plan ID：plan_a');
+    expect(wrapper.text()).toContain('先建立專案');
+    expect(wrapper.text()).not.toContain('執行結果');
+    expect(wrapper.findAll('button').find((btn) => btn.text().includes('確認執行'))?.attributes('disabled'))
+      .toBeUndefined();
+  });
+
+  it('keeps the plan available when execution fails', async () => {
+    mocks.createAgentPlan.mockResolvedValueOnce({ data: basePlan });
+    mocks.executeAgentPlan.mockRejectedValueOnce(new Error('execute failed'));
+    const wrapper = await mountOpenedDock();
+    await createPlan(wrapper);
+
+    await wrapper.findAll('button').find((btn) => btn.text().includes('確認執行'))?.trigger('click');
+    await flushPromises();
+
+    expect(mocks.toastError).toHaveBeenCalledWith('Agent 執行失敗');
+    expect(wrapper.text()).toContain('Plan ID：plan_a');
+    expect(wrapper.text()).not.toContain('執行結果');
+    expect(wrapper.findAll('button').find((btn) => btn.text().includes('確認執行'))?.attributes('disabled'))
+      .toBeUndefined();
+  });
+
+  it('keeps the plan available when rejection fails', async () => {
+    mocks.createAgentPlan.mockResolvedValueOnce({ data: basePlan });
+    mocks.rejectAgentPlan.mockRejectedValueOnce(new Error('reject failed'));
+    const wrapper = await mountOpenedDock();
+    await createPlan(wrapper);
+
+    await wrapper.findAll('button').find((btn) => btn.text().includes('放棄計畫'))?.trigger('click');
+    await flushPromises();
+
+    expect(mocks.toastError).toHaveBeenCalledWith('取消計畫失敗');
+    expect(wrapper.text()).toContain('Plan ID：plan_a');
+    expect(wrapper.findAll('button').find((btn) => btn.text().includes('放棄計畫'))?.attributes('disabled'))
+      .toBeUndefined();
+  });
+
+  it('renders malformed step output safely without undefined text', async () => {
+    mocks.createAgentPlan.mockResolvedValueOnce({ data: basePlan });
+    mocks.executeAgentPlan.mockResolvedValueOnce({
+      data: {
+        agent_result: {
+          final_answer: '部分步驟回傳非預期格式',
+          executed_tools: ['unknown_tool', 'generate_timeline_tasks_with_ai'],
+          steps: [
+            {
+              tool_name: 'unknown_tool',
+              input: null,
+              output: {
+                ok: false,
+                data: ['unexpected'],
+                error: { message: '工具回傳格式錯誤' },
+              },
+            },
+            {
+              tool_name: 'generate_timeline_tasks_with_ai',
+              input: {},
+              output: {
+                ok: true,
+                data: {
+                  tasks: [
+                    null,
+                    'invalid',
+                    {},
+                    { name: '  ', estimated_days: 'unknown', isExisting: false },
+                    { name: '有效任務', isExisting: false },
+                    { name: '既有任務', isExisting: true },
+                  ],
+                },
+              },
+            },
+          ],
+        },
+      },
+    });
+    const wrapper = await mountOpenedDock();
+    await createPlan(wrapper);
+
+    await wrapper.findAll('button').find((btn) => btn.text().includes('確認執行'))?.trigger('click');
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('工具回傳格式錯誤');
+    expect(wrapper.text()).toContain('未命名任務');
+    expect(wrapper.text()).toContain('有效任務');
+    expect(wrapper.text()).not.toContain('既有任務');
+    expect(wrapper.text()).not.toContain('undefined');
   });
 });

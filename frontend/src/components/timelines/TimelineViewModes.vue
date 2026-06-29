@@ -110,6 +110,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, nextTick, onBeforeUnmount } from 'vue';
+import type { ComponentPublicInstance } from 'vue';
 import { toast } from 'vue-sonner';
 import dayGridPlugin from '@fullcalendar/daygrid';
 import interactionPlugin from '@fullcalendar/interaction';
@@ -126,7 +127,7 @@ import type { CalendarOptions, EventClickArg, EventMountArg, DayCellMountArg } f
 import { taskService } from '../../services/taskService';
 import { formatDate } from '../../utils/formatters';
 import { buildGanttPopupHtml } from '../../utils/ganttPopup';
-import type { Task, Timeline, Subtask, TaskUpdatePayload, TimelineViewModesProps, DaysRemainingResult } from '../../types';
+import type { Task, TaskPriority, Timeline, Subtask, TaskUpdatePayload, TimelineViewModesProps, DaysRemainingResult } from '../../types';
 
 const props = defineProps<TimelineViewModesProps>();
 
@@ -170,7 +171,10 @@ const filteredTasks = computed(() => {
   if (filterPriority.value) tasks = tasks.filter(t => t.priority === filterPriority.value);
   if (filterTag.value) {
     const tag = filterTag.value.toLowerCase();
-    tasks = tasks.filter(t => t.tags && t.tags.toLowerCase().includes(tag));
+    tasks = tasks.filter(t => {
+      const tags = Array.isArray(t.tags) ? t.tags.join(',') : t.tags;
+      return Boolean(tags?.toLowerCase().includes(tag));
+    });
   }
   return tasks;
 });
@@ -206,8 +210,8 @@ watch(
 
 // ────────────── 甘特圖相關 ──────────────
 const ganttContainerRef = ref<HTMLElement | null>(null);
-const setGanttContainerRef = (el: Element | null) => {
-  ganttContainerRef.value = el as HTMLElement | null;
+const setGanttContainerRef = (el: Element | ComponentPublicInstance | null) => {
+  ganttContainerRef.value = el instanceof HTMLElement ? el : null;
 };
 const selectedGanttTimeline = ref<string>('all');
 const selectedGanttRange = ref<'all' | '90d' | '30d'>('90d');
@@ -788,10 +792,11 @@ const deleteSubtask = async (subtask: Subtask) => {
 const onPrioritySelect = (event: Event) => {
   const target = event.target as HTMLSelectElement | null;
   const priority = Number(target?.value);
+  if (priority !== 1 && priority !== 2 && priority !== 3) return;
   void updateTaskPriority(priority);
 };
 
-const updateTaskPriority = async (priority: number) => {
+const updateTaskPriority = async (priority: TaskPriority) => {
   if (!selectedKanbanTask.value) return;
   try {
     const payload: TaskUpdatePayload = { priority };

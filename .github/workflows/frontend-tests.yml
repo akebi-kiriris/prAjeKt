@@ -33,6 +33,11 @@ jobs:
         cd frontend
         npm run test:coverage
 
+    - name: Type check
+      run: |
+        cd frontend
+        npm run type-check
+
     - name: Build
       run: |
         cd frontend

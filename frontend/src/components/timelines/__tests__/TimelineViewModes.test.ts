@@ -46,15 +46,18 @@ vi.mock('../TimelineKanbanBoard.vue', () => ({
     props: {
       showFilterPanel: { type: Boolean, required: true },
       pendingTasks: { type: Array, required: true },
+      inProgressTasks: { type: Array, required: true },
       formatDateFn: { type: Function, required: true },
     },
-    emits: ['toggle-filter-panel', 'open-task', 'pending-change'],
+    emits: ['toggle-filter-panel', 'update:filter-tag', 'open-task', 'pending-change'],
     setup(props, { emit }) {
       return () => h('div', [
         h('span', { 'data-testid': 'filter-state' }, props.showFilterPanel ? 'open' : 'closed'),
         h('span', { 'data-testid': 'pending-count' }, String(props.pendingTasks.length)),
+        h('span', { 'data-testid': 'in-progress-count' }, String(props.inProgressTasks.length)),
         h('span', { 'data-testid': 'formatted-date' }, props.formatDateFn('2026-06-10')),
         h('button', { 'data-testid': 'toggle-filter', onClick: () => emit('toggle-filter-panel') }, 'toggle filter'),
+        h('button', { 'data-testid': 'filter-backend', onClick: () => emit('update:filter-tag', 'backend') }, 'filter backend'),
         h('button', {
           'data-testid': 'open-task',
           onClick: () => emit('open-task', {
@@ -117,6 +120,10 @@ vi.mock('../TimelineKanbanTaskModal.vue', () => ({
           'data-testid': 'priority-select',
           onClick: () => emit('priority-select', { target: { value: '1' } }),
         }, 'priority-select'),
+        h('button', {
+          'data-testid': 'invalid-priority-select',
+          onClick: () => emit('priority-select', { target: { value: '4' } }),
+        }, 'invalid-priority-select'),
         h('button', { 'data-testid': 'update-tags', onClick: () => emit('update-tags') }, 'update-tags'),
       ]) : null;
     },
@@ -145,7 +152,36 @@ vi.mock('../TimelineGanttView.vue', () => ({
 }));
 
 vi.mock('../TimelineCalendarView.vue', () => ({
-  default: defineComponent({ name: 'TimelineCalendarViewStub', setup: () => () => h('div') }),
+  default: defineComponent({
+    name: 'TimelineCalendarViewStub',
+    props: {
+      calendarOptions: { type: Object, required: true },
+      thisWeekTimelines: { type: Array, required: true },
+      overdueTimelines: { type: Array, required: true },
+      completedTimelines: { type: Array, required: true },
+      getDaysRemaining: { type: Function, required: true },
+    },
+    setup(props) {
+      return () => h('div', [
+        h('span', { 'data-testid': 'this-week-count' }, String(props.thisWeekTimelines.length)),
+        h('span', { 'data-testid': 'overdue-count' }, String(props.overdueTimelines.length)),
+        h('span', { 'data-testid': 'completed-count' }, String(props.completedTimelines.length)),
+        h('span', { 'data-testid': 'missing-deadline' }, props.getDaysRemaining(null).text),
+        h('button', {
+          'data-testid': 'calendar-valid-click',
+          onClick: () => (props.calendarOptions as Record<string, any>).eventClick({
+            event: { extendedProps: { timeline: baseTimelines[0] } },
+          }),
+        }, 'valid calendar click'),
+        h('button', {
+          'data-testid': 'calendar-invalid-click',
+          onClick: () => (props.calendarOptions as Record<string, any>).eventClick({
+            event: { extendedProps: { timeline: { id: 'invalid' } } },
+          }),
+        }, 'invalid calendar click'),
+      ]);
+    },
+  }),
 }));
 
 vi.mock('../TimelineListView.vue', () => ({
@@ -451,5 +487,100 @@ describe('TimelineViewModes', () => {
 
     expect(mocks.update).toHaveBeenCalledWith(1, { tags: 'backend,urgent' });
     expect(wrapper.emitted('refresh-all')).toHaveLength(2);
+  });
+
+  it('filters tasks when tags are strings, arrays or null', async () => {
+    const tasks = createTasks();
+    tasks[1].tags = ['backend', 'urgent'];
+    tasks[2].tags = null;
+    const wrapper = mount(TimelineViewModes, {
+      props: {
+        viewMode: 'kanban',
+        timelines: createTimelines(),
+        sortedTimelines: createTimelines(),
+        allTasks: tasks,
+      },
+    });
+
+    expect(wrapper.get('[data-testid="pending-count"]').text()).toBe('2');
+    expect(wrapper.get('[data-testid="in-progress-count"]').text()).toBe('1');
+
+    await wrapper.get('[data-testid="filter-backend"]').trigger('click');
+    await nextTick();
+
+    expect(wrapper.get('[data-testid="pending-count"]').text()).toBe('0');
+    expect(wrapper.get('[data-testid="in-progress-count"]').text()).toBe('1');
+  });
+
+  it('does not update priority for invalid values or without a selected task', async () => {
+    mocks.getSubtasks.mockResolvedValueOnce({ data: [] });
+    const wrapper = createWrapper('kanban');
+
+    const modal = wrapper.findComponent({ name: 'TimelineKanbanTaskModalStub' });
+    modal.vm.$emit('priority-select', { target: { value: '1' } });
+    await flushPromises();
+    expect(mocks.update).not.toHaveBeenCalled();
+
+    await wrapper.get('[data-testid="open-task"]').trigger('click');
+    await flushPromises();
+    await wrapper.get('[data-testid="invalid-priority-select"]').trigger('click');
+    await flushPromises();
+
+    expect(mocks.update).not.toHaveBeenCalled();
+  });
+
+  it('builds calendar groups and only emits valid timeline clicks', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 5, 24, 12));
+    const timelines: Timeline[] = [
+      {
+        ...baseTimelines[0],
+        id: 1,
+        endDate: '2026-06-27',
+        totalTasks: 2,
+        completedTasks: 0,
+      },
+      {
+        ...baseTimelines[0],
+        id: 2,
+        name: 'Overdue',
+        endDate: '2026-06-20',
+        totalTasks: 2,
+        completedTasks: 1,
+      },
+      {
+        ...baseTimelines[0],
+        id: 3,
+        name: 'Completed',
+        endDate: '2026-07-30',
+        totalTasks: 2,
+        completedTasks: 2,
+      },
+      {
+        ...baseTimelines[0],
+        id: 4,
+        name: 'No deadline',
+        endDate: null,
+      },
+    ];
+    const wrapper = mount(TimelineViewModes, {
+      props: {
+        viewMode: 'calendar',
+        timelines,
+        sortedTimelines: timelines,
+        allTasks: createTasks(),
+      },
+    });
+
+    expect(wrapper.get('[data-testid="this-week-count"]').text()).toBe('1');
+    expect(wrapper.get('[data-testid="overdue-count"]').text()).toBe('1');
+    expect(wrapper.get('[data-testid="completed-count"]').text()).toBe('1');
+    expect(wrapper.get('[data-testid="missing-deadline"]').text()).toBe('未設定');
+
+    await wrapper.get('[data-testid="calendar-invalid-click"]').trigger('click');
+    expect(wrapper.emitted('view-timeline')).toBeUndefined();
+
+    await wrapper.get('[data-testid="calendar-valid-click"]').trigger('click');
+    expect(wrapper.emitted('view-timeline')?.[0][0]).toMatchObject({ id: 1 });
   });
 });
