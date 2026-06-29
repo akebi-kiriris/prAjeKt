@@ -7,7 +7,7 @@ type MockAxiosInstance = ReturnType<typeof vi.fn> & {
   };
 };
 
-const { axiosCreateMock, axiosPostMock, apiInstanceMock, routerPushMock } = vi.hoisted(() => {
+const { axiosCreateMock, axiosPostMock, apiInstanceMock, routerPushMock, currentRouteMock } = vi.hoisted(() => {
   const requestUse = vi.fn();
   const responseUse = vi.fn();
 
@@ -23,6 +23,7 @@ const { axiosCreateMock, axiosPostMock, apiInstanceMock, routerPushMock } = vi.h
     axiosPostMock: vi.fn(),
     apiInstanceMock: apiInstance,
     routerPushMock: vi.fn(),
+    currentRouteMock: { value: { path: '/tasks' } },
   };
 });
 
@@ -42,6 +43,7 @@ vi.mock('axios', () => {
 vi.mock('../../router', () => ({
   default: {
     push: routerPushMock,
+    currentRoute: currentRouteMock,
   },
 }));
 
@@ -62,11 +64,15 @@ describe('api interceptors', () => {
     vi.unstubAllEnvs();
     vi.clearAllMocks();
     localStorage.clear();
+    currentRouteMock.value.path = '/tasks';
   });
 
   async function importApiHandlers(): Promise<{
     onRequest: (config: RetryableRequest) => RetryableRequest;
-    onResponseError: (error: { response?: { status?: number }; config: RetryableRequest }) => Promise<unknown>;
+    onResponseError: (error: {
+      response?: { status?: number; data?: { msg?: string; error_code?: string } };
+      config: RetryableRequest;
+    }) => Promise<unknown>;
   }> {
     vi.stubEnv('VITE_API_BASE_URL', 'http://localhost:5000/api');
     await import('../api');
@@ -174,5 +180,69 @@ describe('api interceptors', () => {
     expect(req2.headers.Authorization).toBe('Bearer queued-token');
     expect(apiInstanceMock).toHaveBeenCalledWith(req1);
     expect(apiInstanceMock).toHaveBeenCalledWith(req2);
+  });
+
+  it('refresh failure should reject the original and queued requests, then clear the session', async () => {
+    const { onResponseError } = await importApiHandlers();
+    localStorage.setItem('access_token', 'old-access');
+    localStorage.setItem('refresh_token', 'expired-refresh');
+
+    let rejectRefresh: (reason: unknown) => void = () => {};
+    axiosPostMock.mockReturnValue(new Promise((_, reject) => {
+      rejectRefresh = reject;
+    }));
+
+    const firstError = { response: { status: 401 }, config: { url: '/a', headers: {} } };
+    const queuedError = { response: { status: 401 }, config: { url: '/b', headers: {} } };
+    const refreshError = new Error('refresh expired');
+    const firstRequest = onResponseError(firstError);
+    const queuedRequest = onResponseError(queuedError);
+    const firstExpectation = expect(firstRequest).rejects.toBe(refreshError);
+    const queuedExpectation = expect(queuedRequest).rejects.toBe(refreshError);
+
+    rejectRefresh(refreshError);
+
+    await firstExpectation;
+    await queuedExpectation;
+    expect(localStorage.getItem('access_token')).toBeNull();
+    expect(localStorage.getItem('refresh_token')).toBeNull();
+    expect(routerPushMock).toHaveBeenCalledWith('/login');
+    expect(apiInstanceMock).not.toHaveBeenCalled();
+  });
+
+  it('422 JWT errors should refresh, while ordinary validation errors should pass through', async () => {
+    const { onResponseError } = await importApiHandlers();
+    localStorage.setItem('refresh_token', 'r-token');
+    axiosPostMock.mockResolvedValueOnce({ data: { access_token: 'new-token' } });
+    apiInstanceMock.mockResolvedValueOnce({ data: { ok: true } });
+    const jwtRequest: RetryableRequest = { url: '/tasks', headers: {} };
+
+    await expect(onResponseError({
+      response: { status: 422, data: { msg: 'Token has expired' } },
+      config: jwtRequest,
+    })).resolves.toEqual({ data: { ok: true } });
+    expect(jwtRequest.headers.Authorization).toBe('Bearer new-token');
+
+    const validationError = {
+      response: { status: 422, data: { msg: 'task name is required' } },
+      config: { url: '/tasks', headers: {} },
+    };
+    await expect(onResponseError(validationError)).rejects.toBe(validationError);
+    expect(axiosPostMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('should not push the login route again when already on login', async () => {
+    const { onResponseError } = await importApiHandlers();
+    currentRouteMock.value.path = '/login';
+    localStorage.setItem('access_token', 'expired-access');
+    const error = {
+      response: { status: 401 },
+      config: { url: '/tasks', headers: {} },
+    };
+
+    await expect(onResponseError(error)).rejects.toBe(error);
+
+    expect(localStorage.getItem('access_token')).toBeNull();
+    expect(routerPushMock).not.toHaveBeenCalled();
   });
 });

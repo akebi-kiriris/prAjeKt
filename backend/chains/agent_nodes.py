@@ -299,6 +299,25 @@ def _extract_project_name(user_message: str) -> str:
     return "新專案"
 
 
+def _normalize_generated_task_for_batch_create(task: dict[str, Any]) -> dict[str, Any]:
+    allowed_fields = {
+        "task_id",
+        "isExisting",
+        "name",
+        "priority",
+        "status",
+        "estimated_days",
+        "task_remark",
+        "depends_on_task_ids",
+        "depends_on_task_refs",
+    }
+    return {
+        key: value
+        for key, value in task.items()
+        if key in allowed_fields and value is not None
+    }
+
+
 def _extract_generated_tasks_from_state(state: AgentState) -> list[dict[str, Any]]:
     steps = state.get("steps", [])
     for step in reversed(steps):
@@ -317,7 +336,7 @@ def _extract_generated_tasks_from_state(state: AgentState) -> list[dict[str, Any
                 continue
             if item.get("isExisting"):
                 continue
-            generated.append(item)
+            generated.append(_normalize_generated_task_for_batch_create(item))
         return generated
     return []
 

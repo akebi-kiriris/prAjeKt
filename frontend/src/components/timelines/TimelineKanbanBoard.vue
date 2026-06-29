@@ -118,6 +118,12 @@ import type { Subtask, Task, Timeline } from '../../types';
 const TaskCard = {
   props: ['task', 'column', 'getPriorityBadgeClass', 'getPriorityLabel', 'getSubtaskProgress', 'getCompletedSubtaskCount', 'getTaskTimelineName', 'formatDateFn'],
   emits: ['open'],
+  methods: {
+    normalizeTaskTags(tags: Task['tags']): string[] {
+      const values = Array.isArray(tags) ? tags : (tags?.split(',') ?? []);
+      return values.map((tag) => tag.trim()).filter(Boolean);
+    },
+  },
   template: `
     <div @click="$emit('open', task)" :class="[
       'kanban-card rounded-xl p-4 shadow-sm cursor-grab hover:shadow-lg hover:-translate-y-1 active:cursor-grabbing transition-all duration-200',
@@ -131,8 +137,8 @@ const TaskCard = {
         <span v-else class="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700 shrink-0 ml-2 font-medium">✓ 完成</span>
       </div>
       <div v-if="column!=='completed' && task.tags" class="flex flex-wrap gap-1 mb-2">
-        <span v-for="tag in task.tags.split(',').slice(0, 3)" :key="tag" class="text-xs px-2 py-0.5 bg-linear-to-r from-blue-100 to-indigo-100 text-blue-700 rounded-full">{{ tag.trim() }}</span>
-        <span v-if="task.tags.split(',').length > 3" class="text-xs text-slate-400">+{{ task.tags.split(',').length - 3 }}</span>
+        <span v-for="tag in normalizeTaskTags(task.tags).slice(0, 3)" :key="tag" class="text-xs px-2 py-0.5 bg-linear-to-r from-blue-100 to-indigo-100 text-blue-700 rounded-full">{{ tag }}</span>
+        <span v-if="normalizeTaskTags(task.tags).length > 3" class="text-xs text-slate-400">+{{ normalizeTaskTags(task.tags).length - 3 }}</span>
       </div>
       <div v-if="column!=='completed' && task.subtasks && task.subtasks.length > 0" class="mb-2">
         <div class="flex items-center gap-2 text-xs text-slate-500">

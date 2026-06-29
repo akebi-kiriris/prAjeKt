@@ -192,9 +192,11 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
+import { toast } from 'vue-sonner';
 import { storeToRefs } from 'pinia';
 import { useTodoStore } from '../stores/todos';
 import { useConfirm } from '../composables/useConfirm';
+import { getApiErrorMessage } from '../utils/apiError';
 import type { CreateTodoPayload, UpdateTodoPayload, Todo, TodoForm } from '../types';
 
 const { confirm } = useConfirm();
@@ -252,8 +254,9 @@ const handleSubmit = async () => {
       await store.addTodo(createPayload);
     }
     cancelForm();
-  } catch (error) {
+  } catch (error: unknown) {
     console.error('操作失敗:', error);
+    toast.error(getApiErrorMessage(error, '操作失敗'));
   }
 };
 
@@ -267,11 +270,23 @@ const editTodo = (todo: Todo) => {
   showAddForm.value = true;
 };
 
-const toggleTodo = (id: number) => store.toggleTodo(id);
+const toggleTodo = async (id: number) => {
+  try {
+    await store.toggleTodo(id);
+  } catch (error: unknown) {
+    console.error('更新待辦狀態失敗:', error);
+    toast.error(getApiErrorMessage(error, '更新待辦狀態失敗'));
+  }
+};
 
 const deleteTodo = async (id: number) => {
   if (!await confirm({ title: '確定要刪除此待辦事項？', danger: true })) return;
-  await store.removeTodo(id);
+  try {
+    await store.removeTodo(id);
+  } catch (error: unknown) {
+    console.error('刪除待辦失敗:', error);
+    toast.error(getApiErrorMessage(error, '刪除待辦失敗'));
+  }
 };
 
 const cancelForm = () => {

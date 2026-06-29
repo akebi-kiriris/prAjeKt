@@ -44,3 +44,5 @@
 1. `Future_AgentPrompt分域與Planner收斂方向_2026-06-07.md`
 2. `Future_validation_helper_位置調整評估_2026-06-16.md`
 3. `Future_refresh_token_HttpOnly_cookie_與_SameSite策略評估_2026-06-17.md`
+4. `Future_Agent工具PayloadAdapter與契約映射整理_2026-06-29.md`
+5. `Future_magic_numbers_與設定常數盤點_2026-06-29.md`

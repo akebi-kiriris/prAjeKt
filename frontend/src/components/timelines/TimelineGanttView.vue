@@ -61,6 +61,7 @@
 </template>
 
 <script setup lang="ts">
+import type { ComponentPublicInstance } from 'vue';
 import type { Timeline } from '../../types';
 
 defineProps<{
@@ -70,7 +71,7 @@ defineProps<{
   selectedGanttViewMode: 'Day' | 'Week' | 'Month';
   ganttRenderableTaskCount: number;
   missingGanttTaskDates: number;
-  setGanttContainerRef: (el: Element | null) => void;
+  setGanttContainerRef: (el: Element | ComponentPublicInstance | null) => void;
 }>();
 
 defineEmits<{
